@@ -73,8 +73,14 @@ export function createSoundPlayer(
         element.currentTime = 0;
         current = { element, until: now() + SOUND_MAX_MS };
         const playing = element;
-        element.addEventListener('ended', () => release(playing), { once: true });
-        await element.play();
+        const onEnded = (): void => release(playing);
+        element.addEventListener('ended', onEnded, { once: true });
+        try {
+          await element.play();
+        } catch (error) {
+          element.removeEventListener('ended', onEnded);
+          throw error;
+        }
 
         return true;
       } catch {

@@ -149,6 +149,8 @@ const fixture = (now: number): NotificationView[] => [
  * `unsubscribedAt`, `pausedUntil`, `schedule` and `smtp: false` (an install that
  * cannot send email), read when the mock is built.
  */
+/** Set to `fail` in a browser test and the next sound change is refused, as a down api would. */
+export const MOCK_SOUNDS_FAIL_STORAGE = 'helpdock.mock.sounds';
 export const MOCK_EMAIL_STATE_STORAGE = 'helpdock.mock.email';
 
 const readStorage = (key: string): string | null => {
@@ -257,6 +259,9 @@ export class MockNotificationsApi implements NotificationsApi {
       this.#preferences = update.preferences;
     }
     if (update.sounds !== undefined) {
+      if (readStorage(MOCK_SOUNDS_FAIL_STORAGE) === 'fail') {
+        throw new AuthError('unavailable', { status: 503 });
+      }
       this.#sounds = update.sounds;
     }
     this.#delivery = {

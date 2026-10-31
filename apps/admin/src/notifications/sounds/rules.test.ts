@@ -17,7 +17,11 @@ const api = new MockTicketsApi();
 const seeded = async (id: string): Promise<Ticket> => (await api.ticket(BRAND, id)).ticket;
 
 /** The seeded chat is open and nobody's: a chat waiting for an agent. */
-const waiting = (): Promise<Ticket> => seeded(MOCK_TICKET_SIGN_IN);
+/** The seeded chat was split off another ticket; a chat that arrived is not. */
+const waiting = async (): Promise<Ticket> => ({
+  ...(await seeded(MOCK_TICKET_SIGN_IN)),
+  splitFromId: null,
+});
 
 const message = async (
   overrides: Partial<Awaited<ReturnType<typeof api.messages>>['messages'][number]>,
@@ -64,6 +68,12 @@ describe('the sound a created ticket earns', () => {
     expect(soundForCreatedTicket({ ...(await waiting()), assigneeId: MOCK_SELF_ID })).toBe(
       'newConversation',
     );
+  });
+
+  it('is silent for a ticket split off another, which a person made', async () => {
+    expect(
+      soundForCreatedTicket({ ...(await waiting()), splitFromId: MOCK_TICKET_REFUND }),
+    ).toBeNull();
   });
 
   it('is silent for a ticket typed in on the desk, which is mostly the person’s own', async () => {

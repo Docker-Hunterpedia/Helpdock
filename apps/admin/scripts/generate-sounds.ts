@@ -3,7 +3,7 @@
  *
  * The files are synthesised here, so they are the project's own work and carry
  * no third-party licence: sine tones with a soft attack and a decaying tail,
- * 16-bit mono at 16 kHz, each under 20 KB. They are dedicated to the public
+ * 16-bit mono at 16 kHz, each under 25 KB. They are dedicated to the public
  * domain under CC0 1.0, which `docs/guides/notifications.md` also states.
  *
  * Run `node scripts/generate-sounds.ts` to regenerate them; the output is

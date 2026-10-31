@@ -511,6 +511,26 @@ describe.skipIf(!hasDocker)('notifications', () => {
       expect((await read(bo)).sounds).toEqual(NOTIFICATION_SOUND_DEFAULTS);
     });
 
+    it('leaves the sounds alone when only the matrix is saved, and the matrix when only sounds are', async () => {
+      const read = async () =>
+        (await call<NotificationPreferencesView>('GET', '/api/me/notification-preferences', bo))
+          .body;
+      const sounds = { ...NOTIFICATION_SOUND_DEFAULTS, customerReply: true };
+      await call('PUT', '/api/me/notification-preferences', bo, { sounds });
+      const changed = {
+        ...NOTIFICATION_PREFERENCE_DEFAULTS,
+        replied: { inApp: true, email: true, push: false },
+      };
+
+      await call('PUT', '/api/me/notification-preferences', bo, { preferences: changed });
+      expect((await read()).sounds).toEqual(sounds);
+      await call('PUT', '/api/me/notification-preferences', bo, {
+        sounds: NOTIFICATION_SOUND_DEFAULTS,
+      });
+
+      expect((await read()).preferences).toEqual(changed);
+    });
+
     it('refuses sounds that name an unknown event or a non-boolean', async () => {
       const bad = [
         { sounds: { ...NOTIFICATION_SOUND_DEFAULTS, party: true } },

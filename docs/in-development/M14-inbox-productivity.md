@@ -1437,8 +1437,8 @@ assigned to me or mentioned), each off by default, and a **Remind me every
 minute while a chat waits** option for the first. Sounds play only in a tab
 that holds the `/staff` socket, at most one at a time, never for the person's
 own actions, and never while the tab is hidden if the browser blocks it (the
-card says so). Every sound has a visible equivalent already (the bell, the
-waiting-chat count), so nothing depends on hearing it (DESIGN §10). The sound
+card says so). Every sound has a visible equivalent already (the ticket list and
+the bell), so nothing depends on hearing it (DESIGN §10). The sound
 files are short, bundled, and lazy-loaded with the settings; the choice is
 stored with the notification preferences (install scope, per person) so it
 follows the person to another browser. Artboard `Admin/Account-Notifications-Sounds`.
@@ -1447,7 +1447,7 @@ follows the person to another browser. Artboard `Admin/Account-Notifications-Sou
 differences and choices:
 
 - **Storage.** A `sounds` jsonb column on `notification_prefs` (migration
-  `0074_notification_sounds`, default `{}`), read and saved through
+  `0075_notification_sounds`, default `{}`), read and saved through
   `GET`/`PUT /api/me/notification-preferences` as `sounds` (five booleans: the
   four events and `waitingChatReminder`). A missing or malformed key reads as
   off. No new table, so no RLS-test addition: the row is global per person like
@@ -1478,8 +1478,10 @@ differences and choices:
 - **Card.** The Sounds card saves as each control moves (the board draws no
   Save), with an optimistic switch that goes back with a toast if the save
   fails; the reminder checkbox is disabled, not hidden, while its switch is
-  off. The board's note mentions "the waiting-chat count": there is no such
-  count in the admin yet, so today the bell is the always-visible equivalent.
+  off. The board's note mentions "the waiting-chat count", which the admin does
+  not have, so the note says what is true: new and waiting conversations also
+  appear in the ticket list, and assignments, replies and mentions in the bell.
+  A ticket split off another is never an arrival, so it is silent.
 - **Tests.** Unit: `rules.test.ts`, `player.test.ts`, `waiting-reminder.test.ts`,
   `use-notification-sounds.test.tsx`, `sounds-card.test.tsx`, the schema,
   service and `http-api` tests; integration: the preferences route in
@@ -1487,7 +1489,7 @@ differences and choices:
   second read, refused when malformed) and the migration list; Playwright:
   `notification-sounds.spec.ts` (en and ar, audio stubbed, `page.clock`).
 
-- [x] `sounds` on the preferences view and update; migration `0074`.
+- [x] `sounds` on the preferences view and update; migration `0075`.
 - [x] `useNotificationSounds`, the player, the reminder and the rules.
 - [x] The Sounds card, en and ar, with Play buttons and the background-tab note.
 - [x] The four sound files and `generate-sounds.ts`; guide, DESIGN §6.4 and change log 1.60.

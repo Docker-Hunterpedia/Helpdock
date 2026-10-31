@@ -357,7 +357,7 @@
       },
       "reminder": "Remind me every minute while it waits",
       "play": "Play: {{event}}",
-      "note": "Sounds play only in a Helpdock tab that is open. This browser may block sound in background tabs; the bell and the waiting-chat count always show it too.",
+      "note": "Sounds play only in a Helpdock tab that is open. This browser may block sound in background tabs; new and waiting conversations also appear in the ticket list, and assignments, replies and mentions in the bell.",
       "failed": "The sound setting could not be saved."
     }
   },

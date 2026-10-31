@@ -3,9 +3,10 @@ import type { Locale } from '@helpdock/i18n';
 import type { SoundEvent } from '@helpdock/schemas';
 import type { Page } from '@playwright/test';
 import { MOCK_BRANDS } from '../src/auth/mock-api.js';
+import { MOCK_SOUNDS_FAIL_STORAGE } from '../src/notifications/mock-api.js';
 import type { MockRealtimeClient } from '../src/realtime/mock-client.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../src/staff/mock-api.js';
-import { MOCK_TICKET_SIGN_IN, type MockTicketsApi } from '../src/tickets/mock-api.js';
+import type { MockTicketsApi } from '../src/tickets/mock-api.js';
 import { expect, test } from './fixtures.js';
 import { signIn } from './flows.js';
 import { strings } from './strings.js';
@@ -94,17 +95,27 @@ const toggle = (card: ReturnType<Page['locator']>, locale: Locale, event: SoundE
 
 const heard = (page: Page) => page.evaluate(() => window.__heard);
 
+/** A chat that just arrived: made in the fixture, then announced as the server would. */
 const waitingChatCreated = (page: Page) =>
   page.evaluate(
-    ([brandId, ticketId, departmentId]) => {
+    async ([brandId, departmentId]) => {
+      const created = await window.__helpdockMockTickets?.create(brandId as string, {
+        subject: 'Hello',
+        bodyHtml: '<p>Hello</p>',
+        departmentId: departmentId as string,
+        channel: 'chat',
+      });
+      const ticketId = created?.ticket.id as string;
       window.__helpdockMockRealtime?.emitTicketChanged({
         brandId: brandId as string,
-        ticketId: ticketId as string,
+        ticketId,
         departmentId: departmentId as string,
         event: 'ticket.created',
       });
+
+      return ticketId;
     },
-    [BRAND, MOCK_TICKET_SIGN_IN, MOCK_DEPARTMENTS[0]?.id],
+    [BRAND, MOCK_DEPARTMENTS[0]?.id],
   );
 
 test.describe('the Sounds card', () => {
@@ -169,7 +180,7 @@ test.describe('a chat that waits', () => {
     await expect(reminder).toBeChecked();
     expect(await heard(page)).toEqual([]);
 
-    await waitingChatCreated(page);
+    const ticketId = await waitingChatCreated(page);
     await expect.poll(() => heard(page)).toEqual(['waiting-chat']);
 
     await page.clock.runFor(MINUTE);
@@ -183,21 +194,49 @@ test.describe('a chat that waits', () => {
         window.__helpdockMockTickets?.update(brandId as string, ticketId as string, {
           assigneeId: self as string,
         }),
-      [BRAND, MOCK_TICKET_SIGN_IN, MOCK_SELF_ID],
+      [BRAND, ticketId, MOCK_SELF_ID],
     );
     await page.clock.runFor(MINUTE);
     await page.clock.runFor(MINUTE);
     expect(await heard(page)).toHaveLength(3);
   });
 
-  test('is silent while the waiting-chat sound is off', async ({ page, appLocale: locale }) => {
+  test('goes quiet, reminder included, once the waiting-chat sound is turned off', async ({
+    page,
+    appLocale: locale,
+  }) => {
     await page.clock.install();
     const card = await openCard(page, locale);
-    await expect(toggle(card, locale, 'waitingChat')).toHaveAttribute('aria-checked', 'false');
+    await toggle(card, locale, 'waitingChat').click();
+    await expect(toggle(card, locale, 'waitingChat')).toHaveAttribute('aria-checked', 'true');
+    await card
+      .getByRole('checkbox', { name: strings(locale)('me:notifications.sounds.reminder') })
+      .click();
 
     await waitingChatCreated(page);
+    await expect.poll(() => heard(page)).toEqual(['waiting-chat']);
+
+    await toggle(card, locale, 'waitingChat').click();
+    await expect(toggle(card, locale, 'waitingChat')).toHaveAttribute('aria-checked', 'false');
+    await page.clock.runFor(MINUTE);
     await page.clock.runFor(MINUTE);
 
-    expect(await heard(page)).toEqual([]);
+    expect(await heard(page)).toEqual(['waiting-chat']);
+  });
+});
+
+test.describe('a sound change that cannot be saved', () => {
+  test('says so and puts the switch back', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    const card = await openCard(page, locale);
+    await page.evaluate(
+      (key) => window.localStorage.setItem(key, 'fail'),
+      MOCK_SOUNDS_FAIL_STORAGE,
+    );
+
+    await toggle(card, locale, 'newConversation').click();
+
+    await expect(page.getByText(t('me:notifications.sounds.failed'))).toBeVisible();
+    await expect(toggle(card, locale, 'newConversation')).toHaveAttribute('aria-checked', 'false');
   });
 });

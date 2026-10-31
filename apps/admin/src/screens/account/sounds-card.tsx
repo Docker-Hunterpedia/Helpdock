@@ -75,6 +75,7 @@ export function SoundsCard({ view }: { readonly view: NotificationPreferencesVie
     <Box
       component="section"
       aria-labelledby={headingId}
+      aria-describedby={noteId}
       sx={{
         borderRadius: '10px',
         border: `1px solid ${tokens['border.default']}`,

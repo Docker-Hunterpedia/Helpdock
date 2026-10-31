@@ -25,6 +25,10 @@ export const isWaitingChat = (ticket: Ticket): boolean =>
  * on the desk, most often this person, so it is silent.
  */
 export const soundForCreatedTicket = (ticket: Ticket): SoundEvent | null => {
+  // A split is made by a person from an existing conversation, not an arrival.
+  if (ticket.splitFromId !== null) {
+    return null;
+  }
   if (isWaitingChat(ticket)) {
     return 'waitingChat';
   }

@@ -87,7 +87,17 @@ const mount = async (sounds: NotificationSounds, tickets = new MockTicketsApi())
   });
   await settle();
 
-  return { client, tickets, notifications };
+  // The seeded chat was split off another ticket, which is never an arrival.
+  const chat = (
+    await tickets.create(BRAND, {
+      subject: 'Hello',
+      bodyHtml: '<p>Hello</p>',
+      departmentId: MOCK_DEPARTMENTS[0]?.id ?? '',
+      channel: 'chat',
+    })
+  ).ticket.id;
+
+  return { client, tickets, notifications, chat };
 };
 
 const created = (client: MockRealtimeClient, ticketId: string, brandId = BRAND) => {
@@ -112,9 +122,9 @@ afterEach(() => {
 
 describe('the live sounds', () => {
   it('play nothing and join no department room while every sound is off', async () => {
-    const { client } = await mount(NOTIFICATION_SOUND_DEFAULTS);
+    const { client, chat } = await mount(NOTIFICATION_SOUND_DEFAULTS);
 
-    created(client, MOCK_TICKET_SIGN_IN);
+    created(client, chat);
     created(client, MOCK_TICKET_REFUND);
     await settle();
 
@@ -131,10 +141,10 @@ describe('the live sounds', () => {
   });
 
   it('play the waiting-chat sound for an unassigned chat, once however often the frame repeats', async () => {
-    const { client } = await mount(on('waitingChat'));
+    const { client, chat } = await mount(on('waitingChat'));
 
-    created(client, MOCK_TICKET_SIGN_IN);
-    created(client, MOCK_TICKET_SIGN_IN);
+    created(client, chat);
+    created(client, chat);
 
     await waitFor(() => expect(FakeAudio.heard).toEqual(['waiting-chat']));
     await settle();
@@ -142,9 +152,9 @@ describe('the live sounds', () => {
   });
 
   it('count a waiting chat as a new conversation for somebody who has only that sound on', async () => {
-    const { client } = await mount(on('newConversation'));
+    const { client, chat } = await mount(on('newConversation'));
 
-    created(client, MOCK_TICKET_SIGN_IN);
+    created(client, chat);
     await waitFor(() => expect(FakeAudio.heard).toEqual(['new-conversation']));
 
     await settle();
@@ -153,9 +163,9 @@ describe('the live sounds', () => {
   });
 
   it('ignore a frame about another brand, and a ticket that cannot be read', async () => {
-    const { client } = await mount(on('waitingChat', 'newConversation'));
+    const { client, chat } = await mount(on('waitingChat', 'newConversation'));
 
-    created(client, MOCK_TICKET_SIGN_IN, OTHER_BRAND);
+    created(client, chat, OTHER_BRAND);
     created(client, '0192c3f0-1a2b-7c3d-8e4f-00000000dead');
     await settle();
 
@@ -267,10 +277,10 @@ describe('the live sounds', () => {
     const minute = () => act(async () => vi.advanceTimersByTimeAsync(MINUTE));
 
     it('repeats every minute while the chat waits and stops when it is picked up', async () => {
-      const { client, tickets } = await mount(on('waitingChat', 'waitingChatReminder'));
+      const { client, tickets, chat } = await mount(on('waitingChat', 'waitingChatReminder'));
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
 
-      created(client, MOCK_TICKET_SIGN_IN);
+      created(client, chat);
       await flush();
       expect(FakeAudio.heard).toEqual(['waiting-chat']);
 
@@ -278,23 +288,23 @@ describe('the live sounds', () => {
       await minute();
       expect(FakeAudio.heard).toEqual(['waiting-chat', 'waiting-chat', 'waiting-chat']);
 
-      await tickets.update(BRAND, MOCK_TICKET_SIGN_IN, { assigneeId: MOCK_SELF_ID });
+      await tickets.update(BRAND, chat, { assigneeId: MOCK_SELF_ID });
       await minute();
       await minute();
       expect(FakeAudio.heard).toHaveLength(3);
     });
 
     it('stops as soon as the frame about the pick-up arrives, before the next minute', async () => {
-      const { client, tickets } = await mount(on('waitingChat', 'waitingChatReminder'));
+      const { client, tickets, chat } = await mount(on('waitingChat', 'waitingChatReminder'));
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-      created(client, MOCK_TICKET_SIGN_IN);
+      created(client, chat);
       await flush();
 
-      await tickets.update(BRAND, MOCK_TICKET_SIGN_IN, { assigneeId: MOCK_SELF_ID });
+      await tickets.update(BRAND, chat, { assigneeId: MOCK_SELF_ID });
       act(() => {
         client.emitTicketChanged({
           brandId: BRAND,
-          ticketId: MOCK_TICKET_SIGN_IN,
+          ticketId: chat,
           departmentId: MOCK_DEPARTMENTS[0]?.id ?? '',
           event: 'ticket.updated',
         });
@@ -306,10 +316,10 @@ describe('the live sounds', () => {
     });
 
     it('does not repeat without the reminder switch', async () => {
-      const { client } = await mount(on('waitingChat'));
+      const { client, chat } = await mount(on('waitingChat'));
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
 
-      created(client, MOCK_TICKET_SIGN_IN);
+      created(client, chat);
       await flush();
       await minute();
       await minute();
@@ -318,9 +328,9 @@ describe('the live sounds', () => {
     });
 
     it('stops with the tab: leaving the shell ends every timer', async () => {
-      const { client } = await mount(on('waitingChat', 'waitingChatReminder'));
+      const { client, chat } = await mount(on('waitingChat', 'waitingChatReminder'));
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-      created(client, MOCK_TICKET_SIGN_IN);
+      created(client, chat);
       await flush();
 
       client.stop();

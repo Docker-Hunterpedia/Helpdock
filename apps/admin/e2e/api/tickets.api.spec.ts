@@ -19,8 +19,6 @@ test.skip(
 );
 
 test.describe.configure({ mode: 'serial' });
-// The details panel is inline from 1440 px (M14-19); below that it is a drawer.
-test.use({ viewport: { width: DETAILS_INLINE_WIDTH, height: 900 } });
 
 const t = strings('en');
 
@@ -30,6 +28,9 @@ const NOTE = 'Finance confirmed the batch by phone.';
 
 test.describe('the ticket workspace against the real api', () => {
   test('creates a ticket, replies, notes and closes it', async ({ page }) => {
+    // The details panel is inline from 1440 px (M14-19); below that it is a drawer.
+    // The worker's shared context ignores `test.use`, so the page is widened here.
+    await page.setViewportSize({ width: DETAILS_INLINE_WIDTH, height: 900 });
     await openAdmin(page);
 
     await page

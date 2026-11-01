@@ -1,3 +1,4 @@
+import { DETAILS_INLINE_WIDTH } from '../flows.js';
 import { strings } from '../strings.js';
 import { expect, openAdmin, test } from './admin-session.js';
 import { SKIP_ENV } from './install.js';
@@ -18,6 +19,8 @@ test.skip(
 );
 
 test.describe.configure({ mode: 'serial' });
+// The details panel is inline from 1440 px (M14-19); below that it is a drawer.
+test.use({ viewport: { width: DETAILS_INLINE_WIDTH, height: 900 } });
 
 const t = strings('en');
 

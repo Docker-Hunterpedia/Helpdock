@@ -237,6 +237,9 @@ test.describe('reference screens @screenshot', () => {
 
     // The holiday form's From date defaults to today.
     await page.clock.setFixedTime(FIXED_CLOCK);
+    // Tall enough that the page does not scroll: the save bar is sticky, and in
+    // a scrolled capture it would sit over the weekly hours.
+    await page.setViewportSize({ width: 1280, height: 1900 });
     await signInToShell(page, locale);
     await openTicketing(page, locale);
     await settingsTab(page, t, 'ticketing:tabs.businessHours').click();

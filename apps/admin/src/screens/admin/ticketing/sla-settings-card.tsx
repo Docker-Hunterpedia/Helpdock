@@ -146,12 +146,12 @@ export function SlaSettingsCard({
         </Typography>
       </Box>
 
-      <Box component="fieldset" sx={{ ...divider, border: 0, margin: 0, paddingInline: 0 }}>
-        <Typography
-          component="legend"
-          variant="body2"
-          sx={{ fontWeight: 500, float: 'inline-start', inlineSize: '100%' }}
-        >
+      <Box
+        role="group"
+        aria-labelledby="sla-compliance-label"
+        sx={{ ...divider, display: 'flex', flexDirection: 'column', gap: 1 }}
+      >
+        <Typography id="sla-compliance-label" variant="body2" sx={{ fontWeight: 500 }}>
           {t('ticketing:slas.settings.compliance')}
         </Typography>
         <RadioGroup

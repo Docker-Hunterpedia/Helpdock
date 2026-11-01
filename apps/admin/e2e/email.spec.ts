@@ -125,6 +125,19 @@ test.describe('Channels › Outgoing email', () => {
 
     const failed = page.getByRole('region', { name: t('channels:failed.heading') });
     await expect(failed.getByRole('row')).toHaveCount(3);
+    // The actions are the last column: they must not be scrolled out of the card.
+    const retryButton = failed.getByRole('button', {
+      name: t('channels:failed.retryLabel', { recipient: 'mona@example.com', ticket: 'HD-1042' }),
+    });
+    await retryButton.scrollIntoViewIfNeeded();
+    const card = await failed.boundingBox();
+    const button = await retryButton.boundingBox();
+    expect(card).not.toBeNull();
+    expect(button).not.toBeNull();
+    if (card && button) {
+      expect(button.x).toBeGreaterThanOrEqual(card.x);
+      expect(button.x + button.width).toBeLessThanOrEqual(card.x + card.width);
+    }
     await failed
       .getByRole('button', {
         name: t('channels:failed.retryLabel', { recipient: 'mona@example.com', ticket: 'HD-1042' }),

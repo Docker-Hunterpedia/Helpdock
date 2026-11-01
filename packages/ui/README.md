@@ -183,7 +183,7 @@ const brand = resolveBrandTheme(input);     // the final token set
   rather than steps of a ramp, so they stay as they are.
 - **radius** — 0 to 12, applied to `md`, with `lg` scaled in proportion. `sm`,
   `xl` and `full` are fixed.
-- **font** — one of the curated pairs. Only `ibm-plex` is self-hosted today.
+- **font** — one of the curated pairs. All three pairs are self-hosted.
 
 `validateBrandTheme` returns a typed list rather than throwing, so the admin can
 show every problem at once next to the live preview. An accent below 3:1 against
@@ -205,21 +205,28 @@ covers:
 import '@helpdock/ui/fonts.css';
 ```
 
-Sixteen faces, 361 KiB of woff2 (369 KiB for the directory, stylesheet included): IBM Plex Sans 400/500/600 in latin and latin-ext, IBM
-Plex Sans Arabic 400/500/600 in arabic and latin, IBM Plex Mono 400/500 in latin
-and latin-ext. DESIGN §3.2 loads three weights and no italics, and the budget for
-the directory is 1.5 MB; `src/fonts.test.ts` enforces both.
+Forty-one faces, about 1 MiB of woff2: IBM Plex Sans 400/500/600 in latin and
+latin-ext, IBM Plex Sans Arabic 400/500/600 in arabic and latin, IBM Plex Mono
+400/500 in latin and latin-ext, Noto Sans 400/500/600 in latin and latin-ext,
+Noto Sans Arabic 400/500/600 in arabic and latin, Noto Sans Mono 400/500 in
+latin and latin-ext, and Vazirmatn 400/500/600 in arabic, latin and latin-ext
+(the Vazirmatn pair's mono is IBM Plex Mono). DESIGN §3.2 loads three weights and
+no italics, and the budget for the directory is 1.5 MB; `src/fonts.test.ts`
+enforces both. `fontFacesFor(font)` lists one pair's faces as data, which the
+widget theme sends instead of every face.
 
 The files are copied out of the `@fontsource/*` packages by
 `pnpm --filter @helpdock/ui sync:fonts` and committed, so a clone builds without
 a font download. Re-run that script after a `@fontsource` upgrade. The directory
 is excluded from Biome because it is generated.
 
-All three families are **IBM Plex**, licensed under the
-[SIL Open Font License 1.1](https://openfontlicense.org), Copyright 2019 IBM
-Corp. The licence text travels with the fonts in the `@fontsource` packages and
-the attribution is repeated at the top of `fonts.css`. The widget loads them from
-the Helpdock origin, never from a third party (DESIGN §3).
+IBM Plex, Noto Sans, Noto Sans Arabic, Noto Sans Mono and Vazirmatn are all
+licensed under the [SIL Open Font License 1.1](https://openfontlicense.org)
+(IBM Plex: Copyright 2019 IBM Corp.; Noto: The Noto Project Authors; Vazirmatn:
+The Vazirmatn Project Authors). The licence text travels with the fonts in the
+`@fontsource` packages and each family's licence is repeated at the top of
+`fonts.css`. The widget loads them from the Helpdock origin, never from a third
+party (DESIGN §3).
 
 ## Dependencies
 

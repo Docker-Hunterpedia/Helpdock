@@ -47,6 +47,26 @@ export const FAMILY_PLANS: readonly FamilyPlan[] = [
     subsets: ['latin', 'latin-ext'],
     weights: [400, 500],
   },
+  {
+    source: '@fontsource/noto-sans',
+    subsets: ['latin', 'latin-ext'],
+    weights: [400, 500, 600],
+  },
+  {
+    source: '@fontsource/noto-sans-arabic',
+    subsets: ['arabic', 'latin'],
+    weights: [400, 500, 600],
+  },
+  {
+    source: '@fontsource/noto-sans-mono',
+    subsets: ['latin', 'latin-ext'],
+    weights: [400, 500],
+  },
+  {
+    source: '@fontsource/vazirmatn',
+    subsets: ['arabic', 'latin', 'latin-ext'],
+    weights: [400, 500, 600],
+  },
 ];
 
 interface FontsourceMetadata {

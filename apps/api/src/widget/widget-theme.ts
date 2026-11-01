@@ -1,5 +1,5 @@
 import type { WidgetAppearance, WidgetLocale, WidgetTheme } from '@helpdock/schemas';
-import { FONT_FACES, resolveBrandTheme, resolveSemanticTokens } from '@helpdock/ui/resolve';
+import { fontFacesFor, resolveBrandTheme, resolveSemanticTokens } from '@helpdock/ui/resolve';
 
 /**
  * The widget's theme (M4-06), resolved here so the widget ships no colour
@@ -8,8 +8,8 @@ import { FONT_FACES, resolveBrandTheme, resolveSemanticTokens } from '@helpdock/
  * into its shadow root as `--hd-*` properties.
  *
  * The brand does not pick a font or a radius on the Widget tab, so both are
- * the design system's defaults. The fonts are the files `packages/ui/fonts`
- * ships, which the widget build copies to `widget-fonts/` and the api serves
+ * the design system's defaults, and only the default pair's faces are sent. The
+ * fonts are files `packages/ui/fonts` ships, which the widget build copies to `widget-fonts/` and the api serves
  * from its own origin (`widget-bundle.controller.ts`).
  */
 
@@ -28,7 +28,7 @@ export const widgetThemeOf = (appearance: WidgetAppearance, assetOrigin: string)
     },
     radius: { md: brand.radius.md, lg: brand.radius.lg },
     fontFamily: { ...brand.fontFamily },
-    fonts: FONT_FACES.map((face) => ({
+    fonts: fontFacesFor(brand.font).map((face) => ({
       family: face.family,
       weight: face.weight,
       url: `${origin}${WIDGET_FONTS_PATH}/${face.file}`,

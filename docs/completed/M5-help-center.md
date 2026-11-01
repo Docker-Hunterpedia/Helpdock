@@ -149,7 +149,7 @@ Written down and carried forward. None of them blocks M6, M7 or M8.
 | **No spelling correction and no "Popular searches"** on the search pages | The search port answers neither. | This doc |
 | **Typos are forgiven in titles only** | Trigram matching over bodies needs an index that row-level security cannot use (ADR 0011). | [Search](#m5-05-search) |
 | **Partial widget queries are logged** | The widget searches while the visitor types, and each partial query is logged as its own search. The help center's search box submits a whole query. | [Search](#m5-05-search) |
-| **Only IBM Plex ships** | Noto Sans and Vazirmatn fall back to the system stack until their files are added to `packages/ui/fonts` (`BRAND_FONTS`). | [Theme and site settings](#m5-06-theme-and-site-settings) |
+| ~~Only IBM Plex ships~~ | Closed by #255: Noto Sans (with Noto Sans Arabic and Noto Sans Mono) and Vazirmatn now ship in `packages/ui/fonts`, and `help-center-brand-fonts.spec.ts` checks the computed family and the loaded file in `en` and `ar`. | [Theme and site settings](#m5-06-theme-and-site-settings) |
 | **SVG logos are refused** | Rasterising an uploaded SVG lets it reference other files. The pipeline takes PNG, JPEG, WebP and GIF. | [Theme and site settings](#m5-06-theme-and-site-settings) |
 | **`hc_media` is not purged when a brand is deleted** | Retention (M1-14) knows ticket attachments only, so a deleted brand's article images, logo and favicon stay in the bucket. | This doc |
 | ~~The api's page Playwright project is not in CI~~ | Closed in #139: the admin `e2e` job runs `pnpm --filter @helpdock/api e2e` on its first shard. | [CI workflow](../../.github/workflows/ci.yml) |

@@ -213,7 +213,7 @@ the MUI theme, the light and dark `--hd-*` custom properties the widget uses, th
 two Emotion caches that make RTL work, and `resolveBrandTheme` for the per-brand
 accent, ramp and radius. Its contrast suite asserts every pair DESIGN §2.2 claims,
 in both modes, so a colour change that breaks AA fails CI. The self-hosted IBM
-Plex woff2 files live there too, under a 1.5 MB budget.
+Plex, Noto Sans and Vazirmatn woff2 files live there too, under a 1.5 MB budget.
 
 ```ts
 import { createHelpdockTheme, createRtlCache, tokens } from '@helpdock/ui';

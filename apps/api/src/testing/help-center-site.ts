@@ -166,6 +166,8 @@ export interface MemorySiteOptions {
   access?: HcAccess;
   widgetOrigins?: readonly string[];
   customCss?: string;
+  /** The brand's typeface pair; `ibm-plex` when omitted. */
+  font?: 'ibm-plex' | 'noto-sans' | 'vazirmatn';
 }
 
 const readable = (version: Version, audience: HcAudience, access: HcAccess): boolean =>
@@ -326,7 +328,7 @@ export const memorySiteContent = (options: MemorySiteOptions = {}) => {
                   surfaceTone: 'warm' as const,
                   radius: 6,
                   mode: 'auto' as const,
-                  font: 'ibm-plex' as const,
+                  font: options.font ?? ('ibm-plex' as const),
                 },
                 logo: null,
                 favicon: null,

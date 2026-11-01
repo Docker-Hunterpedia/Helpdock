@@ -75,7 +75,7 @@ Admins and Team Leaders (`help_center:manage`); a Viewer sees the cards read-onl
 
 | Card | What it sets |
 |---|---|
-| Theme | Accent (refused if it is below 3:1 against the page; the card shows how white text reads on it), surface tone, corner radius 0–12, light, dark or auto, the typeface pair, logo and favicon (PNG, JPEG, WebP or GIF, re-encoded and scaled to 512 px at most). Only IBM Plex ships today; the other two pairs fall back to the system's fonts. |
+| Theme | Accent (refused if it is below 3:1 against the page; the card shows how white text reads on it), surface tone, corner radius 0–12, light, dark or auto, the typeface pair, logo and favicon (PNG, JPEG, WebP or GIF, re-encoded and scaled to 512 px at most). The pairs are IBM Plex, Noto Sans (with Noto Sans Arabic) and Vazirmatn, all self-hosted; Arabic pages use the pair's Arabic companion. |
 | Home page | Category cards, up to six featured articles in order (move one with the arrow keys on its handle), popular articles. Search is always shown. |
 | Header and footer links | Up to eight each: an English and an Arabic label and an `https://`, `http://` or `mailto:` address. |
 | Custom CSS | Up to 20 000 characters, applied after the theme. Saving keeps only plain style rules and `@media` blocks; it removes `@import` and other at-rules, `url()` other than an inline image or an image uploaded here, `expression()` and script addresses, `position: fixed`, and anything with a backslash or a `<`. The card lists what it removed and why. |

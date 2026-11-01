@@ -4,7 +4,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 /**
- * The self-hosted type of DESIGN §3 — IBM Plex Sans, Sans Arabic and Mono as
+ * The self-hosted type of DESIGN §3 and §8 — IBM Plex, Noto Sans and Vazirmatn as
  * subset woff2, and the `@font-face` sheet that names them — for the pages the
  * api renders itself: the hosted web form now (M4-09), the help center when
  * M5 renders it. "Fonts are self-hosted … never from a third party."

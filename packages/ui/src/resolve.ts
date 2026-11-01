@@ -12,6 +12,6 @@ export type {
 } from './brand.js';
 export { BRAND_FONTS, resolveBrandTheme, validateBrandTheme } from './brand.js';
 export type { FontFaceRule } from './font-faces.js';
-export { FONT_FACES } from './font-faces.js';
+export { FONT_FACES, fontFacesFor } from './font-faces.js';
 export { resolveSemanticTokens } from './semantic.js';
 export { fontFallbacks } from './tokens.js';

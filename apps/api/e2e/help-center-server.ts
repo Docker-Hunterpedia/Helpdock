@@ -25,7 +25,7 @@ import { send, siteRequest } from '../dist/help-center/site/site.controller.js';
 import { HelpCenterSite } from '../dist/help-center/site/site.js';
 import { loadFonts } from '../dist/static/fonts.js';
 import { articleId, memorySiteContent } from '../src/testing/help-center-site.ts';
-import { HELP_CENTER_PORT, HELP_CENTER_WALL_PORT } from './fixtures.ts';
+import { HELP_CENTER_FONT_PORTS, HELP_CENTER_PORT, HELP_CENTER_WALL_PORT } from './fixtures.ts';
 import {
   IMPORTED_FILE_BYTES,
   IMPORTED_FILE_DOWNLOAD_PATH,
@@ -43,9 +43,13 @@ const refundHits = [
   },
 ];
 
-const siteOver = (access: 'public' | 'internal_only', port: number) =>
+const siteOver = (
+  access: 'public' | 'internal_only',
+  port: number,
+  font?: 'noto-sans' | 'vazirmatn',
+) =>
   new HelpCenterSite({
-    content: withImportedArticle(memorySiteContent({ access }).content),
+    content: withImportedArticle(memorySiteContent({ access, font }).content),
     hosts: { brandOf: async () => null },
     search: {
       search: async ({ q }: { q: string }) =>
@@ -130,6 +134,10 @@ const serve = async (site: HelpCenterSite, port: number): Promise<void> => {
   process.stdout.write(`help center e2e server on http://127.0.0.1:${String(port)}\n`);
 };
 
+// The brands that picked Noto Sans and Vazirmatn, for help-center-brand-fonts.spec.ts.
+for (const font of ['noto-sans', 'vazirmatn'] as const) {
+  await serve(siteOver('public', HELP_CENTER_FONT_PORTS[font], font), HELP_CENTER_FONT_PORTS[font]);
+}
 // The internal-only twin first: Playwright starts the specs once the public one answers.
 await serve(siteOver('internal_only', HELP_CENTER_WALL_PORT), HELP_CENTER_WALL_PORT);
 await serve(siteOver('public', HELP_CENTER_PORT), HELP_CENTER_PORT);

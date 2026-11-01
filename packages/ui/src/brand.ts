@@ -25,9 +25,8 @@ const DEFAULT_RADIUS = tokens.radius.md;
 
 /**
  * DESIGN §8: a curated list of self-hosted pairs, each with an Arabic
- * companion. No arbitrary font URLs. Only `ibm-plex` ships in
- * `packages/ui/fonts` today; the other two arrive with their own deliverable,
- * and until then they fall back to the system stack.
+ * companion. No arbitrary font URLs. All three ship in `packages/ui/fonts`;
+ * the system stack after each family is only the fallback while a file loads.
  */
 export const BRAND_FONTS = {
   'ibm-plex': {

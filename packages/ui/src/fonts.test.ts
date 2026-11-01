@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { FONT_BUDGET_BYTES } from '../scripts/sync-fonts.ts';
-import { tokens } from './tokens.js';
+import { BRAND_FONTS } from './brand.js';
 
 const fontsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fonts');
 const stylesheet = await readFile(path.join(fontsDir, 'fonts.css'), 'utf8');
@@ -18,19 +18,43 @@ const faces = [...stylesheet.matchAll(/@font-face\s*\{([^}]*)\}/g)].map(([, body
 }));
 
 describe('fonts.css', () => {
-  it('declares the three families DESIGN §3 names', () => {
+  it('declares the families of every curated brand pair', () => {
     expect(new Set(faces.map((face) => face.family))).toEqual(
-      new Set(['IBM Plex Sans', 'IBM Plex Sans Arabic', 'IBM Plex Mono']),
+      new Set([
+        'IBM Plex Sans',
+        'IBM Plex Sans Arabic',
+        'IBM Plex Mono',
+        'Noto Sans',
+        'Noto Sans Arabic',
+        'Noto Sans Mono',
+        'Vazirmatn',
+      ]),
     );
   });
 
-  it('loads only the three weights, and only two for the mono face', () => {
+  it('loads only the three weights, and only two for the mono faces', () => {
     const weightsOf = (family: string) =>
       new Set(faces.filter((face) => face.family === family).map((face) => face.weight));
 
-    expect(weightsOf('IBM Plex Sans')).toEqual(new Set([400, 500, 600]));
-    expect(weightsOf('IBM Plex Sans Arabic')).toEqual(new Set([400, 500, 600]));
+    for (const family of [
+      'IBM Plex Sans',
+      'IBM Plex Sans Arabic',
+      'Noto Sans',
+      'Noto Sans Arabic',
+      'Vazirmatn',
+    ]) {
+      expect(weightsOf(family)).toEqual(new Set([400, 500, 600]));
+    }
     expect(weightsOf('IBM Plex Mono')).toEqual(new Set([400, 500]));
+    expect(weightsOf('Noto Sans Mono')).toEqual(new Set([400, 500]));
+  });
+
+  it('ships an Arabic-script subset for each Arabic companion', () => {
+    for (const family of ['IBM Plex Sans Arabic', 'Noto Sans Arabic', 'Vazirmatn']) {
+      expect(faces.some((face) => face.family === family && face.file?.includes('-arabic-'))).toBe(
+        true,
+      );
+    }
   });
 
   it('never loads bold, which DESIGN §3.2 rules out', () => {
@@ -57,9 +81,14 @@ describe('fonts.css', () => {
     expect(files.filter((file) => file !== 'fonts.css' && !referenced.has(file))).toEqual([]);
   });
 
-  it('names the same families the tokens fall back from', () => {
-    for (const face of faces) {
-      expect(Object.values(tokens.typography.fontFamily).join(' ')).toContain(`'${face.family}'`);
+  it('ships every family a curated brand font names first', () => {
+    const shipped = new Set(faces.map((face) => face.family));
+
+    for (const pair of Object.values(BRAND_FONTS)) {
+      for (const stack of [pair.sans, pair.arabic, pair.mono]) {
+        const first = /^'([^']+)'/.exec(stack)?.[1];
+        expect(shipped).toContain(first);
+      }
     }
   });
 

@@ -27,7 +27,7 @@ describe('widgetThemeOf', () => {
     expect(theme.launcher).toEqual({ style: 'icon_text', label: null, position: 'start' });
   });
 
-  it('lists the self-hosted fonts on the api origin', () => {
+  it('lists the default pairs self-hosted fonts on the api origin, and no other family', () => {
     const { fonts } = widgetThemeOf(appearance, 'https://support.example.com/');
 
     expect(fonts.length).toBeGreaterThan(0);

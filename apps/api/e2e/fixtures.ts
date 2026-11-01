@@ -15,3 +15,8 @@ export const HELP_CENTER_URL = `http://127.0.0.1:${String(HELP_CENTER_PORT)}`;
 /** The same server's internal-only twin, for the wall every visitor meets there (M9-04). */
 export const HELP_CENTER_WALL_PORT = HELP_CENTER_PORT + 100;
 export const HELP_CENTER_WALL_URL = `http://127.0.0.1:${String(HELP_CENTER_WALL_PORT)}`;
+/** Twins of the public server whose brand picked another typeface (M5-06). */
+export const HELP_CENTER_FONT_PORTS = {
+  'noto-sans': HELP_CENTER_PORT + 200,
+  vazirmatn: HELP_CENTER_PORT + 300,
+} as const;

@@ -781,6 +781,18 @@ importers:
       '@fontsource/ibm-plex-sans-arabic':
         specifier: 5.3.0
         version: 5.3.0
+      '@fontsource/noto-sans':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/noto-sans-arabic':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/noto-sans-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/vazirmatn':
+        specifier: 5.3.0
+        version: 5.3.0
       '@mui/material':
         specifier: 9.4.0
         version: 9.4.0(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.0)(supports-color@7.2.0))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.0)(supports-color@7.2.0))(@types/react@19.3.0)(react@19.3.0)(supports-color@7.2.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -1877,6 +1889,18 @@ packages:
 
   '@fontsource/ibm-plex-sans@5.3.0':
     resolution: {integrity: sha512-CbE4CbbEEZJX860XyUiRpsksXIQR8Rp2XDva2VO53NJox9tVNtusrysd2x5YkUEY3ErQ66W1IiiQL8/wihhw5w==}
+
+  '@fontsource/noto-sans-arabic@5.3.0':
+    resolution: {integrity: sha512-i3t6GR0LOReyJVEk+YfYCnxv53wuIelg7Y9NGNvOq4Diq/EP0YszaGXkQwfQNigLjfO4POrLaPGM0sNliGYk7A==}
+
+  '@fontsource/noto-sans-mono@5.3.0':
+    resolution: {integrity: sha512-DPZ+/Ng9HP5UKiALCKtoeGfA7zJzEjHFB/18OU/c3+4I9zZ3eMVAuFZb0SqzT89Yj7KNhJFYnYjyDaVKhdRuUg==}
+
+  '@fontsource/noto-sans@5.3.0':
+    resolution: {integrity: sha512-fBCog2PY7DiVVTEEqtI/Qdinx/knobHYfoGpjFXdfBX5RoJaBp1Prw2G75p0OIsdlMZg3cLo0c+YbIUYOxnQJw==}
+
+  '@fontsource/vazirmatn@5.3.0':
+    resolution: {integrity: sha512-XC/2yN2r5gwhFT3klSuWaqncODX2DOfRYfNmbyzgtWYxHxMC+tcoaX+tgggrm6hSkEgpR1TuSDEf1PiI91G7qg==}
 
   '@google/genai@1.52.0':
     resolution: {integrity: sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q==}
@@ -7683,6 +7707,14 @@ snapshots:
   '@fontsource/ibm-plex-sans-arabic@5.3.0': {}
 
   '@fontsource/ibm-plex-sans@5.3.0': {}
+
+  '@fontsource/noto-sans-arabic@5.3.0': {}
+
+  '@fontsource/noto-sans-mono@5.3.0': {}
+
+  '@fontsource/noto-sans@5.3.0': {}
+
+  '@fontsource/vazirmatn@5.3.0': {}
 
   '@google/genai@1.52.0(supports-color@7.2.0)':
     dependencies:

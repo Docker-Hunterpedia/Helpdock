@@ -14,6 +14,14 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 1.4.0 — 2026-11-01
+
+Brand fonts. No migrations and no configuration changes.
+
+- **Brand typefaces.** A brand that picks Noto Sans or Vazirmatn for its help
+  center theme now gets that typeface, served by Helpdock itself, instead of
+  the system font. No request goes to a third-party font host.
+
 ## 1.3.0 — 2026-11-01
 
 Inbox productivity (M14) and a security patch. Upgrade if you receive email

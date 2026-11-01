@@ -9,7 +9,7 @@ services:
       registry_type: GHCR
       registry: docker-hunterpedia
       repository: helpdock
-      tag: 1.3.0
+      tag: 1.4.0
     http_port: 3000
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-2gb
@@ -27,7 +27,7 @@ workers:
       registry_type: GHCR
       registry: docker-hunterpedia
       repository: helpdock
-      tag: 1.3.0
+      tag: 1.4.0
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-2gb
     envs:

@@ -7,7 +7,9 @@ import {
   openContacts,
   openSettingsArea,
   openTicket,
+  openTicketing,
   openTickets,
+  settingsTab,
   signIn,
   submitPassword,
 } from './flows.js';
@@ -187,5 +189,76 @@ test.describe('reference screens @screenshot', () => {
     await page.getByText(t('contacts:detail.visibleTickets', { count: 2 })).waitFor();
 
     await expect(page).toHaveScreenshot('contact-detail.png', { fullPage: true });
+  });
+
+  test('Channels, Mailboxes', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    await signInToShell(page, locale);
+    await openSettingsArea(page, t, 'channels');
+    // The heading renders with the shell; the mailbox list arrives after it.
+    await page.getByRole('heading', { name: t('channels:mailboxes.heading'), level: 2 }).waitFor();
+    await page.getByRole('table').waitFor();
+
+    await expect(page).toHaveScreenshot('channels-mailboxes.png', { fullPage: true });
+  });
+
+  test('Channels, Outgoing email', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signInToShell(page, locale);
+    await openSettingsArea(page, t, 'channels');
+    await settingsTab(page, t, 'channels:tabs.outgoing').click();
+    await page.getByRole('heading', { name: t('channels:smtp.heading') }).waitFor();
+    // Not delivered rows come last, once the failed-message query settles.
+    await page
+      .getByRole('region', { name: t('channels:failed.heading') })
+      .getByRole('row')
+      .nth(1)
+      .waitFor();
+
+    await expect(page).toHaveScreenshot('channels-outgoing.png', { fullPage: true });
+  });
+
+  test('Automation, Rules', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signInToShell(page, locale);
+    await openSettingsArea(page, t, 'automation');
+    await page.getByRole('list', { name: t('rules:list.rules.caption') }).waitFor();
+
+    await expect(page).toHaveScreenshot('automation-rules.png', { fullPage: true });
+  });
+
+  test('Ticketing, Business hours', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    // The holiday form's From date defaults to today.
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    // Tall enough that the page does not scroll: the save bar is sticky, and in
+    // a scrolled capture it would sit over the weekly hours.
+    await page.setViewportSize({ width: 1280, height: 1900 });
+    await signInToShell(page, locale);
+    await openTicketing(page, locale);
+    await settingsTab(page, t, 'ticketing:tabs.businessHours').click();
+    await page
+      .getByRole('heading', { name: t('ticketing:businessHours.heading'), level: 2 })
+      .waitFor();
+
+    await expect(page).toHaveScreenshot('ticketing-business-hours.png', { fullPage: true });
+  });
+
+  test('Ticketing, SLAs', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signInToShell(page, locale);
+    await openTicketing(page, locale);
+    await settingsTab(page, t, 'ticketing:tabs.slas').click();
+    await page.getByRole('form', { name: t('ticketing:slas.editor.form') }).waitFor();
+
+    await expect(page).toHaveScreenshot('ticketing-slas.png', { fullPage: true });
   });
 });

@@ -142,7 +142,7 @@ export function FailedSendsCard({ brandId }: { readonly brandId: string }): Reac
                     <TableCell>
                       <bdi>{row.recipient}</bdi>
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <MuiLink component={Link} to={ticketRoute(row.ticketId)}>
                         <Typography variant="mono" component="bdi" sx={{ fontSize: 13 }}>
                           {row.ticketReference}
@@ -152,7 +152,7 @@ export function FailedSendsCard({ brandId }: { readonly brandId: string }): Reac
                     <TableCell
                       title={row.lastError ?? undefined}
                       sx={{
-                        maxWidth: 320,
+                        maxWidth: 160,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',

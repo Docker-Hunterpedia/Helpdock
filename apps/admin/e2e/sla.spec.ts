@@ -109,6 +109,27 @@ test.describe('the Business hours tab', () => {
 });
 
 test.describe('the SLAs tab', () => {
+  test('lays the compliance choice out under its label', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTab(page, locale, 'slas');
+
+    const group = page.getByRole('group', { name: t('ticketing:slas.settings.compliance') });
+    const radio = group.getByRole('radio', { name: t('ticketing:slas.settings.countReopens') });
+    // One line each, not a word per line at the far edge of the card.
+    const label = group.getByText(t('ticketing:slas.settings.countReopens'));
+    const box = await label.boundingBox();
+    expect(box?.height).toBeLessThan(30);
+    const groupBox = await group.boundingBox();
+    const radioBox = await radio.boundingBox();
+    if (groupBox && radioBox) {
+      expect(radioBox.x + radioBox.width).toBeLessThanOrEqual(
+        // MUI pulls the radio 11px outward to align its dot with the text.
+        groupBox.x + groupBox.width + 11,
+      );
+    }
+  });
+
   test('changes a target and saves the policy', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);

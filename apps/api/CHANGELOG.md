@@ -1,5 +1,11 @@
 # @helpdock/api
 
+## 1.4.0
+
+### Minor Changes
+
+- [#446](https://github.com/Docker-Hunterpedia/Helpdock/pull/446) [`f4138d4`](https://github.com/Docker-Hunterpedia/Helpdock/commit/f4138d4fa80136264d8ef581cba78b4d052a1142) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Brands that pick Noto Sans or Vazirmatn for their help center theme now get those typefaces, self-hosted, instead of the system font.
+
 ## 1.3.0
 
 ### Minor Changes

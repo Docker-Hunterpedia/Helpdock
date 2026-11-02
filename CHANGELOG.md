@@ -14,6 +14,25 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 1.4.1 — 2026-11-02
+
+Admin usability fixes from the 2026-11 review. No migrations and no
+configuration changes.
+
+- **One sidebar.** Tickets, Contacts, Help center, Reports and Settings now
+  share one tree with expandable subpages, in place of the second Settings
+  sidebar. Every entry has an icon, and the collapsed rail opens a flyout.
+- **Navigation.** New pages open at the top, `#fragment` links reach their
+  section, and unknown addresses show "Page not found" inside the app.
+- **Settings.** Brand gains a Data retention page, Profile takes your email and
+  language from Security, and the System page's email card is now System email.
+  Statuses show the reader's language first.
+- **Forms.** Save and Discard stay disabled until a form changes, and labels sit
+  above their fields. The widget preview draws the selected mode and colour
+  scheme.
+- **Audit log.** Page-view rows stay hidden unless asked for
+  (`includePageViews`), including in the System page's audit preview.
+
 ## 1.4.0 — 2026-11-01
 
 Brand fonts. No migrations and no configuration changes.

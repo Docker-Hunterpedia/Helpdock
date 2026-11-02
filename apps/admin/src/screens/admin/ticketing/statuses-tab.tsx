@@ -29,15 +29,19 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
+import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { isAuthError } from '../../../auth/api.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { isTicketingError } from '../../../ticketing/api.js';
 import { refusalCopy } from '../../../ticketing/refusal-copy.js';
+import { statusNames } from '../../../ticketing/status-names.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { Field } from '../../../ui/field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
+import { visuallyHidden } from '../../../ui/visually-hidden.js';
+import { nameButtonSx } from './name-button.js';
 import { moveBy, moveTo } from './reorder.js';
 import { ReplyBehaviourCard } from './reply-behaviour-card.tsx';
 import { type StatusDraft, StatusEditor } from './status-editor.tsx';
@@ -73,6 +77,7 @@ interface UpdateInput {
 
 export function StatusesTab(): ReactNode {
   const t = useT();
+  const { locale } = usePreferences();
   const api = useTicketingApi();
   const session = useSession();
   const tokens = useSemanticTokens();
@@ -271,10 +276,10 @@ export function StatusesTab(): ReactNode {
                 <TableRow sx={{ backgroundColor: tokens['bg.muted'] }}>
                   <TableCell />
                   <TableCell>{t('ticketing:statuses.table.name')}</TableCell>
+                  <TableCell>{t('ticketing:statuses.table.type')}</TableCell>
                   <TableCell>{t('ticketing:statuses.table.systemState')}</TableCell>
                   <TableCell>{t('ticketing:statuses.table.pausesSla')}</TableCell>
                   <TableCell>{t('ticketing:statuses.table.awaitingCustomer')}</TableCell>
-                  <TableCell align="right">{t('ticketing:statuses.table.tickets')}</TableCell>
                   <TableCell />
                 </TableRow>
               </TableHead>
@@ -292,14 +297,16 @@ export function StatusesTab(): ReactNode {
                       setDragging(null);
                     }}
                     sx={{
-                      height: 44,
+                      height: 52,
                       backgroundColor:
                         status.id === selectedId ? tokens['action.primary.tint'] : undefined,
                     }}
                   >
                     <TableCell sx={{ width: 40 }}>
                       <IconButton
-                        aria-label={t('ticketing:statuses.table.dragHandle', { name: status.name })}
+                        aria-label={t('ticketing:statuses.table.dragHandle', {
+                          name: statusNames(status, locale).primary,
+                        })}
                         draggable
                         disabled={busy}
                         onDragStart={() => {
@@ -320,50 +327,34 @@ export function StatusesTab(): ReactNode {
                     </TableCell>
 
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Box
-                          aria-hidden="true"
-                          sx={{
-                            inlineSize: 10,
-                            blockSize: 10,
-                            borderRadius: '50%',
-                            flexShrink: 0,
-                            backgroundColor: tokens[`status.${status.color}`],
-                          }}
-                        />
-                        <Button
-                          variant="text"
-                          aria-label={t('ticketing:statuses.table.select', { name: status.name })}
-                          onClick={() => {
-                            setCreating(false);
-                            setSelectedId(status.id);
-                          }}
-                          sx={{ justifyContent: 'flex-start', paddingInline: 0 }}
-                        >
-                          {status.name}
-                        </Button>
-                        <Chip
-                          size="small"
-                          label={t(
-                            status.isDefault
-                              ? 'ticketing:statuses.chips.default'
-                              : status.isSystem
-                                ? 'ticketing:statuses.chips.system'
-                                : 'ticketing:statuses.chips.custom',
-                          )}
-                        />
-                      </Box>
-                      {status.nameAr === null ? null : (
-                        <Typography
-                          variant="caption"
-                          component="span"
-                          lang="ar"
-                          dir="rtl"
-                          sx={{ display: 'block', color: 'text.secondary' }}
-                        >
-                          {status.nameAr}
-                        </Typography>
-                      )}
+                      <StatusNames status={status} locale={locale}>
+                        {(name) => (
+                          <Button
+                            variant="text"
+                            aria-label={t('ticketing:statuses.table.select', { name })}
+                            onClick={() => {
+                              setCreating(false);
+                              setSelectedId(status.id);
+                            }}
+                            sx={nameButtonSx}
+                          >
+                            {name}
+                          </Button>
+                        )}
+                      </StatusNames>
+                    </TableCell>
+
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={t(
+                          status.isDefault
+                            ? 'ticketing:statuses.chips.default'
+                            : status.isSystem
+                              ? 'ticketing:statuses.chips.system'
+                              : 'ticketing:statuses.chips.custom',
+                        )}
+                      />
                     </TableCell>
 
                     <TableCell>{t(`ticketing:statuses.states.${status.systemState}`)}</TableCell>
@@ -373,15 +364,11 @@ export function StatusesTab(): ReactNode {
                     <TableCell>
                       <FlagCell on={status.awaitingCustomer} />
                     </TableCell>
-                    <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {status.id === selected?.id && usage.data !== undefined
-                        ? usage.data.ticketCount
-                        : ''}
-                    </TableCell>
-
                     <TableCell align="right">
                       <IconButton
-                        aria-label={t('ticketing:statuses.table.rowActions', { name: status.name })}
+                        aria-label={t('ticketing:statuses.table.rowActions', {
+                          name: statusNames(status, locale).primary,
+                        })}
                         aria-haspopup="menu"
                         disabled={busy}
                         onClick={(event) => {
@@ -413,6 +400,7 @@ export function StatusesTab(): ReactNode {
             <StatusEditor
               status={selected}
               ticketCount={ticketCount}
+              usageKnown={usage.data !== undefined}
               fallbackName={fallbackName}
               busy={busy}
               onSubmit={(draft) => {
@@ -626,18 +614,58 @@ function FlagCell({ on }: { readonly on: boolean }): ReactNode {
   return on ? (
     <>
       <Check size={16} aria-hidden="true" />
-      <Box
-        component="span"
-        sx={{
-          position: 'absolute',
-          inlineSize: 1,
-          blockSize: 1,
-          overflow: 'hidden',
-          clipPath: 'inset(50%)',
-        }}
-      >
+      <Box component="span" sx={visuallyHidden}>
         {t('ticketing:statuses.table.checked')}
       </Box>
     </>
   ) : null;
+}
+
+/**
+ * The status's colour dot, its name in the reader's language (rendered by the
+ * caller, as it is the button that opens the editor) and the other name under
+ * it. One column, start aligned, never wrapping (`Admin/UX-Fixes-2026-11`).
+ */
+function StatusNames({
+  status,
+  locale,
+  children,
+}: {
+  readonly status: TicketStatus;
+  readonly locale: 'en' | 'ar';
+  readonly children: (primary: string) => ReactNode;
+}): ReactNode {
+  const tokens = useSemanticTokens();
+  const names = statusNames(status, locale);
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+      <Box
+        aria-hidden="true"
+        sx={{
+          inlineSize: 10,
+          blockSize: 10,
+          borderRadius: '50%',
+          flexShrink: 0,
+          backgroundColor: tokens[`status.${status.color}`],
+        }}
+      />
+      <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, alignItems: 'flex-start' }}>
+        <Box lang={names.primaryLang} dir={names.primaryLang === 'ar' ? 'rtl' : 'ltr'}>
+          {children(names.primary)}
+        </Box>
+        {names.secondary === null ? null : (
+          <Typography
+            variant="caption"
+            component="span"
+            lang={names.secondaryLang}
+            dir={names.secondaryLang === 'ar' ? 'rtl' : 'ltr'}
+            sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}
+          >
+            {names.secondary}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
 }

@@ -16,6 +16,7 @@ import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useEmailApi, useSession, useStaffApi } from '../../auth/session.tsx';
 import { emailKeys } from '../../email/api.js';
+import { isDirty } from '../../ui/dirty.js';
 import { Field } from '../../ui/field.tsx';
 import { useEmailAction } from '../admin/channels/section-card.tsx';
 
@@ -102,6 +103,8 @@ export function SignatureTab(): ReactNode {
       setChecked(false);
     },
   );
+
+  const dirty = stored.data !== undefined && isDirty(draft, stored.data);
 
   const wrong = { en: checked && tooManyLines(draft.en), ar: checked && tooManyLines(draft.ar) };
 
@@ -231,7 +234,7 @@ export function SignatureTab(): ReactNode {
         >
           <Button
             variant="text"
-            disabled={save.isPending || stored.data === undefined}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               if (stored.data !== undefined) {
                 setDraft(stored.data);
@@ -241,7 +244,7 @@ export function SignatureTab(): ReactNode {
           >
             {t('me:signature.discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('me:signature.save')}
           </Button>
         </Box>

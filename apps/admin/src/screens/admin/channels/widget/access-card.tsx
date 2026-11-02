@@ -21,6 +21,7 @@ import { useT } from '../../../../app/i18n.js';
 import { usePreferences } from '../../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { useChannelsApi } from '../../../../auth/session.tsx';
+import { isDirty } from '../../../../ui/dirty.js';
 import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { latinNumbering } from '../../../../ui/format.js';
 import { SectionCard, useEmailAction } from '../section-card.tsx';
@@ -144,6 +145,8 @@ export function AccessCard({
         ? t('channels:widget.access.secretSavedBySystem', { date: date(stamp.setAt) })
         : t('channels:widget.access.secretSaved', { date: date(stamp.setAt), name: stamp.setBy });
 
+  const dirty = isDirty(draft, draftOf(access));
+
   return (
     <SectionCard
       id={`${id}-access`}
@@ -155,7 +158,7 @@ export function AccessCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               setDraft(draftOf(access));
               setOriginProblem(null);
@@ -164,7 +167,7 @@ export function AccessCard({
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:widget.save')}
           </Button>
         </>

@@ -223,7 +223,7 @@ function buildComponents(
           borderRadius: px(radius.md),
           backgroundColor: semantic['bg.surface'],
           ...typeStyle('body'),
-          '& .MuiOutlinedInput-notchedOutline': { borderColor: semantic['border.strong'] },
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: semantic['border.strong'], top: 0 },
           '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: semantic['border.strong'] },
           '&.Mui-focused': ring,
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
@@ -233,10 +233,49 @@ function buildComponents(
           '&.Mui-error .MuiOutlinedInput-notchedOutline': {
             borderColor: semantic['status.danger'],
           },
+          // The label sits above the box (DESIGN §6.1), so the outline has no
+          // notch to cut for it: no legend, and no lift of the top border.
+          '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
         },
         input: { paddingBlock: 0, paddingInline: px(10) },
       },
     },
+
+    // DESIGN §6.1: a label is a line of text above its input at 13/500 with a
+    // 6 px gap, never a floating notched label inside the box. Any field built
+    // with MUI's `label` prop gets that here, so no screen draws the other kind.
+    MuiInputLabel: {
+      // The label is above the box, so it is never "resting" inside it: a placeholder shows at once.
+      defaultProps: { shrink: true },
+      styleOverrides: {
+        root: {
+          position: 'static',
+          transform: 'none',
+          maxWidth: '100%',
+          marginBlockEnd: px(6),
+          pointerEvents: 'auto',
+          overflow: 'visible',
+          whiteSpace: 'normal',
+          fontSize: px(13),
+          fontWeight: tokens.typography.fontWeight.medium,
+          lineHeight: px(20),
+          color: semantic['text.primary'],
+          '&.Mui-focused, &.Mui-error': { color: semantic['text.primary'] },
+          '&.Mui-disabled': { color: semantic['text.secondary'] },
+          '&.MuiInputLabel-shrink': { transform: 'none' },
+        },
+      },
+    },
+
+    // DESIGN §6.1: the hint sits flush under the box at 12, the same as Field's.
+    MuiFormHelperText: {
+      styleOverrides: {
+        root: { marginInline: 0, marginBlockStart: px(6), ...typeStyle('caption') },
+      },
+    },
+
+    MuiDialogContent: { styleOverrides: { root: { minHeight: 0 } } },
+    MuiDialogActions: { styleOverrides: { root: { flexShrink: 0 } } },
 
     MuiChip: {
       styleOverrides: {
@@ -257,6 +296,9 @@ function buildComponents(
           backgroundColor: semantic['bg.surface'],
           boxShadow: elevation['3'],
           backgroundImage: 'none',
+          // A dialog that is a form: the title and the actions stay in view
+          // and the content between them scrolls, however short the window.
+          '& > form': { display: 'flex', flexDirection: 'column', minHeight: 0, flex: '1 1 auto' },
         },
       },
     },

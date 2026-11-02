@@ -110,7 +110,6 @@ export function SpamTab(): ReactNode {
         aria-labelledby={headingId}
         sx={{
           flex: '1 1 520px',
-          maxWidth: 820,
           minWidth: 0,
           display: 'flex',
           flexDirection: 'column',

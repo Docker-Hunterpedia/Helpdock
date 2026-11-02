@@ -38,7 +38,10 @@ export function WidgetPreview({
   const { locale: adminLocale } = usePreferences();
   // It opens in the admin's own language; the toggle shows the other one.
   const [locale, setLocale] = useState<'en' | 'ar'>(adminLocale);
-  const [mode, setMode] = useState<'light' | 'dark'>('light');
+  // Light or Dark in the form drives the preview; Auto leaves the choice to the toggle.
+  const [autoMode, setMode] = useState<'light' | 'dark'>('light');
+  const fixedScheme = appearance.colorScheme === 'auto' ? null : appearance.colorScheme;
+  const mode = fixedScheme ?? autoMode;
   const surface = useMemo(() => resolveSemanticTokens(mode), [mode]);
   const { i18n } = useTranslation(NAMESPACES);
   // The preview speaks the visitor's language, whatever the admin is in.
@@ -51,7 +54,8 @@ export function WidgetPreview({
     locale === 'ar' && appearance.greetingAr.trim() !== ''
       ? appearance.greetingAr
       : appearance.greetingEn;
-  const fields = conversation.prechatEnabled ? conversation.prechatFields : [];
+  const chatLike = appearance.mode === 'chat' || appearance.mode === 'chat_articles';
+  const fields = chatLike && conversation.prechatEnabled ? conversation.prechatFields : [];
   const labelOf = (key: string): string => {
     if (key === 'name') {
       return w('widget.preview.name');
@@ -77,8 +81,7 @@ export function WidgetPreview({
         display: 'flex',
         flexDirection: 'column',
         gap: 3,
-        position: { xl: 'sticky' },
-        insetBlockStart: 24,
+        '@media (min-width:1200px)': { position: 'sticky', insetBlockStart: 24 },
       }}
     >
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
@@ -101,23 +104,28 @@ export function WidgetPreview({
             <span lang="ar">العربية</span>
           </ToggleButton>
         </ToggleButtonGroup>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={mode}
-          aria-label={t('channels:widget.preview.theme')}
-          onChange={(_event, value: 'light' | 'dark' | null) => {
-            if (value !== null) {
-              setMode(value);
-            }
-          }}
-        >
-          <ToggleButton value="light">{t('channels:widget.preview.light')}</ToggleButton>
-          <ToggleButton value="dark">{t('channels:widget.preview.dark')}</ToggleButton>
-        </ToggleButtonGroup>
+        {fixedScheme === null ? (
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={autoMode}
+            aria-label={t('channels:widget.preview.theme')}
+            onChange={(_event, value: 'light' | 'dark' | null) => {
+              if (value !== null) {
+                setMode(value);
+              }
+            }}
+          >
+            <ToggleButton value="light">{t('channels:widget.preview.light')}</ToggleButton>
+            <ToggleButton value="dark">{t('channels:widget.preview.dark')}</ToggleButton>
+          </ToggleButtonGroup>
+        ) : null}
       </Box>
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
         {t('channels:widget.preview.caption')}
+        {chatLike
+          ? ` ${conversation.prechatEnabled ? t('channels:widget.preview.captionPrechatOn') : t('channels:widget.preview.captionPrechatOff')}`
+          : ''}
       </Typography>
 
       <Box
@@ -185,79 +193,126 @@ export function WidgetPreview({
           </Box>
 
           <Box sx={{ padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Box
-              sx={{
-                alignSelf: 'flex-start',
-                maxWidth: '85%',
-                paddingBlock: 2,
-                paddingInline: 3,
-                borderRadius: '14px',
-                borderEndStartRadius: '4px',
-                backgroundColor: surface['bg.surface'],
-                border: `1px solid ${surface['border.default']}`,
-                color: surface['text.primary'],
-                fontSize: 14,
-              }}
-            >
-              <bdi>{greeting}</bdi>
-            </Box>
-
-            {fields.length === 0 ? null : (
-              <Box
-                sx={{
-                  borderRadius: '10px',
-                  border: `1px solid ${surface['border.default']}`,
-                  backgroundColor: surface['bg.canvas'],
-                  padding: 3,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 2,
-                }}
-              >
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: surface['text.primary'] }}>
-                  {w('widget.preview.beforeStart')}
+            {appearance.mode === 'helpcenter' ? (
+              <>
+                <Placeholder surface={surface}>{w('widget.preview.searchArticles')}</Placeholder>
+                <ArticleRow surface={surface}>{w('widget.preview.article1')}</ArticleRow>
+                <ArticleRow surface={surface}>{w('widget.preview.article2')}</ArticleRow>
+                <Typography sx={{ fontSize: 13, fontWeight: 500, color: accent.base }}>
+                  {w('widget.preview.contactUs')}
                 </Typography>
-                {fields.map((field) => {
-                  const key = field.kind === 'custom' ? field.key : field.kind;
-                  return (
-                    <Box key={key} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Typography
-                        sx={{ fontSize: 12, fontWeight: 500, color: surface['text.primary'] }}
-                      >
-                        {labelOf(key)}
-                        {field.required ? null : (
-                          <Box component="span" sx={{ color: surface['text.secondary'] }}>
-                            {' '}
-                            {w('widget.preview.optional')}
-                          </Box>
-                        )}
-                      </Typography>
-                      <Box
-                        sx={{
-                          height: 32,
-                          borderRadius: '6px',
-                          border: `1px solid ${surface['border.strong']}`,
-                          backgroundColor: surface['bg.surface'],
-                        }}
-                      />
-                    </Box>
-                  );
-                })}
+              </>
+            ) : (
+              <>
                 <Box
                   sx={{
-                    height: 36,
-                    borderRadius: '6px',
-                    backgroundColor: accent.base,
-                    color: accent.text,
-                    display: 'grid',
-                    placeItems: 'center',
+                    alignSelf: 'flex-start',
+                    maxWidth: '85%',
+                    paddingBlock: 2,
+                    paddingInline: 3,
+                    borderRadius: '14px',
+                    borderEndStartRadius: '4px',
+                    backgroundColor: surface['bg.surface'],
+                    border: `1px solid ${surface['border.default']}`,
+                    color: surface['text.primary'],
                     fontSize: 14,
-                    fontWeight: 500,
                   }}
                 >
-                  {w('widget.preview.start')}
+                  <bdi>{greeting}</bdi>
                 </Box>
-              </Box>
+
+                {appearance.mode === 'chat_articles' ? (
+                  <>
+                    <Typography sx={{ fontSize: 12, color: surface['text.secondary'] }}>
+                      {w('widget.preview.suggested')}
+                    </Typography>
+                    <ArticleRow surface={surface}>{w('widget.preview.article1')}</ArticleRow>
+                    <ArticleRow surface={surface}>{w('widget.preview.article2')}</ArticleRow>
+                  </>
+                ) : null}
+                {appearance.mode === 'form' ? (
+                  <>
+                    <Placeholder surface={surface}>{w('widget.preview.email')}</Placeholder>
+                    <Placeholder surface={surface}>{w('widget.preview.message')}</Placeholder>
+                    <Box
+                      sx={{
+                        height: 36,
+                        borderRadius: '6px',
+                        backgroundColor: accent.base,
+                        color: accent.text,
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontSize: 14,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {w('widget.preview.send')}
+                    </Box>
+                  </>
+                ) : null}
+                {fields.length === 0 ? null : (
+                  <Box
+                    sx={{
+                      borderRadius: '10px',
+                      border: `1px solid ${surface['border.default']}`,
+                      backgroundColor: surface['bg.canvas'],
+                      padding: 3,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2,
+                    }}
+                  >
+                    <Typography
+                      sx={{ fontSize: 13, fontWeight: 600, color: surface['text.primary'] }}
+                    >
+                      {w('widget.preview.beforeStart')}
+                    </Typography>
+                    {fields.map((field) => {
+                      const key = field.kind === 'custom' ? field.key : field.kind;
+                      return (
+                        <Box key={key} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Typography
+                            sx={{ fontSize: 12, fontWeight: 500, color: surface['text.primary'] }}
+                          >
+                            {labelOf(key)}
+                            {field.required ? null : (
+                              <Box component="span" sx={{ color: surface['text.secondary'] }}>
+                                {' '}
+                                {w('widget.preview.optional')}
+                              </Box>
+                            )}
+                          </Typography>
+                          <Box
+                            sx={{
+                              height: 32,
+                              borderRadius: '6px',
+                              border: `1px solid ${surface['border.strong']}`,
+                              backgroundColor: surface['bg.surface'],
+                            }}
+                          />
+                        </Box>
+                      );
+                    })}
+                    <Box
+                      sx={{
+                        height: 36,
+                        borderRadius: '6px',
+                        backgroundColor: accent.base,
+                        color: accent.text,
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontSize: 14,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {w('widget.preview.start')}
+                    </Box>
+                  </Box>
+                )}
+                {chatLike && fields.length === 0 ? (
+                  <Placeholder surface={surface}>{w('widget.preview.composer')}</Placeholder>
+                ) : null}
+              </>
             )}
           </Box>
           <Typography
@@ -293,6 +348,61 @@ export function WidgetPreview({
           {appearance.launcher === 'icon' ? null : w('widget.preview.launcherText')}
         </Box>
       </Box>
+    </Box>
+  );
+}
+
+type Surface = ReturnType<typeof resolveSemanticTokens>;
+
+/** A text box drawn as a picture: border, a muted placeholder and nothing to focus. */
+function Placeholder({
+  surface,
+  children,
+}: {
+  readonly surface: Surface;
+  readonly children: ReactNode;
+}): ReactNode {
+  return (
+    <Box
+      sx={{
+        minHeight: 32,
+        display: 'flex',
+        alignItems: 'center',
+        paddingInline: 3,
+        borderRadius: '6px',
+        border: `1px solid ${surface['border.strong']}`,
+        backgroundColor: surface['bg.surface'],
+        color: surface['text.secondary'],
+        fontSize: 13,
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+function ArticleRow({
+  surface,
+  children,
+}: {
+  readonly surface: Surface;
+  readonly children: ReactNode;
+}): ReactNode {
+  return (
+    <Box
+      sx={{
+        minHeight: 32,
+        display: 'flex',
+        alignItems: 'center',
+        paddingInline: 3,
+        borderRadius: '6px',
+        border: `1px solid ${surface['border.default']}`,
+        backgroundColor: surface['bg.surface'],
+        color: surface['text.primary'],
+        fontSize: 13,
+      }}
+    >
+      {children}
     </Box>
   );
 }

@@ -19,7 +19,8 @@
     "collapseShort": "Collapse sidebar",
     "expand": "Expand sidebar",
     "withCount": "{{label}} · {{count}}",
-    "ctrlKey": "Ctrl"
+    "ctrlKey": "Ctrl",
+    "pagesOf": "Pages of {{label}}"
   },
   "settings": {
     "navLabel": "Settings",
@@ -239,10 +240,9 @@
       "brandGeneral": "brand name, prefix, timezone, language, logo",
       "brandDomains": "custom domain, dns, tls, host, cname",
       "brandImport": "migrate, zendesk, freshdesk, zoho, import tickets",
-      "brandDanger": "delete brand, erase, purge, restore",
+      "brandDanger": "delete brand, erase, restore",
       "ticketingDepartments": "teams, groups, routing",
       "ticketingStatuses": "open, closed, pending, pause sla, workflow states",
-      "ticketingPriorities": "urgent, high, normal, low",
       "ticketingTags": "labels, categories",
       "ticketingCustomFields": "extra fields, form fields, attributes",
       "ticketingTemplates": "ticket templates, forms, new ticket defaults",
@@ -269,7 +269,10 @@
       "developersWebhooks": "events, callbacks, http notifications",
       "staff": "agents, team members, roles, permissions, invite, users",
       "system": "health, version, queues, storage, migrations, status",
-      "systemAuditLog": "activity log, who changed, history, security log"
+      "systemAuditLog": "activity log, who changed, history, security log",
+      "brandRetention": "retention, purge, delete old tickets, keep data, privacy, search log",
+      "systemQueues": "queues, jobs, background jobs, bullmq, retry, failed jobs",
+      "contactsAccounts": "companies, organisations, domains, customer accounts"
     }
   },
   "setupChecklist": {
@@ -316,12 +319,17 @@
       },
       "aiProvider": {
         "title": "Connect an AI provider",
-        "why": "Optional."
+        "why": "The assistant and its suggestions use it."
       },
       "firstTicket": {
         "title": "Receive your first ticket",
         "why": "From a customer, through any channel."
       }
     }
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "This address does not lead anywhere in Helpdock. It may have moved.",
+    "action": "Go to tickets"
   }
 }

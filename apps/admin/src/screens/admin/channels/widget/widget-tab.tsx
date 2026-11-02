@@ -124,7 +124,11 @@ function WidgetCards({
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 1fr) 420px' },
+          gridTemplateColumns: 'minmax(0, 1fr)',
+          // A raw media query is a sibling key, not a key of the responsive object.
+          '@media (min-width:1200px)': {
+            gridTemplateColumns: 'minmax(0, 1fr) minmax(300px, 360px)',
+          },
           gap: 6,
           alignItems: 'start',
         }}

@@ -5,7 +5,6 @@
   "tabs": {
     "departments": "Departments",
     "statuses": "Statuses",
-    "priorities": "Priorities",
     "tags": "Tags",
     "customFields": "Custom fields",
     "templates": "Templates",
@@ -15,10 +14,6 @@
     "feedback": "Feedback",
     "businessHours": "Business hours",
     "slas": "SLAs"
-  },
-  "soon": {
-    "heading": "Not built yet",
-    "body": "{{tab}} arrives with {{milestone}}."
   },
   "departments": {
     "add": "Add department",
@@ -167,11 +162,11 @@
       "systemState": "System state",
       "pausesSla": "Pauses SLA",
       "awaitingCustomer": "Awaiting customer",
-      "tickets": "Tickets",
       "rowActions": "Actions for {{name}}",
       "dragHandle": "Reorder {{name}}",
       "select": "Edit {{name}}",
-      "checked": "Yes"
+      "checked": "Yes",
+      "type": "Type"
     },
     "chips": {
       "default": "default",
@@ -212,7 +207,9 @@
         "body": "Choose a status to edit its name, its system state and its flags."
       },
       "reopenRefused_one": "“{{name}}” holds {{count, number(numberingSystem: latn)}} closed ticket. Move or merge it before changing the status to an open state.",
-      "reopenRefused_other": "“{{name}}” holds {{count, number(numberingSystem: latn)}} closed tickets. Move or merge them before changing the status to an open state."
+      "reopenRefused_other": "“{{name}}” holds {{count, number(numberingSystem: latn)}} closed tickets. Move or merge them before changing the status to an open state.",
+      "ticketCount_one": "{{count}} ticket is in this status",
+      "ticketCount_other": "{{count}} tickets are in this status"
     },
     "colours": {
       "info": "Blue",
@@ -440,7 +437,7 @@
       "subject": "Subject",
       "subjectHint": "Placeholders you can use:",
       "body": "Body",
-      "bodyHint": "Plain text in this release. The rich composer arrives with M5.",
+      "bodyHint": "Plain text for now.",
       "defaultTags": "Default tags",
       "defaultTagsHint": "Applied to every ticket made from this template.",
       "customDefaults": "Custom field defaults",

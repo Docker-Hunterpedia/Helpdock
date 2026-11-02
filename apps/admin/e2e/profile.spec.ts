@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSecurity, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSecurity, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -36,7 +36,7 @@ async function openProfile(page: Page, locale: 'en' | 'ar'): Promise<void> {
   const t = strings(locale);
   await signIn(page, locale);
   await openSecurity(page, locale);
-  await settingsTab(page, t, 'me:account.tabs.profile').click();
+  await clickSettingsTab(page, t, 'me:account.tabs.profile');
   await page.getByRole('heading', { name: t('me:profile.heading'), level: 2 }).waitFor();
   // The fields fill from the stored profile a frame after the heading.
   await expect(page.getByLabel(t('me:profile.jobTitleEn'))).toHaveValue('Billing specialist');
@@ -64,13 +64,16 @@ test('saves the public name, a title and the phone in international form, and ke
   await page.getByLabel(t('me:profile.publicName'), { exact: true }).fill('Lina H');
   await page.getByLabel(t('me:profile.jobTitleEn')).fill('Support lead');
   await page.getByLabel(t('me:profile.phone')).fill('00966 55 987 6543');
-  await page.getByRole('button', { name: t('me:profile.save') }).click();
+  await page
+    .getByRole('button', { name: t('me:profile.save') })
+    .first()
+    .click();
 
   await expect(page.getByText(t('me:profile.saved'))).toBeVisible();
 
   // Away and back: what was saved is what comes back, with the phone normalised.
-  await settingsTab(page, t, 'me:account.tabs.security').click();
-  await settingsTab(page, t, 'me:account.tabs.profile').click();
+  await clickSettingsTab(page, t, 'me:account.tabs.security');
+  await clickSettingsTab(page, t, 'me:account.tabs.profile');
   await expect(page.getByLabel(t('me:profile.publicName'), { exact: true })).toHaveValue('Lina H');
   await expect(page.getByLabel(t('me:profile.jobTitleEn'))).toHaveValue('Support lead');
   await expect(page.getByLabel(t('me:profile.phone'))).toHaveValue('+966559876543');
@@ -85,14 +88,20 @@ test('says what is wrong with a phone number that is not international, and save
 
   await page.getByLabel(t('me:profile.publicName'), { exact: true }).fill('Not saved');
   await page.getByLabel(t('me:profile.phone')).fill('0551234567');
-  await page.getByRole('button', { name: t('me:profile.save') }).click();
+  await page
+    .getByRole('button', { name: t('me:profile.save') })
+    .first()
+    .click();
 
   const phone = page.getByLabel(t('me:profile.phone'));
   await expect(page.getByText(t('me:profile.phoneInvalid'))).toBeVisible();
   await expect(phone).toHaveAttribute('aria-invalid', 'true');
   expect(await violations(page)).toEqual([]);
 
-  await page.getByRole('button', { name: t('me:profile.discard') }).click();
+  await page
+    .getByRole('button', { name: t('me:profile.discard') })
+    .first()
+    .click();
   await expect(page.getByLabel(t('me:profile.publicName'), { exact: true })).toHaveValue('');
   await expect(phone).toHaveValue('+966551234567');
 });
@@ -161,8 +170,8 @@ test('holds the single-key shortcuts switch, which stays where it was put', asyn
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
 
-  await settingsTab(page, t, 'me:account.tabs.security').click();
-  await settingsTab(page, t, 'me:account.tabs.profile').click();
+  await clickSettingsTab(page, t, 'me:account.tabs.security');
+  await clickSettingsTab(page, t, 'me:account.tabs.profile');
   await expect(
     page
       .getByRole('region', { name: t('me:profile.workingHeading') })
@@ -176,7 +185,7 @@ test('the signature preview fills its placeholders from the profile', async ({
 }) => {
   const t = strings(locale);
   await openProfile(page, locale);
-  await settingsTab(page, t, 'me:account.tabs.signature').click();
+  await clickSettingsTab(page, t, 'me:account.tabs.signature');
   await page.getByRole('heading', { name: t('me:signature.heading'), level: 2 }).waitFor();
 
   await page

@@ -12,6 +12,7 @@ import { type FormEvent, type ReactNode, useId, useRef, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { isDirty } from '../../../ui/dirty.js';
 import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { type ActionChoices, MacroActionsField } from './macro-actions-field.tsx';
 import {
@@ -83,6 +84,7 @@ export function MacroEditor({
   const problemsId = useId();
   const departmentId = useId();
   const [draft, setDraft] = useState(initial);
+  const dirty = isDirty(draft, initial);
   const [picking, setPicking] = useState<Locale | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const areas = {
@@ -440,11 +442,16 @@ export function MacroEditor({
         >
           {problem ?? (isMacro ? t('macros:editor.cannedNote') : '')}
         </Typography>
-        <Button variant="text" onClick={onDiscard} disabled={busy}>
+        <Button
+          variant="text"
+          onClick={onDiscard}
+          // Discard is also how an editor with nothing changed (new, copied, read-only) is closed.
+          disabled={busy || (macro !== null && !readOnly && !dirty)}
+        >
           {t('macros:editor.discard')}
         </Button>
         {readOnly ? null : (
-          <Button type="submit" variant="contained" disabled={busy}>
+          <Button type="submit" variant="contained" disabled={busy || (macro !== null && !dirty)}>
             {t(macro === null ? 'macros:editor.create' : 'macros:editor.save')}
           </Button>
         )}

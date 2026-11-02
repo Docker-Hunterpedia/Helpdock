@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 test('pauses, resumes and cancels extraction, filters the log and reopens history', async ({
@@ -10,7 +10,7 @@ test('pauses, resumes and cancels extraction, filters the log and reopens histor
   const t = strings(locale);
   await signIn(page, locale);
   await openSettingsArea(page, t, 'brand');
-  await settingsTab(page, t, 'brand:tabs.import').click();
+  await clickSettingsTab(page, t, 'brand:tabs.import');
   const history = page.getByRole('region', { name: t('imports:history.title') });
   await expect(history.getByText(t('imports:history.emptyTitle'))).toBeVisible();
   expect(

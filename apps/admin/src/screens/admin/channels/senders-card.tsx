@@ -19,6 +19,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'reac
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { useEmailApi } from '../../../auth/session.tsx';
+import { isDirty } from '../../../ui/dirty.js';
 import { Field } from '../../../ui/field.tsx';
 import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import { SectionCard, useEmailAction } from './section-card.tsx';
@@ -114,6 +115,8 @@ export function SendersCard({
     onSaved,
   );
 
+  const dirty = isDirty(draft, draftOf(settings.senders));
+
   const nameOf = (departmentId: string): string =>
     departments.find((row) => row.id === departmentId)?.name ?? departmentId;
   const unused = departments.filter(
@@ -148,7 +151,7 @@ export function SendersCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               setDraft(draftOf(settings.senders));
               setProblems(new Set());
@@ -156,7 +159,7 @@ export function SendersCard({
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:senders.save')}
           </Button>
         </>

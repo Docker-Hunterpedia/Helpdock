@@ -2,17 +2,17 @@
 
 How a brand's tickets are shaped and routed: departments, the teams inside
 them, and the brand-level behaviour that later deliverables read. The screen is
-**Settings → Inbox** (M14-21: the sidebar's single Settings entry opens a grouped
-navigation, and the ticketing settings are the first pages of its Inbox group,
+**Settings → Inbox** (M14-21: the sidebar's single Settings entry opens a tree of
+groups in the sidebar itself, and the ticketing settings are the first pages of its Inbox group,
 at `/settings/inbox/<page>`; the old `/admin/ticketing/…` addresses redirect).
 This guide follows them in their order.
 
 The Inbox group holds these pages: **Departments** (M1-01), **Statuses**
-(M1-08), **Priorities**, **Tags**, **Custom fields** and **Templates** (M1-06),
+(M1-08), **Tags**, **Custom fields** and **Templates** (M1-06),
 **Views** (M1-05), **Assignment** (M1-07), **Business hours** and **SLA
 policies** ([SLAs](slas.md)), **Spam** (M1-11) and **Feedback** (M1-12), then
 Rules, Time-based, Routing and Macros ([Automation](automation.md),
-[Macros](macros.md)). What each role is offered there is the table below.
+[Macros](macros.md)). What each role is offered there is the table below. There is no Priorities page: tickets have the four fixed priorities (low, medium, high, urgent), and editing their labels is not built; `/settings/inbox/priorities` and the old `/admin/ticketing/priorities` open Departments.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short

@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openTicket, signIn } from './flows.js';
+import { clickSidebarPage, openTicket, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -37,7 +37,7 @@ test.describe('agent assist on a ticket', () => {
     await signIn(page, locale);
     await openTicket(page, locale, 'HD-1041');
 
-    await page.getByRole('button', { name: t('tickets:assist.button') }).click();
+    await page.getByRole('button', { name: t('tickets:assist.button'), exact: true }).click();
     const menu = page.getByRole('menu');
     await expect(
       menu.getByRole('menuitem', { name: new RegExp(t('tickets:assist.menu.draftArticle')) }),
@@ -111,7 +111,7 @@ test.describe('article proposals', () => {
     await signIn(page, locale);
     await openTicket(page, locale, 'HD-1030');
 
-    await page.getByRole('button', { name: t('tickets:assist.button') }).click();
+    await page.getByRole('button', { name: t('tickets:assist.button'), exact: true }).click();
     await page
       .getByRole('menuitem', { name: new RegExp(t('tickets:assist.menu.draftArticle')) })
       .click();
@@ -124,7 +124,7 @@ test.describe('article proposals', () => {
     await expect(page.getByText(t('tickets:assist.draft.sent'))).toBeVisible();
 
     await page.getByRole('link', { name: new RegExp(t('admin:nav.helpCenter')) }).click();
-    await page.getByRole('tab', { name: new RegExp(t('helpCenter:tabs.proposals')) }).click();
+    await clickSidebarPage(page, t, 'helpCenter', new RegExp(t('helpCenter:tabs.proposals')));
     const review = page.getByRole('region', { name: t('helpCenter:proposals.review') });
     await expect(review.getByRole('heading', { name: /Customs and VAT/ })).toBeVisible();
     expect(await violations(page)).toEqual([]);

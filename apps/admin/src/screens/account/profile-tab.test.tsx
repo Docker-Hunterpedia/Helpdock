@@ -10,6 +10,9 @@ import { signedInMockApis } from '../../test/signed-in.js';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
+const customerCard = (): HTMLElement => screen.getByRole('form', { name: 'Profile for customers' });
+const workingCard = (): HTMLElement => screen.getByRole('region', { name: 'Working in Helpdock' });
+
 const renderProfile = async () => {
   const apis = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
@@ -48,7 +51,7 @@ describe('the Profile tab', () => {
     await user.type(screen.getByLabelText('Job title (English)'), 'Support lead');
     await user.clear(screen.getByLabelText('Phone'));
     await user.type(screen.getByLabelText('Phone'), '00966 55 987 6543');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(within(customerCard()).getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('Profile saved.')).toBeVisible();
     await expect(staff.profile()).resolves.toMatchObject({
@@ -62,10 +65,9 @@ describe('the Profile tab', () => {
   it('clears a field that was emptied, and the public name goes back to the first name', async () => {
     const { user, staff } = await renderProfile();
     await staff.updateProfile({ publicName: 'Lina H' });
-    await user.click(screen.getByRole('button', { name: 'Discard' }));
 
     await user.clear(screen.getByLabelText('Job title (Arabic)'));
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(within(customerCard()).getByRole('button', { name: 'Save changes' }));
 
     await screen.findByText('Profile saved.');
     await expect(staff.profile()).resolves.toMatchObject({ jobTitleAr: null, publicName: null });
@@ -77,7 +79,7 @@ describe('the Profile tab', () => {
     await user.clear(screen.getByLabelText('Phone'));
     await user.type(screen.getByLabelText('Phone'), '0551234567');
     await user.type(screen.getByLabelText('Public name'), 'Not saved');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(within(customerCard()).getByRole('button', { name: 'Save changes' }));
 
     expect(
       await screen.findByText('Enter an international number, like +966 55 123 4567.'),
@@ -90,9 +92,73 @@ describe('the Profile tab', () => {
     const { user } = await renderProfile();
 
     await user.type(screen.getByLabelText('Public name'), 'Temporary');
-    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    await user.click(within(customerCard()).getByRole('button', { name: 'Discard' }));
 
     expect(screen.getByLabelText('Public name')).toHaveValue('');
+  });
+
+  it('keeps Save and Discard disabled until something changes, and again once it is undone', async () => {
+    const { user } = await renderProfile();
+    const save = within(customerCard()).getByRole('button', { name: 'Save changes' });
+    const discard = within(customerCard()).getByRole('button', { name: 'Discard' });
+    expect(save).toBeDisabled();
+    expect(discard).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Public name'), 'T');
+    expect(save).toBeEnabled();
+    expect(discard).toBeEnabled();
+
+    await user.clear(screen.getByLabelText('Public name'));
+    expect(save).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Public name'), 'Lina H');
+    await user.click(save);
+    await screen.findByText('Profile saved.');
+    await waitFor(() => {
+      expect(save).toBeDisabled();
+    });
+  });
+
+  describe('the account details moved here from Security', () => {
+    it('shows the address read-only and leaves the sign-in address to an administrator', async () => {
+      await renderProfile();
+
+      expect(within(workingCard()).getByLabelText('Email')).toHaveAttribute('readonly');
+      expect(within(workingCard()).getByLabelText('Email')).toHaveValue('lina@helpdock.com');
+    });
+
+    it('keeps what was typed in the profile card while the language is saved', async () => {
+      const { user } = await renderProfile();
+      await user.type(screen.getByLabelText('Public name'), 'Typed, not saved');
+      // The card's name turns Arabic with the app, so hold the element.
+      const working = workingCard();
+
+      await user.click(within(working).getByRole('combobox', { name: 'Language' }));
+      await user.click(await screen.findByRole('option', { name: 'العربية' }));
+      const save = within(working).getByRole('button', { name: 'Save changes' });
+      await user.click(save);
+      await waitFor(() => {
+        expect(save).toBeDisabled();
+      });
+
+      // Saving the language switched the app to Arabic; the field is still the one typed into.
+      expect(
+        document.querySelector<HTMLInputElement>('input[value="Typed, not saved"]'),
+      ).not.toBeNull();
+    });
+
+    it('saves the language on its own and switches the app to it', async () => {
+      const { user, staff } = await renderProfile();
+      const save = within(workingCard()).getByRole('button', { name: 'Save changes' });
+      expect(save).toBeDisabled();
+
+      await user.click(within(workingCard()).getByRole('combobox', { name: 'Language' }));
+      await user.click(await screen.findByRole('option', { name: 'العربية' }));
+      expect(save).toBeEnabled();
+      await user.click(save);
+
+      await expect(staff.profile()).resolves.toMatchObject({ locale: 'ar' });
+    });
   });
 
   describe('the photo', () => {

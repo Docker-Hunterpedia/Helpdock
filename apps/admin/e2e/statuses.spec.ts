@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { openTicketing, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openTicketing, seededStatusName, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -34,11 +34,16 @@ const openStatuses = async (
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await settingsTab(page, t, 'ticketing:tabs.statuses').click();
+  await clickSettingsTab(page, t, 'ticketing:tabs.statuses');
   await expect(
-    page.getByRole('button', { name: t('ticketing:statuses.table.select', { name: 'Open' }) }),
+    page.getByRole('button', {
+      name: t('ticketing:statuses.table.select', { name: seededStatusName(locale, 'Open') }),
+    }),
   ).toBeVisible();
 };
+
+// A dialog still fading in is blended with the scrim, which axe reads as low contrast.
+test.use({ reducedMotion: 'reduce' });
 
 test.describe('ticket statuses', () => {
   test('lists the brand’s statuses with their state and chips', async ({
@@ -50,7 +55,9 @@ test.describe('ticket statuses', () => {
 
     await expect(
       page.getByRole('button', {
-        name: t('ticketing:statuses.table.select', { name: 'Awaiting customer' }),
+        name: t('ticketing:statuses.table.select', {
+          name: seededStatusName(locale, 'Awaiting customer'),
+        }),
       }),
     ).toBeVisible();
     await expect(page.getByText(t('ticketing:statuses.chips.default')).first()).toBeVisible();
@@ -107,7 +114,9 @@ test.describe('ticket statuses', () => {
 
     await page
       .getByRole('button', {
-        name: t('ticketing:statuses.table.select', { name: 'Awaiting customer' }),
+        name: t('ticketing:statuses.table.select', {
+          name: seededStatusName(locale, 'Awaiting customer'),
+        }),
       })
       .click();
 
@@ -126,7 +135,9 @@ test.describe('ticket statuses', () => {
     // The drag handle is a real button, so the keyboard alternative is on the
     // control itself as well as in the row menu (DESIGN §10).
     await page
-      .getByRole('button', { name: t('ticketing:statuses.table.dragHandle', { name: 'Open' }) })
+      .getByRole('button', {
+        name: t('ticketing:statuses.table.dragHandle', { name: seededStatusName(locale, 'Open') }),
+      })
       .focus();
     await page.keyboard.press('ArrowDown');
 
@@ -143,7 +154,9 @@ test.describe('ticket statuses', () => {
 
     await page
       .getByRole('button', {
-        name: t('ticketing:statuses.table.select', { name: 'Waiting on supplier' }),
+        name: t('ticketing:statuses.table.select', {
+          name: seededStatusName(locale, 'Waiting on supplier'),
+        }),
       })
       .click();
 
@@ -167,7 +180,9 @@ test.describe('ticket statuses', () => {
     );
     await expect(
       page.getByRole('button', {
-        name: t('ticketing:statuses.table.select', { name: 'Waiting on supplier' }),
+        name: t('ticketing:statuses.table.select', {
+          name: seededStatusName(locale, 'Waiting on supplier'),
+        }),
       }),
     ).toHaveCount(0);
   });
@@ -232,7 +247,9 @@ test.describe('ticket statuses', () => {
 
     await page
       .getByRole('button', {
-        name: t('ticketing:statuses.table.select', { name: 'Waiting on supplier' }),
+        name: t('ticketing:statuses.table.select', {
+          name: seededStatusName(locale, 'Waiting on supplier'),
+        }),
       })
       .click();
     await chooseState('closed');

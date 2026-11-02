@@ -37,7 +37,7 @@ import { TestEventBox } from './test-event.tsx';
  * SecretReveal, and neither secret is kept anywhere once "Done" is pressed.
  */
 
-const queryKey = (brandId: string) => ['developers', 'webhooks', brandId] as const;
+export const queryKey = (brandId: string) => ['developers', 'webhooks', brandId] as const;
 
 type Revealed =
   | { readonly kind: 'added'; readonly webhook: WebhookWithSecret }

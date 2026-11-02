@@ -64,20 +64,21 @@ test.describe('the admin shell', () => {
     const t = strings(locale);
     await signIn(page, locale);
 
-    await expect(page.locator('a[aria-current="page"]')).toContainText(t('admin:nav.tickets'));
+    // The ticket views are the open section, and one of them is the page on screen.
+    await expect(page.locator('a[aria-current="true"]')).toHaveCount(1);
+    await expect(
+      page
+        .getByRole('navigation', { name: t('admin:nav.label') })
+        .getByRole('button', { name: t('admin:nav.pagesOf', { label: t('admin:nav.tickets') }) }),
+    ).toHaveAttribute('aria-expanded', 'true');
 
     await openSettingsArea(page, t, 'staff');
 
     await expect(
       page
-        .getByRole('navigation', { name: t('admin:settings.navLabel') })
+        .getByRole('list', { name: t('admin:settings.navLabel') })
         .locator('a[aria-current="page"]'),
     ).toContainText(t('admin:nav.staff'));
-    await expect(
-      page
-        .getByRole('navigation', { name: t('admin:nav.label') })
-        .getByRole('link', { name: t('admin:nav.settings'), exact: true }),
-    ).toHaveAttribute('aria-current', 'page');
     // M0-06 replaced the placeholder with the real screen, which carries the
     // same title as its nav item.
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('staff:title'));
@@ -149,10 +150,12 @@ test.describe('the admin shell', () => {
       );
 
       // Every icon names itself in a tooltip, on hover and on keyboard focus.
-      const contacts = nav.getByRole('link', { name: t('admin:nav.contacts'), exact: true });
+      // A section with pages opens a flyout with the same entries; Reports is a plain link.
+      const contacts = nav.getByRole('button', { name: t('admin:nav.contacts'), exact: true });
       await contacts.hover();
       await expect(page.getByRole('tooltip')).toHaveText(t('admin:nav.contacts'));
       await contacts.click();
+      await page.getByRole('menuitem', { name: t('contacts:segment.people') }).click();
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('admin:nav.contacts'));
 
       await expand.click();
@@ -160,6 +163,11 @@ test.describe('the admin shell', () => {
       await expect(
         nav.getByRole('link', { name: t('admin:nav.contacts'), exact: true }),
       ).toHaveText(t('admin:nav.contacts'));
+      await expect(
+        nav.getByRole('button', {
+          name: t('admin:nav.pagesOf', { label: t('admin:nav.contacts') }),
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
     });
 
     test('toggles with ⌘\\ or Ctrl+\\ and remembers the rail after a reload', async ({
@@ -187,7 +195,7 @@ test.describe('the admin shell', () => {
       await signIn(page, locale);
       await page.getByRole('button', { name: t('admin:nav.collapse') }).click();
 
-      await page.getByRole('button', { name: t('tickets:views.label') }).click();
+      await page.getByRole('button', { name: t('admin:nav.tickets'), exact: true }).click();
       const views = page.getByRole('dialog', { name: t('tickets:views.label') });
       await views.getByRole('link', { name: new RegExp(`^${t('tickets:views.all')}`) }).click();
 
@@ -207,7 +215,10 @@ test.describe('the admin shell', () => {
     await page.getByRole('button', { name: t('admin:nav.open') }).click();
     await expect(nav).toBeVisible();
 
-    await page.getByRole('link', { name: new RegExp(t('admin:nav.contacts')) }).click();
+    // A section's row opens its branch and keeps the drawer; choosing a page closes it.
+    await page.getByRole('link', { name: new RegExp(`^${t('admin:nav.contacts')}`) }).click();
+    await expect(nav).toBeVisible();
+    await page.getByRole('link', { name: t('contacts:segment.people'), exact: true }).click();
 
     await expect(nav).toBeHidden();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('admin:nav.contacts'));

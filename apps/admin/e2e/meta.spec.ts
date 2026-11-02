@@ -10,7 +10,7 @@ import {
   MOCK_WHATSAPP_TOKEN,
 } from '../src/meta/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, openTicket, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, openTicket, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -45,7 +45,7 @@ async function violations(page: Page): Promise<string[]> {
 const openMeta = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
   await openSettingsArea(page, t, 'channels');
-  await settingsTab(page, t, 'channels:tabs.meta').click();
+  await clickSettingsTab(page, t, 'channels:tabs.meta');
   await page
     .getByRole('table', { name: t('channels:meta.heading') })
     .getByRole('link', { name: '+1 555 0142' })

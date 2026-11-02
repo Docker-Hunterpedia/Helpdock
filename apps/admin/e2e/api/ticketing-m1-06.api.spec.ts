@@ -1,4 +1,4 @@
-import { openSettingsArea, settingsTab } from '../flows.js';
+import { clickSettingsTab, openSettingsArea } from '../flows.js';
 import { strings } from '../strings.js';
 import { expect, openAdmin, test } from './admin-session.js';
 import { SKIP_ENV } from './install.js';
@@ -53,7 +53,7 @@ const openTab = async (
 ): Promise<void> => {
   await openSettingsArea(page, t, 'ticketing');
   await page.getByRole('table').first().waitFor();
-  await settingsTab(page, t, `ticketing:tabs.${tab}`).click();
+  await clickSettingsTab(page, t, `ticketing:tabs.${tab}`);
   await page.getByRole('button', { name: ADD_BUTTON[tab], exact: true }).waitFor();
 };
 

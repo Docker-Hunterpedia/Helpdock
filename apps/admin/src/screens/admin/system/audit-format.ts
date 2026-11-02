@@ -15,6 +15,8 @@ export interface AuditFilters {
   /** `YYYY-MM-DD` as the date input holds it, in the reader's time zone. */
   readonly from: string;
   readonly to: string;
+  /** Every page load writes a row; they are listed only when asked for. */
+  readonly includePageViews: boolean;
 }
 
 export const NO_FILTERS: AuditFilters = {
@@ -24,6 +26,7 @@ export const NO_FILTERS: AuditFilters = {
   brand: '',
   from: '',
   to: '',
+  includePageViews: false,
 };
 
 /** The artboard's Action options, in its order. A family matches every verb under it. */
@@ -78,12 +81,13 @@ export const queryOf = (
     ...(filters.brand === '' ? {} : { brand: filters.brand }),
     ...(from === null ? {} : { from: from.toISOString() }),
     ...(to === null ? {} : { to: new Date(to.getTime() + DAY_MS - 1).toISOString() }),
+    ...(filters.includePageViews ? { includePageViews: true } : {}),
     ...(cursor === null ? {} : { cursor }),
   };
 };
 
 export const hasFilters = (filters: AuditFilters): boolean =>
-  Object.values(filters).some((value) => value !== '');
+  Object.entries(filters).some(([key, value]) => key !== 'includePageViews' && value !== '');
 
 const pad = (value: number): string => String(value).padStart(2, '0');
 

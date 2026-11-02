@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { clickSidebarPage, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -211,7 +211,7 @@ test.describe('Who can read it', () => {
     const t = strings(locale);
     await signIn(page, locale);
     await openHelpCenter(page, locale);
-    await page.getByRole('tab', { name: t('helpCenter:tabs.settings') }).click();
+    await clickSidebarPage(page, t, 'helpCenter', t('helpCenter:tabs.settings'));
 
     await page
       .getByRole('radio', { name: new RegExp(t('helpCenter:settings.access.internal_only.label')) })

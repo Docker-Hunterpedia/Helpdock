@@ -38,6 +38,7 @@ export function SectionCard({
   return (
     <Box
       component="section"
+      id={id}
       {...(regionName === undefined
         ? { 'aria-labelledby': headingId }
         : { 'aria-label': regionName })}
@@ -48,6 +49,8 @@ export function SectionCard({
         display: 'flex',
         flexDirection: 'column',
         minWidth: 0,
+        // A link to the card (`#id`) is a native jump the router does not see: keep the 16 px above it.
+        scrollMarginBlockStart: '16px',
       }}
     >
       <Box

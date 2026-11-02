@@ -1,4 +1,4 @@
-import { openSettingsArea, settingsTab } from '../flows.js';
+import { clickSettingsTab, openSettingsArea } from '../flows.js';
 import { strings } from '../strings.js';
 import { expect, openAdmin, test } from './admin-session.js';
 import { E2E_BOT_TOKEN, E2E_BOT_USERNAME, E2E_REFUSED_TOKEN } from './fake-telegram.js';
@@ -28,7 +28,7 @@ test.describe('Channels › Telegram against the real api', () => {
   test('refuses a token, adds a bot, tests and saves it, and deletes it', async ({ page }) => {
     await openAdmin(page);
     await openSettingsArea(page, t, 'channels');
-    await settingsTab(page, t, 'channels:tabs.telegram').click();
+    await clickSettingsTab(page, t, 'channels:tabs.telegram');
     await expect(
       page.getByRole('heading', { name: t('channels:telegram.empty.heading') }),
     ).toBeVisible();

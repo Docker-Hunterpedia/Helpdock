@@ -84,7 +84,7 @@ describe('Contacts', () => {
   });
 
   it('offers New account on the Accounts tab and opens the account dialog', async () => {
-    const { apis, rendered } = await render('/contacts?tab=accounts');
+    const { apis, rendered } = await render('/contacts/accounts');
     const accounts = await apis.contacts.listAccounts(BRAND);
     vi.spyOn(apis.contacts, 'listAccounts').mockResolvedValue({
       ...accounts,
@@ -307,7 +307,7 @@ describe('a Viewer', () => {
   });
 
   it('sees the empty Accounts sentence without New account', async () => {
-    const { apis, rendered } = await asViewer('/contacts?tab=accounts');
+    const { apis, rendered } = await asViewer('/contacts/accounts');
     const accounts = await apis.contacts.listAccounts(BRAND);
     vi.spyOn(apis.contacts, 'listAccounts').mockResolvedValue({
       ...accounts,

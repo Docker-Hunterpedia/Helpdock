@@ -1,6 +1,7 @@
 import type { Locale } from '@helpdock/i18n';
-import type { Locator, Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_TOTP_CODE } from '../src/auth/mock-api.js';
+import { SETTINGS_ENTRIES, settingsGroupLabelKey } from '../src/shell/settings-nav.js';
 import { strings } from './strings.js';
 
 /**
@@ -74,14 +75,69 @@ const AREA_LANDINGS = {
   system: 'admin:nav.system',
 } as const;
 
-/** A link of the Settings navigation, by the catalog key of the page's old tab label or name. */
+/** The Settings tree of the main sidebar: groups, each holding its pages. */
+const settingsTree = (root: Page | Locator, t: Translate): Locator =>
+  root.getByRole('navigation', { name: t('admin:nav.label') }).getByRole('list', {
+    name: t('admin:settings.navLabel'),
+  });
+
+/** A page link of the Settings tree, by the catalog key of the page's old tab label or name. */
 export const settingsTab = (root: Page | Locator, t: Translate, key: string): Locator =>
-  root
-    .getByRole('navigation', { name: t('admin:settings.navLabel') })
-    .getByRole('link', { name: say(t, SETTINGS_LABELS[key] ?? key), exact: true });
+  settingsTree(root, t).getByRole('link', {
+    name: say(t, SETTINGS_LABELS[key] ?? key),
+    exact: true,
+  });
 
 /** `t` for a key that is a value here rather than a literal, which the catalogs' key type would refuse. */
 const say = (t: Translate, key: string): string => (t as (key: string) => string)(key);
+
+/**
+ * Opens Settings' tree if it is folded or not yet reached: the sidebar's
+ * Settings row goes to the first page of the area (and opens it), or unfolds
+ * the tree while the person is already inside it.
+ */
+export async function openSettingsTree(page: Page | Locator, t: Translate): Promise<void> {
+  const tree = settingsTree(page, t);
+  if (!(await tree.isVisible())) {
+    await page
+      .getByRole('navigation', { name: t('admin:nav.label') })
+      .getByRole('link', { name: t('admin:nav.settings'), exact: true })
+      // The Help center's own "Settings" page has the same name; the section row comes last.
+      .last()
+      .click();
+    await tree.waitFor();
+    // The tree reopens the branch of the page it lands on once the route has changed; a group
+    // clicked before that would be closed again by it.
+    await expect(tree.locator('a[aria-current="page"]')).toHaveCount(1);
+  }
+}
+
+/** Clicks a Settings page: opens the tree and the page's group first when they are closed. */
+export async function clickSettingsTab(
+  page: Page | Locator,
+  t: Translate,
+  key: string,
+): Promise<void> {
+  await openSettingsTree(page, t);
+  const labelKey = SETTINGS_LABELS[key] ?? key;
+  const entry = SETTINGS_ENTRIES.find((candidate) => candidate.labelKey === labelKey);
+  if (entry !== undefined) {
+    const group = settingsTree(page, t).getByRole('button', {
+      name: say(t, settingsGroupLabelKey(entry.group)),
+      exact: true,
+    });
+    if ((await group.getAttribute('aria-expanded')) !== 'true') {
+      await group.click();
+    }
+  }
+  await settingsTab(page, t, key).click();
+  // The tree reopens its branch when the route changes; wait for that before the next click.
+  // A drawer closes itself on the choice, and then there is nothing left to wait on.
+  const link = settingsTab(page, t, key);
+  await expect
+    .poll(async () => ((await link.isVisible()) ? await link.getAttribute('aria-current') : 'page'))
+    .toBe('page');
+}
 
 /**
  * Opens one area of what used to be the Admin group: the sidebar's single
@@ -92,14 +148,7 @@ export async function openSettingsArea(
   t: Translate,
   area: keyof typeof AREA_LANDINGS,
 ): Promise<void> {
-  const nav = page.getByRole('navigation', { name: t('admin:settings.navLabel') });
-  if (!(await nav.isVisible())) {
-    await page
-      .getByRole('navigation', { name: t('admin:nav.label') })
-      .getByRole('link', { name: t('admin:nav.settings'), exact: true })
-      .click();
-  }
-  await settingsTab(page, t, AREA_LANDINGS[area]).click();
+  await clickSettingsTab(page, t, AREA_LANDINGS[area]);
 }
 
 /**
@@ -176,7 +225,7 @@ export async function openTicketingTab(
   } as const;
 
   await openTicketing(page, locale);
-  await settingsTab(page, t, `ticketing:tabs.${tab[segment]}`).click();
+  await clickSettingsTab(page, t, `ticketing:tabs.${tab[segment]}`);
   await page.getByRole('button', { name: arrived[segment], exact: true }).waitFor();
 }
 
@@ -188,11 +237,17 @@ export async function openTicketingTab(
 export async function openTickets(page: Page, locale: Locale, view?: string): Promise<void> {
   const t = strings(locale);
 
-  await page
-    .getByRole('link', { name: new RegExp(t('admin:nav.tickets')) })
-    .first()
-    .click();
-  await page.getByRole('region', { name: t('tickets:list.label') }).waitFor();
+  // The row of the section the person is already in only folds it, so a person on the
+  // tickets (where sign-in lands) is already where the click would take them.
+  const list = page.getByRole('region', { name: t('tickets:list.label') });
+  if (!(await list.isVisible())) {
+    await page
+      .getByRole('navigation', { name: t('admin:nav.label') })
+      .getByRole('link', { name: new RegExp(`^${t('admin:nav.tickets')}`) })
+      .first()
+      .click();
+  }
+  await list.waitFor();
 
   if (view !== undefined) {
     const name = t(`tickets:views.${view}` as 'tickets:views.all');
@@ -249,3 +304,50 @@ export async function openSettings(page: Page, locale: Locale): Promise<void> {
   await openSettingsArea(page, t, 'settings');
   await page.getByRole('heading', { name: t('settings:signInMethods.title'), level: 2 }).waitFor();
 }
+
+/**
+ * Moves to a path without reloading: the mock session lives in memory, so a
+ * `page.goto` after sign-in would land on the sign-in screen. The router hears
+ * the `popstate` and navigates as it would for a link.
+ */
+export async function goInApp(page: Page, path: string): Promise<void> {
+  await page.evaluate((target) => {
+    window.history.pushState({}, '', target);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+}
+
+/**
+ * Opens a page of a sidebar section (Contacts or Help center): opens the
+ * section with its chevron when it is folded, then follows the page's link.
+ */
+export async function clickSidebarPage(
+  page: Page,
+  t: Translate,
+  section: 'contacts' | 'helpCenter',
+  pageLabel: string | RegExp,
+): Promise<void> {
+  const nav = page.getByRole('navigation', { name: t('admin:nav.label') });
+  // The section's own list: the Help center's "Settings" page shares its name with Settings itself.
+  const link = nav
+    .getByRole('list', { name: t(`admin:nav.${section}`), exact: true })
+    .getByRole('link', { name: pageLabel });
+  if (!(await link.isVisible())) {
+    await nav
+      .getByRole('button', { name: t('admin:nav.pagesOf', { label: t(`admin:nav.${section}`) }) })
+      .click();
+  }
+  await link.click();
+}
+
+/** In the Arabic UI the Arabic name of a seeded status is the one on its button and its row. */
+export const seededStatusName = (locale: Locale, english: string): string =>
+  locale === 'ar'
+    ? ((
+        {
+          Open: 'مفتوحة',
+          'Awaiting customer': 'بانتظار العميل',
+          'Waiting on supplier': 'بانتظار المورّد',
+        } as Record<string, string>
+      )[english] ?? english)
+    : english;

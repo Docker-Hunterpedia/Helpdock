@@ -19,6 +19,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'reac
 import { useT } from '../../../../app/i18n.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { useChannelsApi } from '../../../../auth/session.tsx';
+import { isDirty } from '../../../../ui/dirty.js';
 import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { SectionCard, useEmailAction } from '../section-card.tsx';
 import { CheckRow } from './conversation-card.tsx';
@@ -92,6 +93,8 @@ export function ContentPolicyCard({
     : undefined;
   const perMessageHint = t('channels:widget.policy.perMessageHint');
 
+  const dirty = isDirty(draft, policyDraftOf(policy));
+
   return (
     <SectionCard
       id={`${id}-policy`}
@@ -102,7 +105,7 @@ export function ContentPolicyCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               setDraft(policyDraftOf(policy));
               setProblems(new Set());
@@ -110,7 +113,7 @@ export function ContentPolicyCard({
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:widget.save')}
           </Button>
         </>

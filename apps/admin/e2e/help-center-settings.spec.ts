@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { fillSignIn, signIn, submitTotp } from './flows.js';
+import { clickSidebarPage, fillSignIn, signIn, submitTotp } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -27,7 +27,7 @@ const openSettings = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
   await page.getByRole('link', { name: new RegExp(t('admin:nav.helpCenter')) }).click();
-  await page.getByRole('tab', { name: t('helpCenter:tabs.settings') }).click();
+  await clickSidebarPage(page, t, 'helpCenter', t('helpCenter:tabs.settings'));
   await page.getByRole('region', { name: t('helpCenter:site.theme.heading') }).waitFor();
 };
 

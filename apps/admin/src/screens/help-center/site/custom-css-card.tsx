@@ -5,6 +5,7 @@ import { ShieldAlert, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { isDirty } from '../../../ui/dirty.js';
 import { SectionCard } from '../../admin/channels/section-card.tsx';
 import { useHelpCenter } from '../use-help-center.js';
 import { useSiteSave } from './use-site.js';
@@ -39,6 +40,8 @@ export function CustomCssCard({
   );
   const fieldId = `${id}-css`;
 
+  const dirty = isDirty(draft, css);
+
   return (
     <SectionCard
       id={`${id}-custom-css`}
@@ -52,10 +55,14 @@ export function CustomCssCard({
         ? {
             footer: (
               <>
-                <Button variant="text" disabled={save.isPending} onClick={() => setDraft(css)}>
+                <Button
+                  variant="text"
+                  disabled={save.isPending || !dirty}
+                  onClick={() => setDraft(css)}
+                >
                   {t('helpCenter:settings.discard')}
                 </Button>
-                <Button type="submit" variant="contained" disabled={save.isPending}>
+                <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
                   {t('helpCenter:settings.save')}
                 </Button>
               </>

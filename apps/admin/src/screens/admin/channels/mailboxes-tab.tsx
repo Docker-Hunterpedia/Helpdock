@@ -23,6 +23,7 @@ import { EmptyState } from '../../../shell/empty-state.tsx';
 import { ActionsMenu } from '../../../ui/actions-menu.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
+import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import { ago, clockTime } from './format.js';
 import { HealthDot, HealthLegend } from './health.tsx';
 import { InboundParseCard } from './inbound-parse-card.tsx';
@@ -118,7 +119,7 @@ export function MailboxesTab(): ReactNode {
                     {t('channels:mailboxes.columns.health')}
                   </TableCell>
                   <TableCell sx={{ width: 48 }}>
-                    <Box component="span" sx={visuallyHiddenSx}>
+                    <Box component="span" sx={visuallyHidden}>
                       {t('channels:mailboxes.columns.actions')}
                     </Box>
                   </TableCell>
@@ -225,15 +226,6 @@ export function MailboxesTab(): ReactNode {
 }
 
 const ellipsisSx = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const;
-
-const visuallyHiddenSx = {
-  position: 'absolute',
-  width: '1px',
-  height: '1px',
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-} as const;
 
 function Incoming({ mailbox }: { readonly mailbox: Mailbox }): ReactNode {
   const t = useT();

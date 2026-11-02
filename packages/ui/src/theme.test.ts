@@ -142,6 +142,22 @@ describe('component overrides', () => {
     expect(overrides.MuiTableCell?.styleOverrides?.root).toMatchObject({ height: '44px' });
   });
 
+  it('keeps a label shrunk, so a placeholder is visible before the field is focused', () => {
+    expect(overrides.MuiInputLabel?.defaultProps).toMatchObject({ shrink: true });
+  });
+
+  it('puts a field label above its input, with no notch cut into the outline', () => {
+    expect(overrides.MuiInputLabel?.styleOverrides?.root).toMatchObject({
+      position: 'static',
+      transform: 'none',
+      fontSize: '13px',
+      lineHeight: '20px',
+    });
+    expect(overrides.MuiOutlinedInput?.styleOverrides?.root).toMatchObject({
+      '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
+    });
+  });
+
   it('gives the segmented control its own text token, not MUI\u2019s translucent black', () => {
     // DESIGN §10: the unselected option has to clear 4.5:1 on the canvas, and
     // MUI's default `rgba(0, 0, 0, 0.54)` does not.

@@ -102,7 +102,6 @@ export function HolidaysCard({
               onChange={(event) => {
                 setStartsOn(event.target.value);
               }}
-              slotProps={{ inputLabel: { shrink: true } }}
             />
             <TextField
               type="date"
@@ -112,7 +111,6 @@ export function HolidaysCard({
               onChange={(event) => {
                 setEndsOn(event.target.value);
               }}
-              slotProps={{ inputLabel: { shrink: true } }}
             />
             <TextField
               select
@@ -123,7 +121,7 @@ export function HolidaysCard({
                 setDepartmentId(event.target.value);
               }}
               sx={{ minInlineSize: 180 }}
-              slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+              slotProps={{ select: { displayEmpty: true } }}
             >
               <MenuItem value="">{t('ticketing:businessHours.holidays.allDepartments')}</MenuItem>
               {overview.departments.map((department) => (

@@ -334,7 +334,7 @@ Five things M1-15 should know:
 |---|---|---|
 | `/settings/inbox` | `Admin/Ticketing` | The Inbox group of Settings (M14-21): M1's settings and Automation's pages, redirecting to the first page the reader has. Visible to an Admin and a Team Leader; the api refuses it whatever the sidebar draws. |
 | `/settings/inbox/departments` | `Admin/Ticketing` | The 820 px list, the 300 px side editor, and the selected department's teams inline underneath. |
-| `/settings/inbox/priorities` | `Admin/Ticketing` | The routed placeholder that names the deliverable filling it, M1-02. Any other segment redirects to the first tab. |
+| `/settings/inbox/priorities` | `Admin/Ticketing` | Opens Departments, like any other segment that is not a page: there is no Priorities page (M1-02's editable labels are not built). |
 | `/settings/inbox/views` | `Admin/Ticketing-Views` | M1-05. The brand's shared views in sidebar order — built-in ones marked — with what each shows, who sees it and its count; the side editor (`view-editor.tsx`, its selects in `view-draft.ts`). |
 | `/settings/inbox/assignment` | `Admin/Ticketing-Assignment` | M1-07. The departments with their mode, cap, timer and agents online; the selected department's agents with presence, load, skills and rotation; the side editor. The ticket workspace's assignee picker is `screens/tickets/assignee-picker.tsx` (`AdminTicketDialogs`, panel 3). |
 
@@ -355,7 +355,8 @@ milestone placeholder with no artboard. The guide says so
 | Route | Artboard | |
 |---|---|---|
 | `/settings/brand` | `AdminBrandDanger` | Redirects to General. The Brand group of Settings is drawn for an Admin alone. |
-| `/settings/brand/danger` | `AdminBrandDanger` | The Data retention card: the windows, the "next purge" count per row and the last run. The artboard's General, Domains and Theme tabs and its "Delete this brand" section have no deliverable yet and are not drawn. |
+| `/settings/brand/retention` | `AdminBrandDanger` | The Data retention card: the windows, the "next purge" count per row and the last run (moved out of the Danger zone by `Admin/UX-Fixes-2026-11`). |
+| `/settings/brand/danger` | `AdminBrandDanger` | "Delete this brand" and the pending-deletion banner. |
 
 The form's rules — which day counts are valid, what a draft sends, whether it is
 dirty — are `src/screens/admin/brand/retention-form.ts`, tested without a DOM.
@@ -557,6 +558,15 @@ sidebar renders a count only for the keys it receives — the api sends none in
 1.0, so the fixture sends none either and the screenshots show the sidebar
 production shows — and switching brand is a client-side change to the cached
 session until a milestone gives it somewhere to persist.
+
+The sidebar is one tree (`Admin/UX-Fixes-2026-11`, `src/shell/sidebar-sections.ts` for
+what each person is offered and `sidebar-tree.tsx` for the rows): Tickets (its views),
+Contacts (People, Accounts), Help center (Articles, Proposals, Settings, Insights),
+Reports and Settings (seven groups of pages, with an icon on each in `settings-nav.ts`).
+One section and one Settings group are open at a time and the current page's branch
+opens and scrolls into view by itself. `src/shell/route-scroll.ts` opens a new page at
+the top and scrolls a `#fragment` to its section (4 s of retries for data that arrives
+late, 16 px margin); `src/shell/page-title.ts` sets `<page> · Helpdock`.
 
 The sidebar collapses to a 56 px icon rail (1.0.2, `Admin/Shell-SidebarCollapse`,
 `src/shell/sidebar-collapse.ts`). The choice is stored under

@@ -3,7 +3,7 @@ import { Button } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { automationRoute, ruleRoute } from '../../../app/route-paths.js';
 import { currentBrand, useSession } from '../../../auth/session.tsx';
@@ -35,7 +35,6 @@ export function AutomationPage(): ReactNode {
   const api = useAutomationApi();
   const { tab: segment, ruleId } = useParams();
   const [search] = useSearchParams();
-  const { pathname } = useLocation();
 
   const tabs = tabsFor(session.user.role);
   const readsRules = tabs.some((candidate) => candidate.kind !== null);
@@ -64,20 +63,29 @@ export function AutomationPage(): ReactNode {
   }
 
   const newRuleKind: RuleKind = tab.kind ?? 'event';
+  // With no rules of the kind the empty state carries the one "New rule" button.
+  const noRules =
+    tab.kind !== null && rules.data?.rules.every((rule) => rule.kind !== tab.kind) === true;
 
   return (
     <>
       <PageHeader
-        title={t('rules:title')}
+        title={
+          editing === null
+            ? t('rules:title')
+            : editing === 'new'
+              ? t('rules:builder.newTitle')
+              : (editedRule?.name ?? t('rules:title'))
+        }
         caption={t('rules:subtitle', { brand: brand.name })}
         action={
-          tab.kind === null ? undefined : (
+          // In the builder the header has no "New rule": it would be the disabled copy of a page you are on.
+          tab.kind === null || editing !== null || noRules ? undefined : (
             <Button
               variant="contained"
               component={Link}
               to={`${ruleRoute('new')}?kind=${newRuleKind}`}
               startIcon={<Plus size={16} aria-hidden="true" />}
-              disabled={pathname === ruleRoute('new')}
             >
               {t('rules:newRule')}
             </Button>

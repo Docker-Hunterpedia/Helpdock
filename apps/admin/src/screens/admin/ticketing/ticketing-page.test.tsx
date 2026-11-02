@@ -1,7 +1,8 @@
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /**
@@ -27,12 +28,10 @@ const renderTicketing = async (path = '/settings/inbox') => {
 describe('the Inbox settings', () => {
   it('offers every setting M1 will fill as a link of the Inbox group', async () => {
     await renderTicketing();
-    const nav = screen.getByRole('navigation', { name: 'Settings' });
 
     for (const label of [
       'Departments',
       'Statuses',
-      'Priorities',
       'Tags',
       'Custom fields',
       'Templates',
@@ -43,7 +42,7 @@ describe('the Inbox settings', () => {
       'Spam',
       'Feedback',
     ]) {
-      expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument();
+      expect(settingsLink(label)).toBeInTheDocument();
     }
   });
 
@@ -62,20 +61,16 @@ describe('the Inbox settings', () => {
   ])('selects Departments when the url %s', async (_case, path) => {
     await renderTicketing(path);
 
-    expect(
-      within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('link', {
-        name: 'Departments',
-        current: 'page',
-      }),
-    ).toBeVisible();
+    expect(settingsLink('Departments')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Departments');
     expect(await screen.findByRole('table')).toBeInTheDocument();
   });
 
-  it('names the deliverable a tab is waiting for', async () => {
+  it('opens Departments for the old Priorities address, which has no page', async () => {
     await renderTicketing('/settings/inbox/priorities');
 
-    expect(await screen.findByText('Priorities arrives with M1-02.')).toBeInTheDocument();
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Departments');
   });
 
   it('draws the Views tab rather than a placeholder, since M1-05 filled it', async () => {

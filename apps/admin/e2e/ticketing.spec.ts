@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.js';
-import { openTicketing, openTicketingTab, settingsTab, signIn } from './flows.js';
+import { goInApp, openTicketing, openTicketingTab, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -56,23 +56,20 @@ test.describe('ticketing settings', () => {
     ).toBeVisible();
   });
 
-  test('says which deliverable an unbuilt tab is waiting for', async ({
-    page,
-    appLocale: locale,
-  }) => {
+  test('opens Departments for the old Priorities address', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);
-    await openTicketing(page, locale);
+    await goInApp(page, '/admin/ticketing/priorities');
 
-    // Priorities, the one tab no deliverable has filled since M1-05 filled
-    // Views.
-    await settingsTab(page, t, 'ticketing:tabs.priorities').click();
-
+    await expect(page).toHaveURL(/\/settings\/inbox\/departments$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      t('ticketing:tabs.departments'),
+    );
     await expect(
-      page.getByText(
-        t('ticketing:soon.body', { tab: t('ticketing:tabs.priorities'), milestone: 'M1-02' }),
-      ),
-    ).toBeVisible();
+      page
+        .getByRole('list', { name: t('admin:settings.navLabel') })
+        .getByRole('link', { name: locale === 'ar' ? 'الأولويات' : 'Priorities' }),
+    ).toHaveCount(0);
   });
 
   test('creates a department from the side editor', async ({ page, appLocale: locale }) => {

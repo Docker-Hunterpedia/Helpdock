@@ -20,9 +20,9 @@ import { RetentionCard } from './retention-card.tsx';
 
 /**
  * `Admin/Brand`: **General** (artboard `AdminBrand`, the Identity card),
- * **Domains** (`AdminBrandDomains`, M5-07) and **Danger zone**
- * (`AdminBrandDanger`: M1-14's Data retention card and M8-07's "Delete this
- * brand").
+ * **Domains** (`AdminBrandDomains`, M5-07), **Data retention** (M1-14's card,
+ * moved out of the Danger zone by `Admin/UX-Fixes-2026-11`) and **Danger zone**
+ * (`AdminBrandDanger`: M8-07's "Delete this brand").
  *
  * There is no Theme tab: theming lives on Channels › Widget and on the help
  * center's own settings. While the brand is in its deletion grace every tab
@@ -33,6 +33,7 @@ import { RetentionCard } from './retention-card.tsx';
 export const BRAND_TABS = [
   { key: 'general', segment: 'general' },
   { key: 'domains', segment: 'domains' },
+  { key: 'retention', segment: 'retention' },
   { key: 'danger', segment: 'danger' },
 ] as const;
 const DEFAULT_BRAND_TAB = BRAND_TABS[0];
@@ -62,9 +63,11 @@ export function BrandPage({ imports = false }: { readonly imports?: boolean } = 
     <>
       <PageHeader
         title={t(tab.key === 'import' ? 'imports:title' : 'brand:title')}
-        caption={t(tab.key === 'import' ? 'imports:brandCaption' : 'brand:subtitle', {
-          brand: brand.name,
-        })}
+        caption={
+          tab.key === 'import'
+            ? t('imports:brandCaption', { brand: brand.name })
+            : t(`brand:subtitles.${tab.key}`, { brand: brand.name })
+        }
       />
 
       {deletion.data === undefined ? null : (
@@ -87,6 +90,7 @@ export function BrandPage({ imports = false }: { readonly imports?: boolean } = 
             <ImportOverview key={brand.id} />
           )
         ) : null}
+        {tab.key === 'retention' ? <RetentionPage brand={brand} /> : null}
         {tab.key === 'danger' ? (
           <DangerZone brand={brand} installAdmin={session.user.installAdmin} pending={pending} />
         ) : null}
@@ -105,6 +109,11 @@ function DangerZone({
   /** In its deletion grace: there is nothing to delete, and the banner offers Restore. */
   readonly pending: boolean;
 }): ReactNode {
+  return pending ? null : <DeleteBrandCard brand={brand} installAdmin={installAdmin} />;
+}
+
+/** Brand › Data retention: the windows after which old records are purged, and the note on erasing a person. */
+function RetentionPage({ brand }: { readonly brand: SessionBrand }): ReactNode {
   const t = useT();
   const brandId = brand.id;
   const api = useTicketingApi();
@@ -135,7 +144,7 @@ function DangerZone({
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 720px) 300px' },
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 1fr) 300px' },
         gap: 8,
         alignContent: 'start',
       }}
@@ -153,7 +162,6 @@ function DangerZone({
             }}
           />
         )}
-        {pending ? null : <DeleteBrandCard brand={brand} installAdmin={installAdmin} />}
       </Box>
 
       <Box

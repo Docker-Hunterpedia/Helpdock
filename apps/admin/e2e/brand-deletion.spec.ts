@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 import { MOCK_BRANDS } from '../src/auth/mock-api.js';
 import { activeDeletion, pendingDeletion } from '../src/screens/admin/system/fixtures.js';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -48,7 +48,7 @@ async function openDangerZone(page: Page, locale: Locale): Promise<void> {
   const t = strings(locale);
   await signIn(page, locale);
   await openSettingsArea(page, t, 'brand');
-  await settingsTab(page, t, 'brand:tabs.danger').click();
+  await clickSettingsTab(page, t, 'brand:tabs.danger');
   await page.getByRole('heading', { name: t('brand:deletion.heading') }).waitFor();
 }
 
@@ -80,7 +80,8 @@ test.describe('deleting a brand', () => {
       .getByRole('status')
       .filter({ has: page.getByRole('button', { name: t('brand:deletion.restore') }) });
     await expect(banner).toBeVisible();
-    // Read-only during the grace, on this tab and the others.
+    // Read-only during the grace, on this page and the others.
+    await clickSettingsTab(page, t, 'brand:tabs.retention');
     await expect(
       page.getByRole('spinbutton', {
         name: t('brand:retention.daysLabel', { row: t('brand:retention.rows.spamTickets') }),
@@ -88,6 +89,7 @@ test.describe('deleting a brand', () => {
     ).toBeDisabled();
     expect(await violations(page)).toEqual([]);
 
+    await clickSettingsTab(page, t, 'brand:tabs.danger');
     await banner.getByRole('button', { name: t('brand:deletion.restore') }).click();
 
     await expect(page.getByRole('heading', { name: t('brand:deletion.heading') })).toBeVisible();

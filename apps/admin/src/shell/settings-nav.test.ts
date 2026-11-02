@@ -1,9 +1,12 @@
+import { Settings } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 import { ROUTES } from '../app/route-paths.js';
 import {
   entriesFor,
   firstSettingsPath,
   SETTINGS_ENTRIES,
+  SETTINGS_GROUP_ICONS,
+  SETTINGS_GROUPS,
   type SettingsViewer,
   settingsEntryAt,
   settingsFor,
@@ -39,7 +42,12 @@ describe('settingsFor', () => {
     expect(offered.install).toEqual(['staff', 'brandImport']);
     expect(offered.ai).toEqual(['aiKnowledge', 'aiAssistant']);
     expect(offered.developers).toEqual(['developersApi', 'developersWebhooks']);
-    expect(offered.brand).toEqual(['brandGeneral', 'brandDomains', 'brandDanger']);
+    expect(offered.brand).toEqual([
+      'brandGeneral',
+      'brandDomains',
+      'brandRetention',
+      'brandDanger',
+    ]);
   });
 
   it('offers a team leader what the old pages did and no more', () => {
@@ -72,6 +80,8 @@ describe('settingsFor', () => {
       'sso',
       'staff',
       'system',
+      'systemAuditLog',
+      'systemQueues',
       'brandImport',
     ]);
   });
@@ -97,7 +107,7 @@ describe('settingsEntryAt', () => {
     ['/settings/channels/mailboxes/new', 'channelsMailboxes'],
     ['/settings/channels/telegram/0192c3f0', 'channelsTelegram'],
     ['/settings/install/sso/0192c3f0', 'sso'],
-    ['/settings/install/system/audit-log', 'system'],
+    ['/settings/install/system/audit-log', 'systemAuditLog'],
     ['/settings/install/imports/0192c3f0', 'brandImport'],
   ])('puts %s under %s', (path, id) => {
     expect(settingsEntryAt(path)?.id).toBe(id);
@@ -107,5 +117,35 @@ describe('settingsEntryAt', () => {
     expect(settingsEntryAt('/settings')).toBeUndefined();
     expect(settingsEntryAt('/settings/inbox')).toBeUndefined();
     expect(settingsEntryAt('/tickets')).toBeUndefined();
+  });
+});
+
+describe('the icons of the Settings tree', () => {
+  it('gives every group an icon, and no two groups the same one', () => {
+    const icons = SETTINGS_GROUPS.map((group) => SETTINGS_GROUP_ICONS[group]);
+    expect(icons.every((icon) => icon !== undefined)).toBe(true);
+    expect(new Set(icons).size).toBe(SETTINGS_GROUPS.length);
+  });
+
+  it('gives every page its own icon rather than the fallback gear, unique within its group', () => {
+    for (const group of SETTINGS_GROUPS) {
+      const entries = SETTINGS_ENTRIES.filter((candidate) => candidate.group === group);
+      expect(entries.length).toBeGreaterThan(0);
+      for (const entry of entries) {
+        expect(entry.icon, entry.id).not.toBe(Settings);
+      }
+      expect(new Set(entries.map((entry) => entry.icon)).size, group).toBe(entries.length);
+    }
+  });
+
+  it('lists the audit log and the queues as pages of Install', () => {
+    const install = SETTINGS_ENTRIES.filter((entry) => entry.group === 'install').map(
+      (entry) => entry.id,
+    );
+    expect(install).toEqual(
+      expect.arrayContaining(['system', 'systemAuditLog', 'systemQueues', 'brandImport']),
+    );
+    expect(settingsEntryAt(ROUTES.systemQueues)?.id).toBe('systemQueues');
+    expect(settingsEntryAt(ROUTES.systemAuditLog)?.id).toBe('systemAuditLog');
   });
 });

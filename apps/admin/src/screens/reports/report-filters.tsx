@@ -66,8 +66,13 @@ export function ReportFilterBar({
         gap: 3,
       }}
     >
-      <Box sx={{ display: 'grid', gap: 1 }}>
-        <Typography id={rangeId} component="span" sx={{ fontSize: 13, fontWeight: 500 }}>
+      {/* The same label above the box as the selects beside it: 13/500 on a 20 px line, 6 px gap. */}
+      <Box sx={{ display: 'grid', gap: '6px' }}>
+        <Typography
+          id={rangeId}
+          component="span"
+          sx={{ fontSize: 13, fontWeight: 500, lineHeight: '20px' }}
+        >
           {t('reports:filters.range')}
         </Typography>
         <Button
@@ -214,7 +219,6 @@ function RangePopover({
           size="small"
           label={t('reports:filters.from')}
           value={draft.from}
-          slotProps={{ inputLabel: { shrink: true } }}
           onChange={(event) => {
             setDraft({ ...draft, from: event.target.value });
           }}
@@ -224,7 +228,6 @@ function RangePopover({
           size="small"
           label={t('reports:filters.to')}
           value={draft.to}
-          slotProps={{ inputLabel: { shrink: true } }}
           error={!valid}
           helperText={valid ? undefined : t('reports:filters.invalidRange')}
           onChange={(event) => {

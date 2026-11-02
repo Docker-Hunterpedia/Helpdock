@@ -88,7 +88,7 @@ test('uses the Arabic face for the article language option (#339)', async ({
   const t = strings(locale);
   await signIn(page, locale);
   await openTicket(page, locale, 'HD-1030');
-  await page.getByRole('button', { name: t('tickets:assist.button') }).click();
+  await page.getByRole('button', { name: t('tickets:assist.button'), exact: true }).click();
   await page
     .getByRole('menuitem', { name: new RegExp(t('tickets:assist.menu.draftArticle')) })
     .click();

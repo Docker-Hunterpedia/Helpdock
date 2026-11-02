@@ -37,6 +37,8 @@ export const ROUTES = {
    */
   ticketWorkspace: '/tickets/*',
   contacts: '/contacts',
+  /** Accounts, the second page of the sidebar's Contacts section. Static, so it wins over `:contactId`. */
+  contactsAccounts: '/contacts/accounts',
   /** The create form, on a route of its own so it can be linked to (M1-04). */
   contactNew: '/contacts/new',
   contact: '/contacts/:contactId',
@@ -54,8 +56,8 @@ export const ROUTES = {
   helpCenterOpen: '/help-center/open',
   reports: '/reports',
   /**
-   * The Settings area (M14-21): one sidebar entry opening a shell with a grouped
-   * secondary navigation. `/settings` alone opens the first page the reader has.
+   * The Settings area (M14-21): one sidebar entry that opens a tree of its groups
+   * and pages in the sidebar itself. `/settings` alone opens the first page the reader has.
    * The groups are Your account, Brand, Inbox, Channels, AI, Developers and
    * Install; `LEGACY_REDIRECTS` below maps every URL the admin had before.
    */
@@ -73,7 +75,7 @@ export const ROUTES = {
   /** Their email signature (M2-05, artboard `AdminSignature`). */
   signature: '/settings/account/signature',
 
-  /** The brand's own settings: General, Domains (M5-07) and Danger zone (M1-14). */
+  /** The brand's own settings: General, Domains (M5-07), Data retention (M1-14) and Danger zone. */
   brand: '/settings/brand',
   /** One page of it. `/settings/brand` alone redirects to General. */
   brandTab: '/settings/brand/:tab',
@@ -124,7 +126,7 @@ export const ROUTES = {
   ssoConnection: '/settings/install/sso/:id',
   staff: '/settings/install/staff',
   system: '/settings/install/system',
-  /** The install-wide audit log (M3-08), reached from System. */
+  /** The install-wide audit log (M3-08), a page of the Install group (and linked from System). */
   systemAuditLog: '/settings/install/system/audit-log',
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/settings/install/system/queues',

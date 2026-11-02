@@ -36,15 +36,6 @@ test.describe('the security page', () => {
     ).toBeVisible();
   });
 
-  test('leaves the sign-in address to an administrator', async ({ page, appLocale: locale }) => {
-    const t = strings(locale);
-    await signIn(page, locale);
-    await openSecurity(page, locale);
-
-    await expect(page.getByLabel(t('me:details.emailLabel'))).toHaveAttribute('readonly', '');
-    await expect(page.getByText(t('me:details.emailHint'))).toBeVisible();
-  });
-
   test('changes a password and says the other browsers were ended', async ({
     page,
     appLocale: locale,

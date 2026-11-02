@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -29,7 +29,7 @@ const openDevelopers = async (page: Page, locale: Locale): Promise<void> => {
 const openWebhooks = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await openDevelopers(page, locale);
-  await settingsTab(page, t, 'developers:tabs.webhooks').click();
+  await clickSettingsTab(page, t, 'developers:tabs.webhooks');
   await page.getByRole('heading', { name: t('developers:webhooks.heading') }).waitFor();
 };
 

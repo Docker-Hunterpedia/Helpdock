@@ -37,7 +37,7 @@ it.each(['en', 'ar'] as const)(
     const { user } = renderApp(<OutgoingEmailCard api={api} />);
 
     const card = await screen.findByRole('region', {
-      name: en ? 'Outgoing email settings' : 'إعدادات البريد الصادر',
+      name: en ? 'System email settings' : 'إعدادات بريد النظام',
     });
     expect(within(card).getByText(en ? 'Working' : 'يعمل')).toBeVisible();
     expect(within(card).getByDisplayValue('smtp.helpdock.dev')).toBeVisible();
@@ -83,7 +83,7 @@ it('saves without resending the stored password, and draws what the api stored',
   await user.type(port, '465');
   await user.click(screen.getByRole('button', { name: 'Save' }));
 
-  expect(await screen.findByText('Outgoing email settings saved.')).toBeVisible();
+  expect(await screen.findByText('System email settings saved.')).toBeVisible();
   expect(save).toHaveBeenCalledWith(
     expect.objectContaining({ host: 'smtp.helpdock.dev', port: 465 }),
   );

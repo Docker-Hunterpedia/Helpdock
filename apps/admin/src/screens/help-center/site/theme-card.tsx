@@ -14,6 +14,7 @@ import { ImageUp } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { isDirty } from '../../../ui/dirty.js';
 import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { SectionCard } from '../../admin/channels/section-card.tsx';
@@ -92,6 +93,8 @@ export function ThemeCard({
   const radiusId = `${id}-radius`;
   const fontId = `${id}-font`;
 
+  const dirty = isDirty(draft, draftOf(appearance));
+
   return (
     <SectionCard
       id={`${id}-theme`}
@@ -104,14 +107,14 @@ export function ThemeCard({
               <>
                 <Button
                   variant="text"
-                  disabled={save.isPending}
+                  disabled={save.isPending || !dirty}
                   onClick={() => {
                     setDraft(draftOf(appearance));
                   }}
                 >
                   {t('helpCenter:settings.discard')}
                 </Button>
-                <Button type="submit" variant="contained" disabled={save.isPending}>
+                <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
                   {t('helpCenter:settings.save')}
                 </Button>
               </>

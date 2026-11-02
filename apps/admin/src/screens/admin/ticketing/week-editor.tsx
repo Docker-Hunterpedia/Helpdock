@@ -151,7 +151,8 @@ export function WeekEditor({
                     </Box>
                   );
                 })
-              ) : (
+              ) : showStateLabel ? null : (
+                // The state label already says "Closed"; say it once.
                 <Typography
                   variant="body2"
                   component="span"

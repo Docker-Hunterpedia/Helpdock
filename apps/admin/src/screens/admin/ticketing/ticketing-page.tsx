@@ -9,7 +9,6 @@ import { BusinessHoursTab } from './business-hours-tab.tsx';
 import { CustomFieldsTab } from './custom-fields-tab.tsx';
 import { DepartmentsTab } from './departments-tab.tsx';
 import { FeedbackTab } from './feedback-tab.tsx';
-import { NotBuiltYetTab } from './not-built-yet-tab.tsx';
 import { SlasTab } from './slas-tab.tsx';
 import { SpamTab } from './spam-tab.tsx';
 import { StatusesTab } from './statuses-tab.tsx';
@@ -20,13 +19,11 @@ import { ViewsTab } from './views-tab.tsx';
 
 /**
  * `Admin/Ticketing`: the page header and whichever setting the url names. Since
- * M14-21 each of the twelve is a link of the Settings area's Inbox group
+ * M14-21 each page is a link of the Settings area's Inbox group
  * (`/settings/inbox/<segment>`), so a setting is a url somebody can send to a
  * colleague, the browser's back button works, and a reload lands where it left
- * off. Eleven are built — Departments (M1-01), Statuses (M1-08), Tags, Custom
- * fields and Templates (M1-06), Views (M1-05), Assignment (M1-07), Spam
- * (M1-11), Feedback (M1-12), Business hours (M3-01) and SLAs (M3-02); the rest
- * are the routed placeholders their deliverables replace.
+ * off. An address that names no page here, such as the old Priorities one,
+ * opens Departments.
  */
 export function TicketingPage(): ReactNode {
   const t = useT();
@@ -79,7 +76,5 @@ function TabBody({ tab }: { readonly tab: TicketingTab }): ReactNode {
       return <BusinessHoursTab />;
     case 'slas':
       return <SlasTab />;
-    default:
-      return <NotBuiltYetTab tab={tab} />;
   }
 }

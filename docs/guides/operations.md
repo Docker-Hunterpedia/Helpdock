@@ -235,19 +235,19 @@ anything a stranger could not learn by trying the port.
 | Worker | The outbox relay's last cycle and the backlog it reported. "no relay has reported" means no worker is running, or none has finished a cycle. |
 | Postgres | Server version, migrations applied at boot, and the runtime role — which must be `helpdock_app` with RLS forced (DOMAIN-RULES §1.5) |
 | Redis | Version, latency, and whether an AOF rewrite is running (not a failure, but it costs latency) |
-| Outgoing email | Whether the install has a system sender, and the address it sends from. A warning here means sign-in links, password resets and staff notifications are going nowhere; the warning banner at the top of the page anchors to the **Outgoing email** card, which edits and tests the sender ([authentication › Sending](authentication.md#sending)). |
+| System email | Whether the install has a system sender, and the address it sends from. A warning here means sign-in links, password resets and staff notifications are going nowhere; the warning banner at the top of the page anchors to the **System email** card, which edits and tests the sender ([authentication › Sending](authentication.md#sending)). |
 | Product metrics | Activation, AI deflection and help center self-service ([below](#product-metrics)) |
 | Queues | The first few, with waiting, active, failed, delayed and the age of the oldest waiting job; "All queues" fetches the rest. A failed count is a dead-letter count. |
 | Channels | Every brand's mailboxes, Telegram bots and Meta accounts (WhatsApp numbers, Facebook Pages and Instagram accounts), grouped by kind, each with the health word its own Channels list shows: `healthy` and `waiting` are green, `behind` amber, `failing` red. A Meta account whose token expired or whose subscription Meta dropped says `token expired` or `unsubscribed` instead ([email](email.md), [Telegram](telegram.md), [Meta channels](meta-channels.md#health-subscribe-now-and-reconnect)). The header counts the connections that need attention. |
 | Version and migrations | The version and commit, the runtime (Node, Postgres, Redis), how many migrations the database has recorded and the newest three by name. Drizzle records no time of application, so they are names alone. |
 | Storage | The bucket's size against its soft limit, and per brand, largest first: everything under each brand's `brands/<id>/` prefix — attachments and the help center's images alike. A brand in its deletion grace is marked "pending deletion". "Not measured yet" until the worker has measured once. Beside it, the Postgres database's size on disk (`pg_database_size`), install-wide only ([below](#where-the-numbers-come-from)). |
-| Audit log | The most recent install-scope entries |
+| Audit log | The most recent install-scope entries, without the `install.scope.access` page-view rows (the audit log page lists those on request) |
 | LLM spend by brand | This UTC month's tokens and cost per brand from `ai_calls`, largest first, each against its own monthly budget ("48 % of $100.00"; amber with an icon from the 80 % alert, "No monthly budget" for a brand without one), then the install's total, whose budget is the sum of the brands' and none as soon as one brand has none. "Not available" until an AI provider is set up. A subsystem that is not measured says so rather than showing a zero. |
 | Brands pending deletion | Every brand in its 30-day grace, with who asked and when ("Deleted by Lina Haddad on 1 Oct 2026", from the install-scope `brand.deletion_requested` audit row; "a removed account" when that account is gone), the days left (amber in the last three) and **Restore** ([deleting a brand](data-retention.md#deleting-a-brand)) |
 
 The endpoint is `@Requires('install:admin')`: everything on it is install-wide,
 so it runs in install scope and writes an `install.scope.access` audit row on
-every read. Those rows are what the page's own audit card shows first.
+every read. Those rows are written for every read but are left out of the page's audit card, so it shows real changes; **Show page views** on the audit log page lists them.
 
 A brand admin who reaches `/settings/install/system` is refused by the api and the page
 draws "Not allowed"; Settings does not list System for them in the first place.

@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { MOCK_GOOD_TOKEN, MOCK_REFUSED_TOKEN } from '../src/telegram/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, openTicket, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, openTicket, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -31,7 +31,7 @@ async function violations(page: Page): Promise<string[]> {
 const openTelegram = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
   await openSettingsArea(page, t, 'channels');
-  await settingsTab(page, t, 'channels:tabs.telegram').click();
+  await clickSettingsTab(page, t, 'channels:tabs.telegram');
   await page
     .getByRole('table', { name: t('channels:telegram.heading') })
     .getByRole('link', { name: '@helpdock_support_bot' })

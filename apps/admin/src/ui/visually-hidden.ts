@@ -6,6 +6,10 @@
  */
 export const visuallyHidden = {
   position: 'absolute',
+  // Without an inset the span stays where it would have been, which in a wide
+  // table is past the window, and a scroll container that is not positioned
+  // does not clip it: the document grew a sideways scroll bar.
+  insetInlineStart: 0,
   width: '1px',
   height: '1px',
   padding: 0,

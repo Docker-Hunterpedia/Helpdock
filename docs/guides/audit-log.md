@@ -28,6 +28,8 @@ which refuses to run from anything but an install-scope transaction.
 
 ## Filters and paging
 
+In the page, **Show page views** (off by default) sets `includePageViews`; **Clear filters** puts it back off.
+
 | Query | Meaning |
 |---|---|
 | `actor` | A staff member's name or email, or an actor id, matched loosely |
@@ -36,6 +38,7 @@ which refuses to run from anything but an install-scope transaction.
 | `brand` | A brand id, or `install` for install-wide rows |
 | `from`, `to` | ISO timestamps; the page sends whole local days |
 | `cursor` | `nextCursor` of the previous page |
+| `includePageViews` | `true` lists the `install.scope.access` rows that every admin page load writes; left out by default so real changes are not buried. Naming the action (`action=install.scope.access`, `install.scope.*` or `install.*`) lists them too. The rows are written either way; this only filters the list |
 | `limit` | 1 to 100, default 50 |
 
 ## What each row shows

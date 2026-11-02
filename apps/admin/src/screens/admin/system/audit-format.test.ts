@@ -17,6 +17,14 @@ describe('queryOf', () => {
     ).toEqual({ actor: 'Lina', action: 'ticket.*', brand: 'install', cursor: 'c1' });
   });
 
+  it('asks for page views only when the switch is on, and does not count it as a filter', () => {
+    expect(queryOf({ ...NO_FILTERS, includePageViews: true }, null)).toEqual({
+      includePageViews: true,
+    });
+    expect(queryOf(NO_FILTERS, null)).not.toHaveProperty('includePageViews');
+    expect(hasFilters({ ...NO_FILTERS, includePageViews: true })).toBe(false);
+  });
+
   it('turns a day range into the whole of both days, inclusive', () => {
     const query = queryOf({ ...NO_FILTERS, from: '2026-09-20', to: '2026-09-27' }, null);
 

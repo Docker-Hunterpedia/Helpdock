@@ -30,7 +30,9 @@ describe('the Business hours tab', () => {
 
     expect(screen.getByRole('switch', { name: 'Sunday open' })).toBeChecked();
     expect(screen.getByRole('switch', { name: 'Friday open' })).not.toBeChecked();
-    expect(screen.getAllByText('Closed all day').length).toBeGreaterThanOrEqual(2);
+    // A closed day says so once: the state label, not also "Closed all day".
+    expect(screen.getAllByText('Closed').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('Closed all day')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   });
 

@@ -47,7 +47,7 @@ describe('Help center › Proposals', () => {
   it('lists what is waiting and shows the draft with where it would go', async () => {
     const { review } = await openProposals();
 
-    expect(screen.getByRole('tab', { name: /Proposals 1/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Proposals 1/ })).toBeVisible();
     expect(
       within(review).getByRole('heading', {
         name: 'Customs and VAT on clothing shipped to Germany',

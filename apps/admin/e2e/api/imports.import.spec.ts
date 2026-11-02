@@ -13,7 +13,7 @@ import {
 } from '@helpdock/schemas';
 import { z } from 'zod';
 import { expect, test } from '../fixtures.js';
-import { openSettingsArea, settingsTab } from '../flows.js';
+import { clickSettingsTab, openSettingsArea } from '../flows.js';
 import { strings } from '../strings.js';
 import { IMPORT_CONTROL_KEY_ENV, IMPORT_READY_ENV, IMPORT_SKIP_ENV } from './import-install.js';
 import { freshTotpCode } from './totp.js';
@@ -57,7 +57,7 @@ test('imports source history through the real wizard without sending anything', 
   };
 
   await openSettingsArea(page, t, 'brand');
-  await settingsTab(page, t, 'brand:tabs.import').click();
+  await clickSettingsTab(page, t, 'brand:tabs.import');
   await page.getByRole('button').filter({ hasText: 'Zendesk' }).click();
   await page.waitForURL(/\/settings\/install\/imports\/[0-9a-f-]+$/);
   const runId = z.uuid().parse(new URL(page.url()).pathname.split('/').at(-1));

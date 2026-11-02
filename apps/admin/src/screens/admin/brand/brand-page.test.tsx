@@ -13,12 +13,12 @@ import {
 import { type SystemApi, SystemApiError } from '../system/system-api.js';
 
 /**
- * The Danger zone tab against the fixture: what the form shows, what it sends,
+ * Brand › Data retention against the fixture: what the form shows, what it sends,
  * and what it refuses to send; and brand deletion (M8-07).
  */
 
 const renderBrand = async (
-  path = '/settings/brand/danger',
+  path = '/settings/brand/retention',
   systemApi: SystemApi = fakeSystemApi(),
 ) => {
   const { auth, staff, ticketing } = await signedInMockApis();
@@ -31,7 +31,10 @@ const renderBrand = async (
   });
 
   // The first render pulls in the whole app; on a busy machine it takes more than a second.
-  await screen.findByRole('heading', { name: 'Data retention' }, { timeout: 10_000 });
+  await screen.findByRole('heading', { level: 1 }, { timeout: 10_000 });
+  if (path.endsWith('/retention')) {
+    await screen.findByRole('heading', { name: 'Data retention', level: 2 });
+  }
 
   return rendered;
 };
@@ -48,14 +51,15 @@ const rowFor = (label: string): HTMLElement => {
 };
 
 describe('the Brand page', () => {
-  it('opens the Danger zone page by its path', async () => {
+  it('opens the Data retention page by its path, and keeps it out of the Danger zone', async () => {
     await renderBrand();
 
-    expect(settingsLink('Danger zone')).toHaveAttribute('aria-current', 'page');
+    expect(settingsLink('Data retention')).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('button', { name: /Delete this brand/ })).not.toBeInTheDocument();
   });
 
   it('shows each window with how many rows the next run would take', async () => {
-    await renderBrand('/settings/brand/danger');
+    await renderBrand('/settings/brand/retention');
 
     expect(within(rowFor('Closed tickets and their messages')).getByText('12 rows')).toBeVisible();
     expect(within(rowFor('Spam tickets')).getByText('62 rows')).toBeVisible();
@@ -171,7 +175,7 @@ describe('deleting the brand (M8-07)', () => {
   it('shows the banner on every tab during the grace, read-only, and restores', async () => {
     const restoreBrand = vi.fn(async (brandId: string) => activeDeletion(brandId));
     const { user } = await renderBrand(
-      '/settings/brand/danger',
+      '/settings/brand/retention',
       fakeSystemApi({
         brandDeletion: async (brandId) => pendingDeletion(brandId, Date.now()),
         restoreBrand,

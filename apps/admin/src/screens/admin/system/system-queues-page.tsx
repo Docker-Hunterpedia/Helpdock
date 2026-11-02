@@ -1,10 +1,8 @@
-import { Box, Button } from '@mui/material';
+import { Box } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ServerCog, ShieldAlert } from 'lucide-react';
+import { ServerCog, ShieldAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link as RouterLink } from 'react-router';
 import { useT } from '../../../app/i18n.js';
-import { ROUTES } from '../../../app/route-paths.js';
 import { EmptyState } from '../../../shell/empty-state.js';
 import { PageHeader } from '../../../shell/page-header.js';
 import { QueuesCard } from './queues-card.js';
@@ -31,24 +29,12 @@ export function SystemQueuesPage({ api }: { readonly api?: SystemApi } = {}): Re
     retry: false,
   });
 
-  const back = (
-    <Button
-      component={RouterLink}
-      to={ROUTES.system}
-      variant="outlined"
-      size="small"
-      startIcon={<ArrowLeft size={16} aria-hidden="true" className="mirror-in-rtl" />}
-    >
-      {t('common:actions.back')}
-    </Button>
-  );
-
   if (error) {
     const notAllowed = error instanceof NotAllowedError;
 
     return (
       <>
-        <PageHeader title={t('system:queues.title')} action={back} />
+        <PageHeader title={t('system:queues.title')} />
         <EmptyState
           icon={notAllowed ? ShieldAlert : ServerCog}
           heading={t(notAllowed ? 'system:notAllowed.heading' : 'system:error.heading')}
@@ -60,11 +46,7 @@ export function SystemQueuesPage({ api }: { readonly api?: SystemApi } = {}): Re
 
   return (
     <>
-      <PageHeader
-        title={t('system:queues.title')}
-        caption={t('system:queues.pageCaption')}
-        action={back}
-      />
+      <PageHeader title={t('system:queues.title')} caption={t('system:queues.pageCaption')} />
       <Box sx={{ display: 'grid', gap: 4 }}>
         {data === undefined ? null : <QueuesCard summary={data.queues} api={client} showAll />}
       </Box>

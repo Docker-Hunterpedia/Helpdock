@@ -1,12 +1,10 @@
 {
   "title": "Help center",
   "tabs": {
-    "label": "Help center sections",
     "articles": "Articles",
     "settings": "Settings",
     "insights": "Insights",
-    "proposals": "Proposals",
-    "proposalsWaiting": "Proposals {{count}}"
+    "proposals": "Proposals"
   },
   "insights": {
     "heading": "Insights",
@@ -22,7 +20,7 @@
       "en": "English",
       "ar": "Arabic"
     },
-    "retention": "Search terms are kept for the search log period in Brand › Danger zone. Staff visits are not counted.",
+    "retention": "Search terms are kept for the search log period in Brand › Data retention. Staff visits are not counted.",
     "failed": "Insights could not be loaded.",
     "retry": "Try again",
     "top": {

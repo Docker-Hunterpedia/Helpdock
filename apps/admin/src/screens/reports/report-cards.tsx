@@ -144,7 +144,10 @@ export function VolumeCard(props: CardProps): ReactNode {
         })),
         onChange: setBreakdown,
       }}
-      legend={series.map((entry) => ({ label: entry.label, colour: entry.colour }))}
+      // With nothing to plot the legend would name series that are not there.
+      legend={
+        total === 0 ? [] : series.map((entry) => ({ label: entry.label, colour: entry.colour }))
+      }
       onExport={() => {
         props.onExport(VOLUME_EXPORT[breakdown]);
       }}

@@ -14,6 +14,9 @@ import { strings } from './strings.js';
  * of all three.
  */
 
+// A dialog still fading in is blended with the scrim, which axe reads as low contrast.
+test.use({ reducedMotion: 'reduce' });
+
 test.describe('merging contacts', () => {
   test('merges from a suggestion, and undoes from the toast', async ({
     page,

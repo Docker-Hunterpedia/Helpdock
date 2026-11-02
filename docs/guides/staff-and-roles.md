@@ -303,8 +303,11 @@ pages: **Profile** (first, `/settings/account/profile`), **Notifications**,
 | Phone | In international form (`+966 55 123 4567`; `00966…` and Arabic digits are accepted). Shown only where a signature or a reply uses `{{agent.phone}}`. |
 | Time zone | Used for the snooze menu's presets and for your digest emails. It starts as the browser's. |
 
-**Working in Helpdock** holds the single-key shortcuts switch
-([Keyboard shortcuts](keyboard-shortcuts.md)); only you see it.
+**Working in Helpdock** holds your **Email** (read-only: an administrator changes the
+sign-in address), your interface **Language** (saved on its own with its own Save and
+Discard; they were on the Security page until 1.4.1) and the single-key shortcuts
+switch ([Keyboard shortcuts](keyboard-shortcuts.md)); only you see it. Save and Discard
+on every card stay disabled until something has changed.
 
 Customers see your public name (your first name until you set one) in the
 widget, as the sender of an email reply ("Lina via Support"), in the survey
@@ -323,7 +326,6 @@ messages you wrote in that visitor's own conversation.
 
 | Card | |
 |---|---|
-| Your details | Name and interface language. The sign-in address is read-only; an administrator changes it. |
 | Password | Current password, then a new one of at least twelve characters. Changing it signs out **every other** browser and forgets every browser this account trusted. |
 | Two-factor | Status, how many recovery codes are left, and — unless the account must have one (an Admin, an install admin, or `auth.require2fa` on) — turning it off. Turning it off and redrawing the codes each ask for a live authenticator code (**Regenerate recovery codes**; an account with a passkey can use **Regenerate with a passkey** instead), because a session proves somebody signed in, not that the person at the keyboard now is the account holder. **Replace app** swaps the authenticator app for a new one in one confirmed step, and works for an account that must have a second factor ([authentication › Replacing the app](authentication.md#replacing-the-app-373)). |
 | Passkeys | Since 1.1, and only where `APP_URL` allows passkeys: each passkey with when it was added and last used and a "Synced" chip when its platform backs it up, with **Add a passkey**, **Rename** and **Remove**. Each asks for the passkey itself, the password or a live code first, and Add and Remove email the account holder. Removing the last one is refused for an account that must have a second factor and has no authenticator app, and an account can hold ten ([authentication › Adding, renaming and removing passkeys](authentication.md#adding-renaming-and-removing-passkeys)). |

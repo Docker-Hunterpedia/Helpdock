@@ -6,8 +6,9 @@ erasing one person does (M1-14), and how a whole brand is deleted (M8-07,
 
 ## The windows
 
-Each brand sets its own windows on **Settings → Brand → Danger zone**, in the Data
-retention card. Only an Admin sees the page and only an Admin may change it
+Each brand sets its own windows on **Settings → Brand → Data retention** (it was
+a card on the Danger zone page until 1.4.1; the Danger zone now holds only
+**Delete this brand**). Only an Admin sees the page and only an Admin may change it
 (`brand:manage`).
 
 | Data | Default | Range | What the purge does |
@@ -107,7 +108,7 @@ full. What it removes from tickets:
 An install admin deletes a brand; a brand's own Admin cannot, because a brand
 is the tenant boundary and deleting one removes everybody's work in it.
 
-In the admin it is **Brand › Danger zone › Delete this brand**: type the
+In the admin it is **Settings › Brand › Danger zone › Delete this brand**: type the
 brand's ticket prefix (`HD` for `HD-1042`) and "Delete brand". The page then
 shows "Scheduled for deletion on …" with **Restore** on every tab, and every
 tab is read-only until the brand is restored. The brands in their grace are

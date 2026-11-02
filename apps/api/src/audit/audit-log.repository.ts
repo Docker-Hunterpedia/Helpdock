@@ -6,7 +6,8 @@ import {
   isUuid,
   users,
 } from '@helpdock/db';
-import { and, asc, desc, eq, gte, inArray, lte, type SQL, sql } from 'drizzle-orm';
+import { AUDIT_PAGE_VIEW_ACTION } from '@helpdock/schemas';
+import { and, asc, desc, eq, gte, inArray, lte, ne, type SQL, sql } from 'drizzle-orm';
 import type { AuditCursor } from './audit-cursor.js';
 
 /**
@@ -24,6 +25,8 @@ export interface AuditLogFilter {
   /** An exact action, or a family ending in `.*`. */
   readonly action?: string | undefined;
   readonly targetType?: string | undefined;
+  /** False leaves out the `install.scope.access` rows every page load writes. */
+  readonly includePageViews?: boolean | undefined;
   readonly brandId?: string | undefined;
   readonly from?: Date | undefined;
   readonly to?: Date | undefined;
@@ -42,6 +45,7 @@ export class AuditLogRepository {
       filter.actor === undefined ? undefined : actorMatches(filter.actor),
       filter.action === undefined ? undefined : actionMatches(filter.action),
       filter.targetType === undefined ? undefined : eq(auditLog.targetType, filter.targetType),
+      filter.includePageViews === true ? undefined : ne(auditLog.action, AUDIT_PAGE_VIEW_ACTION),
       filter.brandId === undefined ? undefined : eq(auditLog.brandId, filter.brandId),
       filter.from === undefined ? undefined : gte(auditLog.createdAt, filter.from),
       filter.to === undefined ? undefined : lte(auditLog.createdAt, filter.to),

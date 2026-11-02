@@ -486,7 +486,6 @@ function PauseDateDialog({
               setTouched(true);
             }}
             slotProps={{
-              inputLabel: { shrink: true },
               formHelperText: { role: 'alert' },
               htmlInput: { min: bounds.min, max: bounds.max, dir: 'ltr' },
             }}

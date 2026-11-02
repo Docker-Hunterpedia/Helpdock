@@ -80,7 +80,7 @@ describe('the contact list', () => {
     // Each tab reads only its own list; the caption used to say "0 accounts".
     expect(await screen.findByText(/^8 people · [1-9]\d* accounts?$/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Accounts' }));
+    await user.click(screen.getByRole('link', { name: 'Accounts' }));
     expect(await screen.findByText(/^8 people · [1-9]\d* accounts?$/)).toBeInTheDocument();
   });
 
@@ -151,14 +151,14 @@ describe('the contact list', () => {
 describe('the accounts tab', () => {
   it('lists the companies with how many people are filed under them', async () => {
     const { user } = await renderContacts();
-    await user.click(screen.getByRole('button', { name: 'Accounts' }));
+    await user.click(screen.getByRole('link', { name: 'Accounts' }));
 
     expect(await screen.findByText('Acme GmbH')).toBeInTheDocument();
     expect(screen.getByText('acme.example')).toBeInTheDocument();
   });
 
   it('creates an account from the header action', async () => {
-    const { user } = await renderContacts('/contacts?tab=accounts');
+    const { user } = await renderContacts('/contacts/accounts');
 
     await user.click(await screen.findByRole('button', { name: 'New account' }));
     await user.type(screen.getByLabelText('Company name'), 'Zephyr Ltd');
@@ -168,7 +168,7 @@ describe('the accounts tab', () => {
   });
 
   it('refuses a domain another account already claims, in words', async () => {
-    const { user } = await renderContacts('/contacts?tab=accounts');
+    const { user } = await renderContacts('/contacts/accounts');
 
     await user.click(await screen.findByRole('button', { name: 'New account' }));
     await user.type(screen.getByLabelText('Company name'), 'Acme two');

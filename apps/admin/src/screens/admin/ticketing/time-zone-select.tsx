@@ -39,7 +39,7 @@ export function TimeZoneSelect({
       onChange={(event) => {
         onChange(event.target.value);
       }}
-      slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
+      slotProps={{ select: { native: true } }}
       sx={{ maxInlineSize: 360 }}
     >
       {options.map(({ zone, label: text }) => (

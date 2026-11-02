@@ -40,12 +40,12 @@ describe('SystemPage', () => {
     renderSystem(apiReturning(healthySystemStatus()));
 
     expect(await screen.findByRole('region', { name: 'API' })).toBeInTheDocument();
-    for (const card of ['Worker', 'Postgres', 'Redis', 'Outgoing email']) {
+    for (const card of ['Worker', 'Postgres', 'Redis', 'System email']) {
       expect(screen.getByRole('region', { name: card })).toBeInTheDocument();
     }
 
     // The healthy install says what it sends from, and says nothing else.
-    const smtp = screen.getByRole('region', { name: 'Outgoing email' });
+    const smtp = screen.getByRole('region', { name: 'System email' });
     expect(within(smtp).getByText('Healthy')).toBeVisible();
     expect(within(smtp).getByText('no-reply@helpdock.dev')).toBeVisible();
 
@@ -156,9 +156,7 @@ describe('SystemPage', () => {
     expect(within(selfService).getByText('9,412 views')).toBeVisible();
     const deflection = screen.getByRole('region', { name: 'AI deflection rate' });
     expect(
-      within(deflection).getByText(
-        'Not available until the AI assistant records auto-replies (M7).',
-      ),
+      within(deflection).getByText('Not available until the AI assistant is set up.'),
     ).toBeVisible();
   });
 
@@ -169,9 +167,7 @@ describe('SystemPage', () => {
     expect(within(storage).getByText(/^Not measured yet/)).toBeVisible();
     expect(within(storage).queryByText('0 B')).not.toBeInTheDocument();
     const llm = screen.getByRole('region', { name: 'LLM spend by brand' });
-    expect(
-      within(llm).getByText('Not available until the AI assistant is set up (M7).'),
-    ).toBeVisible();
+    expect(within(llm).getByText('Not available until the AI assistant is set up.')).toBeVisible();
   });
 
   it('measures storage per brand and marks the one pending deletion', async () => {
@@ -240,7 +236,7 @@ describe('SystemPage', () => {
   it('says there are no channels yet, and which milestone brings them', async () => {
     renderSystem(apiReturning(healthySystemStatus()));
 
-    expect(await screen.findByText('No channels yet · added in M2')).toBeInTheDocument();
+    expect(await screen.findByText('No channels yet.')).toBeInTheDocument();
   });
 
   it('draws a 403 as "Not allowed" rather than as a failure', async () => {
@@ -279,22 +275,22 @@ it('warns in a banner and on the health card while no system sender is set (#369
 
   expect(
     await screen.findByText(
-      'No outgoing email server is set up, so sign-in links, password resets and staff notifications are not being sent.',
+      'No system email server is set up, so sign-in links, password resets and staff notifications are not being sent.',
     ),
   ).toBeVisible();
-  expect(screen.getByRole('link', { name: 'Set up outgoing email' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: 'Set up system email' })).toHaveAttribute(
     'href',
     '#outgoing-email',
   );
 
-  const smtp = screen.getByRole('region', { name: 'Outgoing email' });
+  const smtp = screen.getByRole('region', { name: 'System email' });
   expect(within(smtp).getByText('Not configured')).toBeVisible();
   expect(
     within(smtp).getByText('no SMTP server: sign-in links and password resets are not sent'),
   ).toBeVisible();
 });
 
-it('carries the outgoing email card where the sender is edited (#369)', async () => {
+it('carries the system email card where the sender is edited (#369)', async () => {
   renderSystem(apiReturning(healthySystemStatus()));
 
   // The health card and the form card share a name; the form is the one

@@ -30,6 +30,7 @@ import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { nameButtonSx } from './name-button.js';
 import { moveBy, moveTo } from './reorder.js';
 import { TagChip } from './tag-chip.tsx';
 import { type TagDraft, TagEditor } from './tag-editor.tsx';
@@ -216,7 +217,7 @@ export function TagsTab(): ReactNode {
                           setCreating(false);
                           setSelectedId(tag.id);
                         }}
-                        sx={{ justifyContent: 'flex-start', paddingInline: 0 }}
+                        sx={nameButtonSx}
                       >
                         {tag.name}
                       </Button>

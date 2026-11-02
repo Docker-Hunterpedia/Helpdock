@@ -233,6 +233,30 @@ describe.skipIf(!hasDocker)('the audit log viewer', () => {
     expect(response.body.entries[0]?.requestId).toMatch(/.+/);
   });
 
+  it('leaves the page-view rows out of the list unless asked, and still writes them', async () => {
+    const before = await page(ada, '?action=install.scope.access&limit=100');
+    await page(ada);
+    await page(ada);
+
+    const hidden = await page(ada, '?limit=100');
+    expect(hidden.body.entries.map((entry) => entry.action)).not.toContain('install.scope.access');
+
+    const shown = await page(ada, '?limit=100&includePageViews=true');
+    expect(shown.body.entries.map((entry) => entry.action)).toContain('install.scope.access');
+
+    // Hiding them is only a filter: each read above wrote its own row, so there are more.
+    const after = await page(ada, '?action=install.scope.access&limit=100');
+    expect(after.body.entries.length).toBeGreaterThanOrEqual(before.body.entries.length + 2);
+
+    // The family that holds them asks for them by name; any other family does not.
+    const family = await page(ada, '?action=install.*&limit=100');
+    expect(family.body.entries.map((entry) => entry.action)).toContain('install.scope.access');
+    const other = await page(ada, '?action=tag.*&limit=100');
+    expect(other.body.entries.map((entry) => entry.action)).not.toContain('install.scope.access');
+
+    expect((await page(ada, '?includePageViews=maybe')).status).toBe(400);
+  });
+
   it('filters by action family, brand, target and actor', async () => {
     const tags = await page(ada, `?action=tag.*&brand=${seeded.brandId}&targetType=tag`);
     expect(tags.body.entries.length).toBeGreaterThan(0);

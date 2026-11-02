@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { MOCK_EMPTY_STORAGE } from '../src/auth/mock-empty.js';
 import { expect, test } from './fixtures.js';
-import { openContacts, openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openContacts, openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -60,7 +60,7 @@ test.describe('first-run empty states', () => {
     await startEmpty(page);
     await signIn(page, locale);
     await openSettingsArea(page, t, 'automation');
-    await settingsTab(page, t, 'rules:tabs.macros').click();
+    await clickSettingsTab(page, t, 'rules:tabs.macros');
 
     await expect(page.getByRole('heading', { name: t('macros:list.empty.heading') })).toBeVisible();
     expect(await violations(page)).toEqual([]);

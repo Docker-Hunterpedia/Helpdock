@@ -43,8 +43,8 @@
       "aofRewrite": "AOF rewrite running · latency {{latency}} ms"
     },
     "smtp": {
-      "title": "Outgoing email",
-      "caption": "sign-in links and staff notifications send from this sender",
+      "title": "System email",
+      "caption": "sends sign-in links and staff notifications",
       "notConfigured": "no SMTP server: sign-in links and password resets are not sent"
     }
   },
@@ -66,7 +66,7 @@
   },
   "channels": {
     "title": "Channels",
-    "empty": "No channels yet · added in M2",
+    "empty": "No channels yet.",
     "fix": "fix",
     "caption_one": "All brands · {{count}} connection",
     "caption_other": "All brands · {{count}} connections",
@@ -109,7 +109,9 @@
       "from": "From",
       "to": "to",
       "toLabel": "To",
-      "clear": "Clear filters"
+      "clear": "Clear filters",
+      "pageViews": "Show page views",
+      "pageViewsHint": "Rows written each time an install admin opens an admin page."
     },
     "targets": {
       "settings": "Settings",
@@ -184,7 +186,7 @@
       "label": "AI deflection rate",
       "caption_one": "Auto-replied conversations resolved without staff, averaged over {{count}} brand.",
       "caption_other": "Auto-replied conversations resolved without staff, averaged over {{count}} brands.",
-      "unavailable": "Not available until the AI assistant records auto-replies (M7)."
+      "unavailable": "Not available until the AI assistant is set up."
     },
     "selfService": {
       "label": "Help center self-service",
@@ -227,7 +229,7 @@
     "ofBudget": "{{percent}} % of {{budget}}",
     "pastAlert": "{{percent}} % of {{budget}} · past the {{alert}} % alert",
     "noBudget": "No monthly budget",
-    "unavailable": "Not available until the AI assistant is set up (M7).",
+    "unavailable": "Not available until the AI assistant is set up.",
     "footer": "A brand that reaches its budget stops AI calls until the month turns."
   },
   "pending": {
@@ -272,14 +274,14 @@
     "link": "Open Settings › Install › Authentication"
   },
   "smtp": {
-    "title": "Outgoing email",
-    "caption": "The install's system sender: sign-in links, password resets, invitations, security and staff notification emails.",
+    "title": "System email",
+    "caption": "Sends sign-in links, password resets, invitations, security notices and staff notifications for the whole install. Customer replies go out through Channels › Outgoing email.",
     "statusConfigured": "Working",
     "statusMissing": "Not set",
-    "missingBanner": "No outgoing email server is set up, so sign-in links, password resets and staff notifications are not being sent.",
-    "missingBannerAction": "Set up outgoing email",
-    "loadFailed": "The outgoing email settings could not be read.",
-    "saved": "Outgoing email settings saved.",
+    "missingBanner": "No system email server is set up, so sign-in links, password resets and staff notifications are not being sent.",
+    "missingBannerAction": "Set up system email",
+    "loadFailed": "The system email settings could not be read.",
+    "saved": "System email settings saved.",
     "saveFailed": "The settings could not be saved. Try again.",
     "host": "Server",
     "hostPlaceholder": "smtp.example.com",
@@ -321,6 +323,6 @@
     "testRateLimited": "Too many tests. Wait {{seconds}} seconds and try again.",
     "pinnedSaveFailed": "{{envKey}} sets this in the environment, so it can't be changed here. Remove it from .env to edit it here.",
     "save": "Save",
-    "regionName": "Outgoing email settings"
+    "regionName": "System email settings"
   }
 }

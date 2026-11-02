@@ -78,6 +78,10 @@ const settingsPage = (entry: SettingsEntry): PageEntry => ({
 export const PAGES: readonly PageEntry[] = [
   primary('tickets', 'tickets', ROUTES.tickets),
   primary('contacts', 'contacts', ROUTES.contacts),
+  primary('contactsAccounts', 'contacts', ROUTES.contactsAccounts, [
+    'admin:nav.contacts',
+    'contacts:segment.accounts',
+  ]),
   primary('contactNew', 'contacts', ROUTES.contactNew, [
     'admin:nav.contacts',
     'contacts:newContact',
@@ -110,14 +114,6 @@ export const PAGES: readonly PageEntry[] = [
   primary('reports', 'reports', ROUTES.reports),
 
   ...SETTINGS_ENTRIES.map(settingsPage),
-
-  {
-    id: 'systemAuditLog',
-    path: ROUTES.systemAuditLog,
-    title: [settingsGroupLabelKey('install'), 'system:auditLog.title'],
-    group: 'settings',
-    visibleTo: (viewer) => viewer.installAdmin,
-  },
 ];
 
 export type PageViewer = SettingsViewer;

@@ -89,6 +89,23 @@ describe('the editor', () => {
     );
   });
 
+  it('keeps Save and Discard asleep until the item changes, and again once it is put back', async () => {
+    const { user } = await renderMacros();
+    await user.click(screen.getByRole('button', { name: /Password reset steps/ }));
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    const discard = screen.getByRole('button', { name: 'Discard' });
+    expect(save).toBeDisabled();
+    expect(discard).toBeDisabled();
+
+    const name = screen.getByLabelText(/^Name/);
+    await user.type(name, 'X');
+    expect(save).toBeEnabled();
+    expect(discard).toBeEnabled();
+
+    await user.type(name, '{Backspace}');
+    expect(save).toBeDisabled();
+  });
+
   it('saves a change and says so', async () => {
     const { user, apis } = await renderMacros();
     await user.click(screen.getByRole('button', { name: /Password reset steps/ }));
@@ -133,7 +150,18 @@ describe('the editor', () => {
     await user.click(screen.getByRole('button', { name: 'Duplicate' }));
 
     expect(screen.getByLabelText(/^Name/)).toHaveValue('Hand to finance (copy)');
-    expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
+    // An unchanged copy can be created: Save waits for a change only on a saved item.
+    expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();
+  });
+
+  it('closes a new editor with nothing typed from Discard', async () => {
+    const { user } = await renderMacros();
+
+    await user.click(screen.getByRole('button', { name: 'New' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Canned response' }));
+    expect(screen.getByRole('form', { name: 'New canned response' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(screen.queryByRole('form', { name: 'New canned response' })).not.toBeInTheDocument();
   });
 
   it('deletes after asking', async () => {

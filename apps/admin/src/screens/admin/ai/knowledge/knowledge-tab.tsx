@@ -1,6 +1,7 @@
 import type { KnowledgeSourceList, KnowledgeSourceView } from '@helpdock/schemas';
 import {
   Box,
+  Button,
   InputAdornment,
   Table,
   TableBody,
@@ -11,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Info, Search } from 'lucide-react';
+import { BookOpen, Info, Plus, Search } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useT } from '../../../../app/i18n.js';
@@ -19,6 +20,7 @@ import { useSemanticTokens } from '../../../../app/tokens.js';
 import { knowledgeKeys } from '../../../../knowledge/api.js';
 import { useKnowledgeApi } from '../../../../knowledge/context.tsx';
 import { leaveTo } from '../../../../knowledge/leave.js';
+import { EmptyState } from '../../../../shell/empty-state.tsx';
 import { AlertBanner } from '../../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../../ui/confirm-dialog.tsx';
 import { LoadingSkeleton } from '../../../../ui/loading-skeleton.tsx';
@@ -159,61 +161,80 @@ export function KnowledgeTab({
           />
         }
       >
-        <Box sx={{ marginInline: -5, marginBlockStart: -5, overflowX: 'auto' }}>
-          <Table size="small" aria-label={t('aiSettings:knowledge.tableLabel')}>
-            <TableHead>
-              <TableRow sx={{ backgroundColor: tokens['bg.muted'] }}>
-                {(
-                  ['source', 'visibility', 'chunks', 'lastSync', 'schedule', 'status'] as const
-                ).map((column) => (
-                  <TableCell
-                    key={column}
-                    sx={column === 'chunks' ? { textAlign: 'end' } : undefined}
-                  >
-                    {t(`aiSettings:knowledge.columns.${column}`)}
-                  </TableCell>
-                ))}
-                <TableCell>
-                  <Box component="span" sx={visuallyHidden}>
-                    {t('aiSettings:knowledge.columns.actions')}
-                  </Box>
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {shown.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {t('aiSettings:knowledge.empty')}
-                    </Typography>
+        {list.sources.length === 0 && needle === '' ? (
+          <EmptyState
+            icon={BookOpen}
+            heading={t('aiSettings:knowledge.emptyState.heading')}
+            body={t('aiSettings:knowledge.emptyState.body')}
+            action={
+              <Button
+                variant="contained"
+                startIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={() => {
+                  onAddingChange(true);
+                }}
+              >
+                {t('aiSettings:knowledge.add')}
+              </Button>
+            }
+          />
+        ) : (
+          <Box sx={{ marginInline: -5, marginBlockStart: -5, overflowX: 'auto' }}>
+            <Table size="small" aria-label={t('aiSettings:knowledge.tableLabel')}>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: tokens['bg.muted'] }}>
+                  {(
+                    ['source', 'visibility', 'chunks', 'lastSync', 'schedule', 'status'] as const
+                  ).map((column) => (
+                    <TableCell
+                      key={column}
+                      sx={column === 'chunks' ? { textAlign: 'end' } : undefined}
+                    >
+                      {t(`aiSettings:knowledge.columns.${column}`)}
+                    </TableCell>
+                  ))}
+                  <TableCell>
+                    <Box component="span" sx={visuallyHidden}>
+                      {t('aiSettings:knowledge.columns.actions')}
+                    </Box>
                   </TableCell>
                 </TableRow>
-              ) : (
-                shown.map((source) => (
-                  <SourceRow
-                    key={source.id}
-                    source={source}
-                    open={source.id === openId}
-                    busy={sync.isPending && sync.variables.id === source.id}
-                    onOpen={() => {
-                      setOpenId(source.id);
-                    }}
-                    onSync={() => {
-                      sync.mutate(source);
-                    }}
-                    onConnect={() => {
-                      connect.mutate(source);
-                    }}
-                    onRemove={() => {
-                      setRemoving(source);
-                    }}
-                  />
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Box>
+              </TableHead>
+              <TableBody>
+                {shown.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        {t('aiSettings:knowledge.empty')}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  shown.map((source) => (
+                    <SourceRow
+                      key={source.id}
+                      source={source}
+                      open={source.id === openId}
+                      busy={sync.isPending && sync.variables.id === source.id}
+                      onOpen={() => {
+                        setOpenId(source.id);
+                      }}
+                      onSync={() => {
+                        sync.mutate(source);
+                      }}
+                      onConnect={() => {
+                        connect.mutate(source);
+                      }}
+                      onRemove={() => {
+                        setRemoving(source);
+                      }}
+                    />
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
         <Typography
           variant="caption"
           sx={{ color: 'text.secondary', display: 'inline-flex', gap: 1, alignItems: 'flex-start' }}

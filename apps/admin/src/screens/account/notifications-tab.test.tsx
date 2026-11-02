@@ -56,7 +56,11 @@ describe('Your account', () => {
     });
 
     await screen.findByRole('heading', { name: 'Profile', level: 1 }, { timeout: FIRST_PAINT_MS });
-    const pages = within(screen.getByRole('list', { name: 'Your account' })).getAllByRole('link');
+    const pages = within(
+      document.querySelector<HTMLElement>(
+        `ul[aria-labelledby="${screen.getByRole('button', { name: 'Your account' }).id}"]`,
+      ) as HTMLElement,
+    ).getAllByRole('link', { hidden: true });
     expect(pages.map((link) => link.textContent)).toEqual([
       'Profile',
       'Notifications',

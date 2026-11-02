@@ -106,6 +106,9 @@ export async function openSettingsTree(page: Page | Locator, t: Translate): Prom
       .last()
       .click();
     await tree.waitFor();
+    // The tree reopens the branch of the page it lands on once the route has changed; a group
+    // clicked before that would be closed again by it.
+    await expect(tree.locator('a[aria-current="page"]')).toHaveCount(1);
   }
 }
 

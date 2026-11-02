@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useLocation, useNavigationType } from 'react-router';
 
 /** Section targets arrive after asynchronous data; give them this long to appear. */
@@ -8,7 +8,7 @@ const HASH_POLL_MS = 100;
 const SCROLL_MARGIN = '16px';
 
 const decodeFragment = (hash: string): string => {
-  const raw = hash.replace(/^#/, '');
+  const raw = hash.startsWith('#') ? hash.slice(1) : hash;
   try {
     return decodeURIComponent(raw);
   } catch {
@@ -52,14 +52,15 @@ export function scrollToHash(hash: string, waitMs: number = HASH_WAIT_MS): () =>
  * restored position alone. `flush` pages scroll inside their own panes.
  */
 export function useRouteScroll(flush: boolean): void {
-  const { pathname, hash } = useLocation();
+  const { pathname, hash, key } = useLocation();
   const navigationType = useNavigationType();
-  const firstRender = useRef(true);
+  // The entry the app was opened on has the key `default`. A ref would not do:
+  // StrictMode mounts, cleans up and mounts again, and the second pass would
+  // no longer know it was the first.
+  const initial = key === 'default';
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `navigationType` describes this navigation and must not retrigger on its own.
   useEffect(() => {
-    const initial = firstRender.current;
-    firstRender.current = false;
     if (!initial && navigationType === 'POP') {
       return undefined;
     }
@@ -67,5 +68,5 @@ export function useRouteScroll(flush: boolean): void {
       window.scrollTo(0, 0);
     }
     return hash === '' ? undefined : scrollToHash(hash);
-  }, [pathname, hash, flush]);
+  }, [pathname, hash, flush, initial]);
 }

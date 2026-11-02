@@ -116,7 +116,6 @@ export function SnoozePickerDialog({
               setTouched(true);
             }}
             slotProps={{
-              inputLabel: { shrink: true },
               formHelperText: { role: 'alert' },
               htmlInput: {
                 min: localInput(new Date(now + SNOOZE_MIN_MS)),
@@ -135,7 +134,6 @@ export function SnoozePickerDialog({
             size="small"
             fullWidth
             slotProps={{
-              inputLabel: { shrink: true },
               htmlInput: { readOnly: true, dir: 'ltr' },
             }}
           />

@@ -89,6 +89,23 @@ describe('the editor', () => {
     );
   });
 
+  it('keeps Save and Discard asleep until the item changes, and again once it is put back', async () => {
+    const { user } = await renderMacros();
+    await user.click(screen.getByRole('button', { name: /Password reset steps/ }));
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    const discard = screen.getByRole('button', { name: 'Discard' });
+    expect(save).toBeDisabled();
+    expect(discard).toBeDisabled();
+
+    const name = screen.getByLabelText(/^Name/);
+    await user.type(name, 'X');
+    expect(save).toBeEnabled();
+    expect(discard).toBeEnabled();
+
+    await user.type(name, '{Backspace}');
+    expect(save).toBeDisabled();
+  });
+
   it('saves a change and says so', async () => {
     const { user, apis } = await renderMacros();
     await user.click(screen.getByRole('button', { name: /Password reset steps/ }));

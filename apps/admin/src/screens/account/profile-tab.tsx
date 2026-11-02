@@ -104,10 +104,19 @@ export function ProfileTab(): ReactNode {
   const [phoneWrong, setPhoneWrong] = useState(false);
   const [photoProblem, setPhotoProblem] = useState<PhotoProblem | null>(null);
 
+  // The stored profile changes when the language or the photo is saved; edits
+  // typed in the form meanwhile are kept, not replaced by what was stored.
+  const lastStored = useRef<Profile | null>(null);
   useEffect(() => {
-    if (stored.data !== undefined) {
-      setDraft(draftOf(stored.data));
+    const data = stored.data;
+    if (data === undefined) {
+      return;
     }
+    const before = lastStored.current;
+    lastStored.current = data;
+    setDraft((held) =>
+      held === null || before === null || !isDirty(held, draftOf(before)) ? draftOf(data) : held,
+    );
   }, [stored.data]);
 
   const keep = async (profile: Profile): Promise<void> => {
@@ -119,6 +128,8 @@ export function ProfileTab(): ReactNode {
     mutationFn: (request: ProfileUpdateRequest) => api.updateProfile(request),
     onSuccess: async (profile) => {
       setPhoneWrong(false);
+      // What the api stored (a phone in international form, a trimmed name) replaces what was typed.
+      setDraft(draftOf(profile));
       await keep(profile);
       toast({ tone: 'success', message: t('me:profile.saved') });
     },

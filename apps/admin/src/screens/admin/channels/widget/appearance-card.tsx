@@ -14,6 +14,7 @@ import { type FormEvent, type ReactNode, useId } from 'react';
 import { useT } from '../../../../app/i18n.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { useChannelsApi } from '../../../../auth/session.tsx';
+import { isDirty } from '../../../../ui/dirty.js';
 import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { SectionCard, useEmailAction } from '../section-card.tsx';
 import { checkAccent } from './widget-draft.js';
@@ -24,8 +25,6 @@ const MODES: readonly { readonly mode: WidgetMode; readonly icon: typeof Message
   { mode: 'helpcenter', icon: BookOpen },
   { mode: 'form', icon: FileText },
 ];
-
-import { isDirty } from '../../../../ui/dirty.js';
 
 /**
  * "Appearance" (M4-05, M4-06; artboard `AdminWidget`): the widget's mode, as

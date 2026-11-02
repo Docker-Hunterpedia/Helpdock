@@ -23,7 +23,7 @@ export function NotFoundOrRedirect(): ReactNode {
   return <NotFoundPage />;
 }
 
-export function NotFoundPage(): ReactNode {
+function NotFoundPage(): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   usePageTitle(t('admin:notFound.title'));

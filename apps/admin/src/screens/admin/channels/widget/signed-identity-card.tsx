@@ -8,6 +8,7 @@ import { useT } from '../../../../app/i18n.js';
 import { usePreferences } from '../../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { useChannelsApi } from '../../../../auth/session.tsx';
+import { isDirty } from '../../../../ui/dirty.js';
 import { Field } from '../../../../ui/field.tsx';
 import { latinNumbering } from '../../../../ui/format.js';
 import { useToast } from '../../../../ui/toasts.tsx';
@@ -19,8 +20,6 @@ export const PROTOCOL_GUIDE_URL =
   'https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/widget-protocol.md';
 
 type Signed = NonNullable<WidgetSettings['signedIdentity']>;
-
-import { isDirty } from '../../../../ui/dirty.js';
 
 /**
  * "Signed identity" (M4-02, DOMAIN-RULES §4.2; artboard `AdminWidget`),

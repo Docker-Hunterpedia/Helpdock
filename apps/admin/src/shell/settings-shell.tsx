@@ -7,7 +7,7 @@ import { SettingsHeaderContext } from './settings-header.js';
 import { firstSettingsPath, settingsEntryAt, settingsGroupLabelKey } from './settings-nav.js';
 
 /** Settings pages share one reading width (`Admin/UX-Fixes-2026-11`). */
-export const SETTINGS_CONTENT_MAX = 1040;
+const SETTINGS_CONTENT_MAX = 1040;
 
 /**
  * The Settings area's page frame. Its pages are listed in the main sidebar

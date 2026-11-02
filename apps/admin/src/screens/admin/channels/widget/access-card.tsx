@@ -21,6 +21,7 @@ import { useT } from '../../../../app/i18n.js';
 import { usePreferences } from '../../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { useChannelsApi } from '../../../../auth/session.tsx';
+import { isDirty } from '../../../../ui/dirty.js';
 import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { latinNumbering } from '../../../../ui/format.js';
 import { SectionCard, useEmailAction } from '../section-card.tsx';
@@ -51,8 +52,6 @@ const draftOf = (access: Access): AccessDraft => ({
 /** The built-in check first (ADR 0052): it needs no keys and sends nothing to anyone. */
 const PROVIDERS: readonly CaptchaProvider[] = ['pow', 'turnstile', 'hcaptcha'];
 const DIFFICULTIES: readonly CaptchaDifficulty[] = ['low', 'medium'];
-
-import { isDirty } from '../../../../ui/dirty.js';
 
 /**
  * "Where the widget may run" (M4-03; artboard `AdminWidget`), Admins only:

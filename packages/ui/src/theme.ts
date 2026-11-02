@@ -245,6 +245,8 @@ function buildComponents(
     // 6 px gap, never a floating notched label inside the box. Any field built
     // with MUI's `label` prop gets that here, so no screen draws the other kind.
     MuiInputLabel: {
+      // The label is above the box, so it is never "resting" inside it: a placeholder shows at once.
+      defaultProps: { shrink: true },
       styleOverrides: {
         root: {
           position: 'static',

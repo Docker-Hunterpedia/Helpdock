@@ -219,7 +219,6 @@ function RangePopover({
           size="small"
           label={t('reports:filters.from')}
           value={draft.from}
-          slotProps={{ inputLabel: { shrink: true } }}
           onChange={(event) => {
             setDraft({ ...draft, from: event.target.value });
           }}
@@ -229,7 +228,6 @@ function RangePopover({
           size="small"
           label={t('reports:filters.to')}
           value={draft.to}
-          slotProps={{ inputLabel: { shrink: true } }}
           error={!valid}
           helperText={valid ? undefined : t('reports:filters.invalidRange')}
           onChange={(event) => {

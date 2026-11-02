@@ -14,6 +14,7 @@ import { ImageUp } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { isDirty } from '../../../ui/dirty.js';
 import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { SectionCard } from '../../admin/channels/section-card.tsx';
@@ -38,8 +39,6 @@ const draftOf = (appearance: HcAppearance): Draft => ({
   logo: appearance.logo,
   favicon: appearance.favicon,
 });
-
-import { isDirty } from '../../../ui/dirty.js';
 
 /**
  * "Theme" (M5-06, `Admin/HelpCenter-Settings`): the accent with the contrast

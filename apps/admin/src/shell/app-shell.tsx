@@ -50,7 +50,7 @@ export function AppShell({ flush = false }: { readonly flush?: boolean } = {}): 
 }
 
 function ShellLayout({ flush }: { readonly flush: boolean }): ReactNode {
-  // Settings pads itself (M14-21): its navigation column runs edge to edge.
+  // Settings pads itself: the SettingsShell frame carries its own padding and its 1040 px cap.
   const bleed = useMatch({ path: ROUTES.settings, end: false }) !== null;
   const t = useT();
   const tokens = useSemanticTokens();

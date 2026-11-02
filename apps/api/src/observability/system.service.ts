@@ -1,16 +1,17 @@
 import type { Settings } from '@helpdock/config';
 import { auditLog, brands, type Db } from '@helpdock/db';
 import { readRelayStatus } from '@helpdock/jobs';
-import type {
-  AuditEntry,
-  ChannelStatus,
-  ProductMetrics,
-  SystemQueuePage,
-  SystemQueuesQuery,
-  SystemStatus,
+import {
+  AUDIT_PAGE_VIEW_ACTION,
+  type AuditEntry,
+  type ChannelStatus,
+  type ProductMetrics,
+  type SystemQueuePage,
+  type SystemQueuesQuery,
+  type SystemStatus,
 } from '@helpdock/schemas';
 import { Inject, Injectable } from '@nestjs/common';
-import { desc } from 'drizzle-orm';
+import { desc, ne } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { getTx } from '../context/request-context.js';
 import { systemSenderConfigured } from '../notifications/install-channels.js';
@@ -227,6 +228,9 @@ export class SystemService {
         createdAt: auditLog.createdAt,
       })
       .from(auditLog)
+      // Every admin page load writes an `install.scope.access` row, this one's
+      // included; left in, the glance at activity would be nothing but itself.
+      .where(ne(auditLog.action, AUDIT_PAGE_VIEW_ACTION))
       .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
       .limit(AUDIT_PREVIEW_LIMIT);
 

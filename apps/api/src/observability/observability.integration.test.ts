@@ -325,19 +325,16 @@ describe.skipIf(!hasDocker)('observability', () => {
       await runtime.redis.del(RELAY_STATUS_KEY);
     });
 
-    it('records its own install-scope access in the audit log it returns', async () => {
+    it('leaves the page-view rows out of its audit preview', async () => {
       await get('/api/install/system', asPrincipal(installAdmin));
 
       const status = (
         await get('/api/install/system', asPrincipal(installAdmin))
       ).json<SystemStatus>();
 
-      expect(status.audit[0]).toMatchObject({
-        actorType: 'staff',
-        actorId: installAdminId,
-        action: 'install.scope.access',
-        targetId: 'GET /api/install/system',
-      });
+      // The two reads each wrote an `install.scope.access` row (the audit log page
+      // lists them on request); the glance at activity is not made of itself.
+      expect(status.audit.map((entry) => entry.action)).not.toContain('install.scope.access');
     });
 
     it('reports storage and AI spend as not configured rather than as zero', async () => {
@@ -393,9 +390,7 @@ describe.skipIf(!hasDocker)('observability', () => {
         await get('/api/install/system', asPrincipal(installAdmin))
       ).json<SystemStatus>();
 
-      expect(status.audit.length).toBeGreaterThan(0);
       expect(status.audit.map((entry) => entry.action)).not.toContain('brand.only.action');
-      expect(status.audit.every((entry) => entry.action === 'install.scope.access')).toBe(true);
     });
 
     it('refuses a brand admin who is not an install admin', async () => {

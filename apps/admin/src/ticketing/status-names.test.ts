@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { statusLabel, statusNames } from './status-names.js';
+import { statusNames } from './status-names.js';
 
 const open = { name: 'Open', nameAr: 'مفتوحة' };
 
@@ -25,6 +25,5 @@ describe('statusNames', () => {
   it('falls back to the one name when there is no Arabic name', () => {
     expect(statusNames({ name: 'Waiting', nameAr: null }, 'ar').primary).toBe('Waiting');
     expect(statusNames({ name: 'Waiting', nameAr: '  ' }, 'ar').secondary).toBeNull();
-    expect(statusLabel({ name: 'Waiting', nameAr: null }, 'ar')).toBe('Waiting');
   });
 });

@@ -1,6 +1,13 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { clickSettingsTab, goInApp, openSettingsArea, signIn } from './flows.js';
+import {
+  clickSettingsTab,
+  goInApp,
+  openContacts,
+  openSettingsArea,
+  openTickets,
+  signIn,
+} from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -68,6 +75,70 @@ test.describe('the widget preview', () => {
 
     // Save and Discard wait for a change.
     await expect(page.getByRole('button', { name: t('channels:discard') }).first()).toBeEnabled();
+  });
+});
+
+test.describe('the widget preview layout', () => {
+  test('sits beside Appearance at 1280 px and stays in view while the form scrolls', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await signIn(page, locale);
+    await openSettingsArea(page, t, 'channels');
+    await clickSettingsTab(page, t, 'channels:tabs.widget');
+    const card = page.getByRole('region', { name: t('channels:widget.appearance.heading') });
+    const preview = page.getByRole('complementary', { name: t('channels:widget.preview.heading') });
+    await expect(preview).toBeVisible();
+
+    const cardBox = await card.boundingBox();
+    const previewBox = await preview.boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(previewBox).not.toBeNull();
+    // The same row: the preview starts level with the card, at its inline end.
+    expect(Math.abs((previewBox?.y ?? 0) - (cardBox?.y ?? 0))).toBeLessThan(2);
+    expect(
+      locale === 'ar'
+        ? (previewBox?.x ?? 0) + (previewBox?.width ?? 0) <= (cardBox?.x ?? 0) + 1
+        : (previewBox?.x ?? 0) >= (cardBox?.x ?? 0) + (cardBox?.width ?? 0) - 1,
+    ).toBe(true);
+
+    // Scrolling through the form leaves it on screen.
+    await page.evaluate(() => window.scrollBy(0, 400));
+    await expect(preview).toBeInViewport();
+    // Appearance's own fields still fit the narrower card.
+    await expect.poll(() => horizontalOverflow(page)).toBe(false);
+  });
+});
+
+test.describe('dialogs on a short window', () => {
+  test('keep Cancel and Create in view, clear of the bottom edge, at 745 px high', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await page.setViewportSize({ width: 1280, height: 745 });
+    await signIn(page, locale);
+    await openTickets(page, locale);
+
+    const keepsActionsInView = async (dialogName: string, submitName: string): Promise<void> => {
+      const dialog = page.getByRole('dialog', { name: dialogName });
+      await expect(dialog).toBeVisible();
+      const submit = dialog.getByRole('button', { name: submitName, exact: true });
+      await expect(submit).toBeInViewport({ ratio: 1 });
+      const box = await submit.boundingBox();
+      // Padding below the buttons: they do not touch the window's edge.
+      expect(745 - ((box?.y ?? 0) + (box?.height ?? 0))).toBeGreaterThanOrEqual(12);
+    };
+
+    await page.getByRole('button', { name: t('tickets:newTicket.action') }).click();
+    await keepsActionsInView(t('tickets:newTicket.title'), t('tickets:newTicket.submit'));
+    await page.keyboard.press('Escape');
+
+    await openContacts(page, locale);
+    await page.getByRole('button', { name: t('contacts:newContact') }).click();
+    await keepsActionsInView(t('contacts:dialog.createTitle'), t('contacts:dialog.createSubmit'));
   });
 });
 

@@ -27,7 +27,3 @@ export function statusNames(status: Named, locale: 'en' | 'ar'): StatusNames {
     ? { primary: status.nameAr, primaryLang: 'ar', secondary: status.name, secondaryLang: 'en' }
     : { primary: status.name, primaryLang: 'en', secondary: status.nameAr, secondaryLang: 'ar' };
 }
-
-/** The one name to print where a status shows a single label (a pill, a chip). */
-export const statusLabel = (status: Named, locale: 'en' | 'ar'): string =>
-  statusNames(status, locale).primary;

@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, StrictMode } from 'react';
 import { MemoryRouter, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRouteScroll } from './route-scroll.js';
@@ -63,5 +63,27 @@ describe('useRouteScroll', () => {
     });
 
     expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('scrolls to the fragment of the address the app was opened on, also under StrictMode', () => {
+    const target = document.createElement('section');
+    target.id = 'outgoing-email';
+    target.scrollIntoView = vi.fn();
+    document.body.append(target);
+
+    renderHook(() => useRouteScroll(false), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <StrictMode>
+          <MemoryRouter initialEntries={['/settings/install/system#outgoing-email']}>
+            {children}
+          </MemoryRouter>
+        </StrictMode>
+      ),
+    });
+
+    expect(target.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+    // The first page is not "a new route": nothing is scrolled to the top first.
+    expect(scrollTo).not.toHaveBeenCalled();
+    target.remove();
   });
 });

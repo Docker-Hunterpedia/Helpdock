@@ -38,7 +38,7 @@ const AUDIT_ROW = {
 const fakeTx = (rows: readonly (typeof AUDIT_ROW)[]): DbTransaction =>
   ({
     select: () => ({
-      from: () => ({ orderBy: () => ({ limit: async () => rows }) }),
+      from: () => ({ where: () => ({ orderBy: () => ({ limit: async () => rows }) }) }),
     }),
   }) as unknown as DbTransaction;
 

@@ -83,9 +83,8 @@ export function AppRoutes(): ReactNode {
       <Route path={ROUTES.acceptInvite} element={<AcceptInvite />} />
 
       <Route element={<RequireSession />}>
-        {/* M14-21. Every settings page lives under /settings, in the shell's
-            grouped navigation, and draws edge to edge so that navigation can
-            run the height of the window beside the sidebar. */}
+        {/* M14-21. Every settings page lives under /settings and is listed in the
+            sidebar's Settings tree; SettingsShell only frames the page. */}
         <Route element={<AppShell />}>
           <Route element={<SettingsShell />}>
             <Route path={ROUTES.settings} element={<SettingsLanding />} />

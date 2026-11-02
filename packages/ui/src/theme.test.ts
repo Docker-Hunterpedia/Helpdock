@@ -142,6 +142,10 @@ describe('component overrides', () => {
     expect(overrides.MuiTableCell?.styleOverrides?.root).toMatchObject({ height: '44px' });
   });
 
+  it('keeps a label shrunk, so a placeholder is visible before the field is focused', () => {
+    expect(overrides.MuiInputLabel?.defaultProps).toMatchObject({ shrink: true });
+  });
+
   it('puts a field label above its input, with no notch cut into the outline', () => {
     expect(overrides.MuiInputLabel?.styleOverrides?.root).toMatchObject({
       position: 'static',

@@ -127,6 +127,26 @@ describe('the Profile tab', () => {
       expect(within(workingCard()).getByLabelText('Email')).toHaveValue('lina@helpdock.com');
     });
 
+    it('keeps what was typed in the profile card while the language is saved', async () => {
+      const { user } = await renderProfile();
+      await user.type(screen.getByLabelText('Public name'), 'Typed, not saved');
+      // The card's name turns Arabic with the app, so hold the element.
+      const working = workingCard();
+
+      await user.click(within(working).getByRole('combobox', { name: 'Language' }));
+      await user.click(await screen.findByRole('option', { name: 'العربية' }));
+      const save = within(working).getByRole('button', { name: 'Save changes' });
+      await user.click(save);
+      await waitFor(() => {
+        expect(save).toBeDisabled();
+      });
+
+      // Saving the language switched the app to Arabic; the field is still the one typed into.
+      expect(
+        document.querySelector<HTMLInputElement>('input[value="Typed, not saved"]'),
+      ).not.toBeNull();
+    });
+
     it('saves the language on its own and switches the app to it', async () => {
       const { user, staff } = await renderProfile();
       const save = within(workingCard()).getByRole('button', { name: 'Save changes' });

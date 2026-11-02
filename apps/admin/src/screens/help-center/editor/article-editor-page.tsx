@@ -291,7 +291,16 @@ function LocaleEditor({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
+        height: '100%',
+        minHeight: 0,
+      }}
+    >
       <Box
         sx={{
           minHeight: 56,

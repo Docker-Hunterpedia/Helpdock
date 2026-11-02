@@ -442,11 +442,16 @@ export function MacroEditor({
         >
           {problem ?? (isMacro ? t('macros:editor.cannedNote') : '')}
         </Typography>
-        <Button variant="text" onClick={onDiscard} disabled={busy || !dirty}>
+        <Button
+          variant="text"
+          onClick={onDiscard}
+          // Discard is also how an editor with nothing changed (new, copied, read-only) is closed.
+          disabled={busy || (macro !== null && !readOnly && !dirty)}
+        >
           {t('macros:editor.discard')}
         </Button>
         {readOnly ? null : (
-          <Button type="submit" variant="contained" disabled={busy || !dirty}>
+          <Button type="submit" variant="contained" disabled={busy || (macro !== null && !dirty)}>
             {t(macro === null ? 'macros:editor.create' : 'macros:editor.save')}
           </Button>
         )}

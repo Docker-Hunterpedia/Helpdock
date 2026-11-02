@@ -1,5 +1,13 @@
 import type { Env } from '@helpdock/config';
-import { auditLog, brands, type Db, userBrandRoles, users, uuidv7 } from '@helpdock/db';
+import {
+  auditLog,
+  brands,
+  type Db,
+  INSTALL_SCOPE_BRAND_ID,
+  userBrandRoles,
+  users,
+  uuidv7,
+} from '@helpdock/db';
 import {
   createQueueConnection,
   QUEUE_NAME_LIST,
@@ -391,6 +399,27 @@ describe.skipIf(!hasDocker)('observability', () => {
       ).json<SystemStatus>();
 
       expect(status.audit.map((entry) => entry.action)).not.toContain('brand.only.action');
+    });
+
+    it('shows an install-scope row that is not a page view', async () => {
+      await withSystemJob(runtime.db, INSTALL_SCOPE_BRAND_ID, 'seed-install-audit', (tx) =>
+        tx.insert(auditLog).values({
+          brandId: INSTALL_SCOPE_BRAND_ID,
+          actorType: 'staff',
+          actorId: installAdminId,
+          action: 'settings.updated',
+          targetType: 'settings',
+          targetId: 'smtp',
+        }),
+      );
+
+      const status = (
+        await get('/api/install/system', asPrincipal(installAdmin))
+      ).json<SystemStatus>();
+
+      // Leaving the page views out must not leave the card empty of real changes.
+      expect(status.audit.map((entry) => entry.action)).toContain('settings.updated');
+      expect(status.audit.map((entry) => entry.action)).not.toContain('install.scope.access');
     });
 
     it('refuses a brand admin who is not an install admin', async () => {

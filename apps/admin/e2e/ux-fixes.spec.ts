@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { SIDEBAR_STORAGE_KEY } from '../src/shell/sidebar-collapse.js';
 import { expect, test } from './fixtures.js';
 import {
   clickSettingsTab,
@@ -79,23 +80,30 @@ test.describe('the widget preview', () => {
 });
 
 test.describe('the widget preview layout', () => {
-  test('sits beside Appearance at 1280 px and stays in view while the form scrolls', async ({
-    page,
-    appLocale: locale,
-  }) => {
+  const openWidget = async (page: Page, locale: 'en' | 'ar', width: number) => {
     const t = strings(locale);
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width, height: 800 });
+    // Below 1280 px the sidebar opens as a rail unless the person chose otherwise.
+    await page.addInitScript(
+      ([key]) => window.localStorage.setItem(key as string, 'expanded'),
+      [SIDEBAR_STORAGE_KEY],
+    );
     await signIn(page, locale);
     await openSettingsArea(page, t, 'channels');
     await clickSettingsTab(page, t, 'channels:tabs.widget');
     const card = page.getByRole('region', { name: t('channels:widget.appearance.heading') });
     const preview = page.getByRole('complementary', { name: t('channels:widget.preview.heading') });
     await expect(preview).toBeVisible();
+    return { card, preview };
+  };
 
+  test('sits beside Appearance from 1200 px and stays at the top of the window while the form scrolls', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const { card, preview } = await openWidget(page, locale, 1200);
     const cardBox = await card.boundingBox();
     const previewBox = await preview.boundingBox();
-    expect(cardBox).not.toBeNull();
-    expect(previewBox).not.toBeNull();
     // The same row: the preview starts level with the card, at its inline end.
     expect(Math.abs((previewBox?.y ?? 0) - (cardBox?.y ?? 0))).toBeLessThan(2);
     expect(
@@ -104,11 +112,42 @@ test.describe('the widget preview layout', () => {
         : (previewBox?.x ?? 0) >= (cardBox?.x ?? 0) + (cardBox?.width ?? 0) - 1,
     ).toBe(true);
 
-    // Scrolling through the form leaves it on screen.
-    await page.evaluate(() => window.scrollBy(0, 400));
-    await expect(preview).toBeInViewport();
-    // Appearance's own fields still fit the narrower card.
+    // Scrolled past the top of its row, the preview is held 24 px from the top of the window.
+    await page.evaluate(() => window.scrollBy(0, 340));
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await expect.poll(async () => Math.round((await preview.boundingBox())?.y ?? 0)).toBe(24);
     await expect.poll(() => horizontalOverflow(page)).toBe(false);
+  });
+
+  test('stacks under Appearance one pixel below 1200 px', async ({ page, appLocale: locale }) => {
+    const { card, preview } = await openWidget(page, locale, 1199);
+    const cardBox = await card.boundingBox();
+    const previewBox = await preview.boundingBox();
+    expect(previewBox?.y ?? 0).toBeGreaterThanOrEqual((cardBox?.y ?? 0) + (cardBox?.height ?? 0));
+    expect(await horizontalOverflow(page)).toBe(false);
+  });
+});
+
+test.describe('the article editor', () => {
+  test('reaches the inline end of a wide window', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await page.setViewportSize({ width: 1456, height: 900 });
+    await signIn(page, locale);
+    await page.getByRole('link', { name: new RegExp(t('admin:nav.helpCenter')) }).click();
+    await page.getByRole('heading', { name: t('helpCenter:tree.heading') }).waitFor();
+    await page
+      .getByRole('button', { name: t('helpCenter:newArticle.label') })
+      .first()
+      .click();
+    const body = page.getByRole('textbox', { name: t('helpCenter:editor.body') });
+    await body.waitFor();
+
+    // The editor fills the content area: its root ends where the window does (at the inline end).
+    const root = page.locator('main > div').first();
+    const box = await root.boundingBox();
+    expect(box).not.toBeNull();
+    const gap = locale === 'ar' ? (box?.x ?? 0) : 1456 - ((box?.x ?? 0) + (box?.width ?? 0));
+    expect(gap).toBeLessThanOrEqual(1);
   });
 });
 

@@ -121,17 +121,8 @@ export const NAV_BY_KEY: Record<NavKey, NavItem> = {
   system: item('system', ROUTES.system, Server, { installAdminOnly: true }),
 };
 
-/** DESIGN §6.5: the primary group; Settings follows it as the one `ADMIN_NAV` entry. */
-export const PRIMARY_NAV: readonly NavItem[] = [
-  NAV_BY_KEY.tickets,
-  NAV_BY_KEY.contacts,
-  NAV_BY_KEY.helpCenter,
-  NAV_BY_KEY.reports,
-];
-
+/** Settings, the one sidebar entry for the whole area; the rest of the tree is `sidebar-sections.ts`. */
 export const ADMIN_NAV: readonly NavItem[] = [NAV_BY_KEY.settings];
-
-export const ALL_NAV: readonly NavItem[] = [...PRIMARY_NAV, ...ADMIN_NAV];
 
 /**
  * The destinations this person is offered.

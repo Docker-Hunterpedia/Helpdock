@@ -150,7 +150,18 @@ describe('the editor', () => {
     await user.click(screen.getByRole('button', { name: 'Duplicate' }));
 
     expect(screen.getByLabelText(/^Name/)).toHaveValue('Hand to finance (copy)');
-    expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
+    // An unchanged copy can be created: Save waits for a change only on a saved item.
+    expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();
+  });
+
+  it('closes a new editor with nothing typed from Discard', async () => {
+    const { user } = await renderMacros();
+
+    await user.click(screen.getByRole('button', { name: 'New' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Canned response' }));
+    expect(screen.getByRole('form', { name: 'New canned response' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(screen.queryByRole('form', { name: 'New canned response' })).not.toBeInTheDocument();
   });
 
   it('deletes after asking', async () => {

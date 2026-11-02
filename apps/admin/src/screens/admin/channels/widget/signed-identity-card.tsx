@@ -20,6 +20,8 @@ export const PROTOCOL_GUIDE_URL =
 
 type Signed = NonNullable<WidgetSettings['signedIdentity']>;
 
+import { isDirty } from '../../../../ui/dirty.js';
+
 /**
  * "Signed identity" (M4-02, DOMAIN-RULES §4.2; artboard `AdminWidget`),
  * Admins only: whether the brand's site may vouch for a visitor, the signing
@@ -89,6 +91,11 @@ export function SignedIdentityCard({
         ? t('channels:widget.signed.secretCreatedBySystem', { date: date(stamp.setAt) })
         : t('channels:widget.signed.secretCreated', { date: date(stamp.setAt), name: stamp.setBy });
 
+  const dirty = isDirty(draft, {
+    enabled: signed.enabled,
+    seesAllChannels: signed.seesAllChannels,
+  });
+
   return (
     <SectionCard
       id={`${id}-signed`}
@@ -100,14 +107,14 @@ export function SignedIdentityCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() =>
               setDraft({ enabled: signed.enabled, seesAllChannels: signed.seesAllChannels })
             }
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:widget.save')}
           </Button>
         </>

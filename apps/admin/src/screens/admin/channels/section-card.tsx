@@ -38,6 +38,7 @@ export function SectionCard({
   return (
     <Box
       component="section"
+      id={id}
       {...(regionName === undefined
         ? { 'aria-labelledby': headingId }
         : { 'aria-label': regionName })}

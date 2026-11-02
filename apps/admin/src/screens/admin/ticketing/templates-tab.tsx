@@ -22,6 +22,7 @@ import { currentBrand, useSession, useTicketingApi } from '../../../auth/session
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { nameButtonSx } from './name-button.js';
 import { type TemplateDraft, TemplateEditor } from './template-editor.tsx';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
 
@@ -168,7 +169,7 @@ export function TemplatesTab(): ReactNode {
                           setSelectedId(template.id);
                           setPreview(null);
                         }}
-                        sx={{ justifyContent: 'flex-start', paddingInline: 0 }}
+                        sx={nameButtonSx}
                       >
                         {template.name}
                       </Button>

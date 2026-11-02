@@ -1,5 +1,5 @@
 import { type ReactNode, useMemo } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router';
+import { Navigate, Route, Routes } from 'react-router';
 import { RequireSession } from '../auth/require-session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
@@ -26,6 +26,7 @@ import { HelpCenterPage } from '../screens/help-center/help-center-page.tsx';
 import { OpenHelpCenter } from '../screens/help-center/site/open-help-center.tsx';
 import { MagicLinkConfirm } from '../screens/magic-link-confirm.tsx';
 import { MagicLinkSent } from '../screens/magic-link-sent.tsx';
+import { NotFoundOrRedirect } from '../screens/not-found.tsx';
 import { PasswordReset, PasswordResetSent } from '../screens/password-reset.tsx';
 import { ReportsPage } from '../screens/reports/reports-page.tsx';
 import { SetupPage } from '../screens/setup/setup-page.tsx';
@@ -36,7 +37,7 @@ import { Totp } from '../screens/totp.tsx';
 import { TotpEnrolment } from '../screens/totp-enrolment.tsx';
 import { AppShell } from '../shell/app-shell.tsx';
 import { SettingsLanding, SettingsShell } from '../shell/settings-shell.tsx';
-import { DEFAULT_SIGNED_IN_ROUTE, legacyRedirect, ROUTES } from './route-paths.js';
+import { ROUTES } from './route-paths.js';
 
 /**
  * Two groups: the public auth screens, and everything else behind
@@ -94,7 +95,7 @@ export function AppRoutes(): ReactNode {
             <Route path={ROUTES.myAccount} element={<Navigate to={ROUTES.meProfile} replace />} />
             <Route path={ROUTES.myAccountTab} element={<YourAccountPage />} />
 
-            {/* General, Domains (M5-07) and Danger zone (M1-14). */}
+            {/* General, Domains (M5-07), Data retention (M1-14) and Danger zone (M8-07). */}
             <Route path={ROUTES.brand} element={<BrandPage />} />
             <Route path={ROUTES.brandTab} element={<BrandPage />} />
 
@@ -145,6 +146,7 @@ export function AppRoutes(): ReactNode {
               Router ranks above `:contactId`, so a contact can never be
               shadowed by a word. */}
           <Route path={ROUTES.contacts} element={<ContactsPage />} />
+          <Route path={ROUTES.contactsAccounts} element={<ContactsPage />} />
           <Route path={ROUTES.contactNew} element={<NewContactPage />} />
           <Route path={ROUTES.account} element={<AccountPage />} />
           <Route path={ROUTES.contact} element={<ContactPage />} />
@@ -153,6 +155,9 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.helpCenterTab} element={<HelpCenterPage />} />
           {/* M5-03: "View help center", "Preview" and the internal-only wall land here. */}
           <Route path={ROUTES.helpCenterOpen} element={<OpenHelpCenter />} />
+          {/* An address from before the Settings area redirects, `/` opens the default
+              screen, and anything else is a page of its own inside the shell. */}
+          <Route path="*" element={<NotFoundOrRedirect />} />
         </Route>
 
         {/* M1-15. Its own shell, without the page padding: the workspace is
@@ -166,19 +171,6 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.helpCenterArticle} element={<ArticleEditorRoute />} />
         </Route>
       </Route>
-
-      {/* An address from before the Settings area goes to its new home, with
-          its query string and fragment; anything else goes to the default. */}
-      <Route path="*" element={<UnknownPath />} />
     </Routes>
-  );
-}
-
-/** M14-21: the old admin urls redirect (`LEGACY_REDIRECTS`); an unknown path goes to the default screen. */
-function UnknownPath(): ReactNode {
-  const { pathname, search, hash } = useLocation();
-
-  return (
-    <Navigate to={legacyRedirect(pathname, search, hash) ?? DEFAULT_SIGNED_IN_ROUTE} replace />
   );
 }

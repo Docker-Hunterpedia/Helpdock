@@ -37,6 +37,8 @@ export const ROUTES = {
    */
   ticketWorkspace: '/tickets/*',
   contacts: '/contacts',
+  /** Accounts, the second page of the sidebar's Contacts section. Static, so it wins over `:contactId`. */
+  contactsAccounts: '/contacts/accounts',
   /** The create form, on a route of its own so it can be linked to (M1-04). */
   contactNew: '/contacts/new',
   contact: '/contacts/:contactId',
@@ -73,7 +75,7 @@ export const ROUTES = {
   /** Their email signature (M2-05, artboard `AdminSignature`). */
   signature: '/settings/account/signature',
 
-  /** The brand's own settings: General, Domains (M5-07) and Danger zone (M1-14). */
+  /** The brand's own settings: General, Domains (M5-07), Data retention (M1-14) and Danger zone. */
   brand: '/settings/brand',
   /** One page of it. `/settings/brand` alone redirects to General. */
   brandTab: '/settings/brand/:tab',

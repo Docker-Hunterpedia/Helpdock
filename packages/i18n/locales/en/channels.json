@@ -223,7 +223,7 @@
   "discard": "Discard",
   "smtp": {
     "heading": "Outgoing mail (SMTP)",
-    "caption": "One server for the whole brand. Every reply, CC copy and auto-reply goes through it. DKIM is signed by your provider.",
+    "caption": "Sends customer replies, CC copies and auto-replies, through one server for the whole brand. DKIM is signed by your provider. Sign-in links and staff notifications use System email instead.",
     "host": "SMTP host",
     "port": "Port",
     "security": "Security",
@@ -413,7 +413,7 @@
       "theme": "Preview theme",
       "light": "Light",
       "dark": "Dark",
-      "caption": "Unsaved changes included. Shown with the pre-chat form on and an agent online.",
+      "caption": "Unsaved changes included. Shown with an agent online.",
       "team": "{{brand}} support",
       "replies": "Usually replies in a few minutes",
       "beforeStart": "Before we start",
@@ -423,7 +423,17 @@
       "start": "Start chat",
       "powered": "Powered by Helpdock",
       "launcherText": "Chat with us",
-      "region": "Widget preview"
+      "region": "Widget preview",
+      "captionPrechatOn": "The pre-chat form is on.",
+      "captionPrechatOff": "The pre-chat form is off.",
+      "suggested": "Suggested articles",
+      "article1": "Reset your password",
+      "article2": "Track an order",
+      "searchArticles": "Search articles",
+      "contactUs": "Contact us",
+      "composer": "Write a message",
+      "message": "Message",
+      "send": "Send"
     },
     "conversation": {
       "heading": "Conversation",
@@ -569,7 +579,7 @@
       "caption": "A page where customers write to you without chat. Each submission opens a ticket."
     },
     "enabled": {
-      "label": "The form is on",
+      "label": "Turn this form on",
       "hint": "Turn it off to take the page down. The address then answers “This form is closed”."
     },
     "address": {
@@ -873,7 +883,7 @@
       "expiring": "Expiring: an Instagram token Helpdock could not renew; it stops on the date shown.",
       "failing": "Failing: the token expired or was revoked, or the subscription could not be renewed.",
       "waiting": "Waiting: connected, no message received yet.",
-      "note": "Checked every hour by the health job; “Fix” opens the account’s page."
+      "note": "Checked every hour; “Fix” opens the account’s page."
     },
     "guide": {
       "heading": "What each platform asks for",

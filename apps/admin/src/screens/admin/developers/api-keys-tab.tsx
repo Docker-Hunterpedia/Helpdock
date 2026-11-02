@@ -43,7 +43,7 @@ import { SecretReveal } from './secret-reveal.tsx';
  * keys stay in the list, struck through, when "Show revoked" is ticked.
  */
 
-const queryKey = (brandId: string) => ['developers', 'api-keys', brandId] as const;
+export const queryKey = (brandId: string) => ['developers', 'api-keys', brandId] as const;
 
 export function ApiKeysTab({
   creating,

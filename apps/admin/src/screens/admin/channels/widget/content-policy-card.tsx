@@ -39,6 +39,8 @@ const HINTS: Readonly<Record<PolicyKind, 'imageHint' | 'videoHint' | 'voiceHint'
   file: null,
 };
 
+import { isDirty } from '../../../../ui/dirty.js';
+
 /**
  * "What visitors can send" (M4-07; artboard `AdminWidget`): each kind on or
  * off, its size cap in MB and its MIME types, and attachments per message.
@@ -92,6 +94,8 @@ export function ContentPolicyCard({
     : undefined;
   const perMessageHint = t('channels:widget.policy.perMessageHint');
 
+  const dirty = isDirty(draft, policyDraftOf(policy));
+
   return (
     <SectionCard
       id={`${id}-policy`}
@@ -102,7 +106,7 @@ export function ContentPolicyCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               setDraft(policyDraftOf(policy));
               setProblems(new Set());
@@ -110,7 +114,7 @@ export function ContentPolicyCard({
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:widget.save')}
           </Button>
         </>

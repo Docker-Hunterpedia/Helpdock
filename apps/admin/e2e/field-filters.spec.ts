@@ -2,11 +2,11 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
 import {
+  clickSettingsTab,
   openTicket,
   openTicketing,
   openTicketingTab,
   openTickets,
-  settingsTab,
   signIn,
 } from './flows.js';
 import { strings } from './strings.js';
@@ -214,7 +214,7 @@ test('puts the same rows in the Views tab’s editor and prints them in the "Sho
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await settingsTab(page, t, 'ticketing:tabs.views').click();
+  await clickSettingsTab(page, t, 'ticketing:tabs.views');
   await page.getByRole('button', { name: t('ticketing:views.add'), exact: true }).click();
 
   const card = page.getByRole('form', { name: t('ticketing:views.editor.newHeading') });
@@ -236,7 +236,7 @@ test('puts the mailbox and the written-to address in the Views tab’s editor (M
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await settingsTab(page, t, 'ticketing:tabs.views').click();
+  await clickSettingsTab(page, t, 'ticketing:tabs.views');
   await page.getByRole('button', { name: t('ticketing:views.add'), exact: true }).click();
 
   const card = page.getByRole('form', { name: t('ticketing:views.editor.newHeading') });
@@ -258,7 +258,7 @@ test('stacks a row in the Views tab’s narrow card, so the value keeps room and
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await settingsTab(page, t, 'ticketing:tabs.views').click();
+  await clickSettingsTab(page, t, 'ticketing:tabs.views');
   await page.getByRole('button', { name: t('ticketing:views.add'), exact: true }).click();
 
   const card = page.getByRole('form', { name: t('ticketing:views.editor.newHeading') });

@@ -1,3 +1,5 @@
+import type { Locale } from '@helpdock/i18n';
+import { SUPPORTED_LNGS } from '@helpdock/i18n';
 import {
   JOB_TITLE_MAX_LENGTH,
   normalisePhone,
@@ -9,16 +11,18 @@ import {
   PUBLIC_PHONE_MAX_LENGTH,
   splitName,
 } from '@helpdock/schemas';
-import { Avatar, Box, Button, TextField, Typography } from '@mui/material';
+import { Avatar, Box, Button, MenuItem, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
+import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useStaffApi } from '../../auth/session.tsx';
 import { useKeyboard } from '../../keyboard/keyboard-provider.js';
 import { isStaffError } from '../../staff/api.js';
 import { AlertBanner } from '../../ui/alert-banner.tsx';
+import { isDirty } from '../../ui/dirty.js';
 import { Field } from '../../ui/field.tsx';
 import { Switch } from '../../ui/switch.tsx';
 import { useToast } from '../../ui/toasts.tsx';
@@ -90,9 +94,13 @@ export function ProfileTab(): ReactNode {
   const keyboard = useKeyboard();
   const id = useId();
   const fileInput = useRef<HTMLInputElement>(null);
+  const { setLocale } = usePreferences();
+  const localeId = useId();
 
   const stored = useQuery({ queryKey: PROFILE_KEY, queryFn: () => api.profile() });
   const [draft, setDraft] = useState<Draft | null>(null);
+  // Language is saved on its own, from the Working in Helpdock card.
+  const [chosenLocale, setChosenLocale] = useState<Locale | null>(null);
   const [phoneWrong, setPhoneWrong] = useState(false);
   const [photoProblem, setPhotoProblem] = useState<PhotoProblem | null>(null);
 
@@ -119,6 +127,19 @@ export function ProfileTab(): ReactNode {
         setPhoneWrong(true);
         return;
       }
+      toast({ tone: 'danger', message: t('me:profile.failed') });
+    },
+  });
+
+  const saveLanguage = useMutation({
+    mutationFn: (locale: Locale) => api.updateProfile({ locale }),
+    onSuccess: async (profile) => {
+      setLocale(profile.locale);
+      setChosenLocale(null);
+      await keep(profile);
+      toast({ tone: 'success', message: t('me:profile.languageSaved') });
+    },
+    onError: () => {
       toast({ tone: 'danger', message: t('me:profile.failed') });
     },
   });
@@ -209,6 +230,9 @@ export function ProfileTab(): ReactNode {
     borderBlockEnd: `1px solid ${tokens['border.default']}`,
   } as const;
   const busy = upload.isPending || remove.isPending;
+  const dirty = isDirty(draft, draftOf(profile));
+  const language = chosenLocale ?? profile.locale;
+  const languageDirty = language !== profile.locale;
 
   return (
     <Box
@@ -216,7 +240,6 @@ export function ProfileTab(): ReactNode {
         display: 'flex',
         flexDirection: 'column',
         gap: 5,
-        maxInlineSize: 720,
       }}
     >
       <Box
@@ -411,7 +434,7 @@ export function ProfileTab(): ReactNode {
         >
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               setDraft(draftOf(profile));
               setPhoneWrong(false);
@@ -419,7 +442,7 @@ export function ProfileTab(): ReactNode {
           >
             {t('me:profile.discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('me:profile.save')}
           </Button>
         </Box>
@@ -433,6 +456,62 @@ export function ProfileTab(): ReactNode {
           <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
             {t('me:profile.workingCaption')}
           </Typography>
+        </Box>
+        <Box
+          component="form"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            saveLanguage.mutate(language);
+          }}
+          sx={{
+            padding: 5,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
+            gap: 5,
+            alignItems: 'start',
+            borderBlockEnd: `1px solid ${tokens['border.default']}`,
+          }}
+        >
+          {/* Read-only, not disabled: disabled text fails 4.5:1 and the address should stay selectable. */}
+          <TextField
+            label={t('me:details.emailLabel')}
+            value={profile.email}
+            helperText={t('me:details.emailHint')}
+            slotProps={{ input: { readOnly: true } }}
+          />
+          <TextField
+            id={localeId}
+            select
+            label={t('me:details.localeLabel')}
+            value={language}
+            onChange={(event) => {
+              setChosenLocale(event.target.value as Locale);
+            }}
+          >
+            {SUPPORTED_LNGS.map((option) => (
+              <MenuItem key={option} value={option} lang={option}>
+                {t(`common:language.${option}`)}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Box sx={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+            <Button
+              variant="text"
+              disabled={saveLanguage.isPending || !languageDirty}
+              onClick={() => {
+                setChosenLocale(null);
+              }}
+            >
+              {t('me:profile.discard')}
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={saveLanguage.isPending || !languageDirty}
+            >
+              {t('me:profile.save')}
+            </Button>
+          </Box>
         </Box>
         <Box sx={{ padding: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
           <Switch

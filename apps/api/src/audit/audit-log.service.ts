@@ -1,6 +1,7 @@
 import { type AuditLogEntry, INSTALL_SCOPE_BRAND_ID } from '@helpdock/db';
 import {
   AUDIT_INSTALL_BRAND,
+  AUDIT_PAGE_VIEW_ACTION,
   type AuditLogPage,
   type AuditLogQuery,
   type AuditRecord,
@@ -44,6 +45,7 @@ export class AuditLogService {
       actor: query.actor,
       action: query.action,
       targetType: query.targetType,
+      includePageViews: query.includePageViews || asksForPageViews(query.action),
       brandId: brandFilterOf(query.brand),
       from: query.from === undefined ? undefined : new Date(query.from),
       to: query.to === undefined ? undefined : new Date(query.to),
@@ -70,6 +72,13 @@ export class AuditLogService {
     };
   }
 }
+
+/**
+ * Someone who filters by the page-view action, or a family that holds it,
+ * wants those rows: hiding them would answer a question with nothing.
+ */
+const asksForPageViews = (action: string | undefined): boolean =>
+  action === AUDIT_PAGE_VIEW_ACTION || action === 'install.*' || action === 'install.scope.*';
 
 const brandFilterOf = (brand: string | undefined): string | undefined =>
   brand === AUDIT_INSTALL_BRAND ? INSTALL_SCOPE_BRAND_ID : brand;

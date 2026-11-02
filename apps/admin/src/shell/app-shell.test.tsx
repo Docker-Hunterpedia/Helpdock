@@ -70,8 +70,6 @@ describe('AppShell', () => {
     ).toEqual([
       // The api sends no primary counts in 1.0 (UX-24), so the fixture has none.
       'Tickets',
-      // The + beside "Views": an icon link, named by its aria-label.
-      '',
       'All tickets',
       'My open5',
       'Snoozed0',
@@ -83,6 +81,7 @@ describe('AppShell', () => {
       'Escalated1',
       'VIP refunds1',
       'Urgent, mine1',
+      'New view',
       'Contacts',
       'Help center',
       'Reports',
@@ -95,7 +94,7 @@ describe('AppShell', () => {
     await renderShell('/settings/install/staff');
 
     expect(
-      within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('link', {
+      within(screen.getByRole('list', { name: 'Settings' })).getByRole('link', {
         current: 'page',
       }),
     ).toHaveTextContent('Staff and roles');
@@ -158,7 +157,10 @@ describe('AppShell', () => {
 
     await user.click(open);
     const nav = await screen.findByRole('navigation', { name: 'Main' });
+    // A section's row opens its branch and leaves the drawer open; a page closes it.
     await user.click(within(nav).getByRole('link', { name: /Contacts/ }));
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    await user.click(within(nav).getByRole('link', { name: 'People' }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Contacts');

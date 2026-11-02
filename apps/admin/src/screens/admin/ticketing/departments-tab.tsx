@@ -33,6 +33,7 @@ import { departmentsKey, useDepartmentsQuery } from '../../../ticketing/use-depa
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { type DepartmentDraft, DepartmentEditor } from './department-editor.tsx';
 import { DepartmentTeams } from './department-teams.tsx';
+import { nameButtonSx } from './name-button.js';
 import { moveBy, moveTo } from './reorder.js';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
 
@@ -308,7 +309,7 @@ export function DepartmentsTab(): ReactNode {
                           setCreating(false);
                           setSelectedId(department.id);
                         }}
-                        sx={{ justifyContent: 'flex-start', paddingInline: 0 }}
+                        sx={nameButtonSx}
                       >
                         {department.name}
                       </Button>

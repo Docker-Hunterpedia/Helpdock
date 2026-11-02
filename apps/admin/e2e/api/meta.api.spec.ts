@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { openSettingsArea, settingsTab } from '../flows.js';
+import { clickSettingsTab, openSettingsArea } from '../flows.js';
 import { strings } from '../strings.js';
 import { expect, openAdmin, test } from './admin-session.js';
 import {
@@ -46,7 +46,7 @@ const t = strings('en');
 const openMeta = async (page: Page): Promise<void> => {
   await openAdmin(page);
   await openSettingsArea(page, t, 'channels');
-  await settingsTab(page, t, 'channels:tabs.meta').click();
+  await clickSettingsTab(page, t, 'channels:tabs.meta');
 };
 
 const accountsTable = (page: Page) => page.getByRole('table', { name: t('channels:meta.heading') });

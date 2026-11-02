@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { openTicketing, openTickets, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openTicketing, openTickets, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 test.use({ reducedMotion: 'reduce' });
@@ -54,7 +54,7 @@ test('saves SLA due in the view editor and opens the view in that order', async 
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await settingsTab(page, t, 'ticketing:tabs.views').click();
+  await clickSettingsTab(page, t, 'ticketing:tabs.views');
   await page.getByRole('button', { name: t('ticketing:views.add'), exact: true }).click();
   const card = page.getByRole('form', { name: t('ticketing:views.editor.newHeading') });
   await card
@@ -67,6 +67,11 @@ test('saves SLA due in the view editor and opens the view in that order', async 
   ).toBeDisabled();
   await card.getByLabel(t('ticketing:views.editor.name'), { exact: true }).fill('SLA urgency');
   await card.getByRole('button', { name: t('ticketing:views.editor.create') }).click();
+  // The new view is in the Tickets branch of the sidebar tree, which is closed while Settings is open.
+  await page
+    .getByRole('navigation', { name: t('admin:nav.label') })
+    .getByRole('button', { name: t('admin:nav.pagesOf', { label: t('admin:nav.tickets') }) })
+    .click();
   await page.getByRole('link', { name: /^SLA urgency/ }).click();
   const rows = page
     .getByRole('region', { name: t('tickets:list.label') })

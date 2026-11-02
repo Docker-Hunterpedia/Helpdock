@@ -206,6 +206,14 @@ test.describe('the System page', () => {
       page.getByRole('link', { name: t('system:smtp.missingBannerAction') }),
     ).toHaveAttribute('href', '#outgoing-email');
 
+    // The link lands on the card: its root carries the id, and it is on screen with a margin above.
+    await page.getByRole('link', { name: t('system:smtp.missingBannerAction') }).click();
+    const target = page.locator('#outgoing-email');
+    await expect(target).toBeInViewport();
+    expect(
+      await target.evaluate((element) => element.getBoundingClientRect().top),
+    ).toBeGreaterThanOrEqual(-1);
+
     // The health card says it in words, not only in a hue.
     const health = page.getByRole('region', {
       name: t('system:cards.smtp.title'),

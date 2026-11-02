@@ -1,8 +1,6 @@
-import type { Locale } from '@helpdock/i18n';
-import { SUPPORTED_LNGS } from '@helpdock/i18n';
 import { PASSWORD_MIN_LENGTH, totpCodeRequestSchema } from '@helpdock/schemas';
 import { monoFontStyle } from '@helpdock/ui';
-import { Box, Button, Chip, MenuItem, TextField, Typography } from '@mui/material';
+import { Box, Button, Chip, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, RotateCcw } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
@@ -54,16 +52,12 @@ export function SecurityScreen(): ReactNode {
   const navigate = useNavigate();
   const setSession = useSetSession();
   const queryClient = useQueryClient();
-  const { locale: appLocale, setLocale } = usePreferences();
+  const { locale: appLocale } = usePreferences();
 
-  const nameId = useId();
-  const localeId = useId();
   const currentId = useId();
   const newPasswordId = useId();
   const codeId = useId();
 
-  const [name, setName] = useState<string | null>(null);
-  const [locale, setChosenLocale] = useState<Locale | null>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -97,22 +91,6 @@ export function SecurityScreen(): ReactNode {
       message: isAuthError(error) ? t('auth:unavailable') : t('me:security.failed'),
     });
   };
-
-  const saveProfile = useMutation({
-    mutationFn: () =>
-      api.updateProfile({
-        ...(name === null ? {} : { name: name.trim() }),
-        ...(locale === null ? {} : { locale }),
-      }),
-    onSuccess: async (updated) => {
-      setLocale(updated.locale);
-      setName(null);
-      setChosenLocale(null);
-      await queryClient.invalidateQueries({ queryKey: ['me', 'profile'] });
-      toast({ tone: 'success', message: t('me:security.saved') });
-    },
-    onError: fail,
-  });
 
   const changePassword = useMutation({
     mutationFn: () => api.changePassword(currentPassword, newPassword),
@@ -199,8 +177,6 @@ export function SecurityScreen(): ReactNode {
   });
 
   const strength = passwordStrength(newPassword);
-  const displayName = name ?? profile.data?.name ?? '';
-  const displayLocale = locale ?? profile.data?.locale ?? 'en';
 
   const submitPassword = (event: FormEvent): void => {
     event.preventDefault();
@@ -225,60 +201,7 @@ export function SecurityScreen(): ReactNode {
   // The page header and the tab row are Your account's (`account/account-page.tsx`).
   return (
     <>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 720 }}>
-        <AccountCard title={t('me:details.title')} caption={t('me:details.caption')}>
-          <Box
-            component="form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveProfile.mutate();
-            }}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}
-          >
-            <TextField
-              id={nameId}
-              label={t('me:details.nameLabel')}
-              value={displayName}
-              onChange={(event) => {
-                setName(event.target.value);
-              }}
-              slotProps={{ htmlInput: { maxLength: 120, autoComplete: 'name' } }}
-            />
-            {/*
-              Read-only rather than disabled: a disabled control's text and its
-              hint are drawn in the disabled colour, which is below the 4.5:1
-              of DESIGN §10, and an address somebody may want to copy should
-              stay selectable.
-            */}
-            <TextField
-              label={t('me:details.emailLabel')}
-              value={profile.data?.email ?? ''}
-              helperText={t('me:details.emailHint')}
-              slotProps={{ input: { readOnly: true } }}
-            />
-            <TextField
-              id={localeId}
-              select
-              label={t('me:details.localeLabel')}
-              value={displayLocale}
-              onChange={(event) => {
-                setChosenLocale(event.target.value as Locale);
-              }}
-            >
-              {SUPPORTED_LNGS.map((option) => (
-                <MenuItem key={option} value={option} lang={option}>
-                  {t(`common:language.${option}`)}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button type="submit" variant="contained" disabled={saveProfile.isPending}>
-                {t('me:details.submit')}
-              </Button>
-            </Box>
-          </Box>
-        </AccountCard>
-
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <AccountCard title={t('me:password.title')} caption={t('me:password.caption')}>
           <Box
             component="form"

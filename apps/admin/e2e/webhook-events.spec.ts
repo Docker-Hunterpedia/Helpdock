@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 test('M14-28 groups events, requires a selection, and persists the notes opt-in', async ({
@@ -12,7 +12,7 @@ test('M14-28 groups events, requires a selection, and persists the notes opt-in'
   const t = strings(locale);
   await signIn(page, locale);
   await openSettingsArea(page, t, 'developers');
-  await settingsTab(page, t, 'developers:tabs.webhooks').click();
+  await clickSettingsTab(page, t, 'developers:tabs.webhooks');
   await page
     .getByRole('button', { name: t('developers:webhooks.add'), exact: true })
     .first()

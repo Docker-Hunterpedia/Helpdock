@@ -50,6 +50,26 @@ describe('AuditLogPage', () => {
     expect(within(region).getByText('Secret: changed, value never recorded')).toBeInTheDocument();
   });
 
+  it('leaves page views out until the switch is on, and asks again when it is', async () => {
+    const { user, auditLog } = renderPage();
+    await screen.findByRole('table', { name: 'Audit entries' });
+    const toggle = screen.getByRole('switch', { name: 'Show page views' });
+    expect(toggle).not.toBeChecked();
+    expect(auditLog).toHaveBeenLastCalledWith({});
+
+    await user.click(toggle);
+
+    await waitFor(() => {
+      expect(auditLog).toHaveBeenLastCalledWith({ includePageViews: true });
+    });
+    expect(screen.getByRole('switch', { name: 'Show page views' })).toBeChecked();
+
+    await user.click(screen.getByRole('switch', { name: 'Show page views' }));
+    await waitFor(() => {
+      expect(auditLog).toHaveBeenLastCalledWith({});
+    });
+  });
+
   it('asks again with the filters, and from the first page', async () => {
     const { user, auditLog } = renderPage();
     await screen.findByRole('table', { name: 'Audit entries' });
@@ -113,14 +133,5 @@ describe('AuditLogPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Not allowed' })).toBeInTheDocument();
-  });
-
-  it('offers the way back to System', async () => {
-    renderPage();
-
-    expect(await screen.findByRole('link', { name: 'Back to System' })).toHaveAttribute(
-      'href',
-      '/settings/install/system',
-    );
   });
 });

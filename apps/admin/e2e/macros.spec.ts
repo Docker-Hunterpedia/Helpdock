@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, openTicket, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, openTicket, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -30,7 +30,7 @@ const violations = async (page: Page): Promise<string[]> => {
 const openMacros = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
   await openSettingsArea(page, t, 'automation');
-  await settingsTab(page, t, 'rules:tabs.macros').click();
+  await clickSettingsTab(page, t, 'rules:tabs.macros');
   await page.getByRole('heading', { name: t('macros:list.heading') }).waitFor();
 };
 

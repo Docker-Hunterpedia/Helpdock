@@ -54,7 +54,7 @@ const NOT_A_DESTINATION: Readonly<Record<keyof typeof ROUTES, string>> = {
   metaAccount: 'one account, reached from Channels › Meta',
   developers: 'redirects to API keys',
   developersTab: 'the family of the Developers tabs, each in the registry',
-  systemQueues: 'the queue dashboard, reached from System',
+  systemQueues: 'in the registry',
   myAccount: 'redirects to Profile',
   myAccountTab: 'the family of the account pages, each in the registry',
   csat: 'the public rating page, not a staff screen',
@@ -63,6 +63,7 @@ const NOT_A_DESTINATION: Readonly<Record<keyof typeof ROUTES, string>> = {
   tickets: 'in the registry',
   contacts: 'in the registry',
   contactNew: 'in the registry',
+  contactsAccounts: 'in the registry',
   helpCenter: 'in the registry',
   reports: 'in the registry',
   settings: 'redirects to the first page the reader is offered',
@@ -129,8 +130,9 @@ describe('the page registry and the routes', () => {
       ROUTES.sso,
       ROUTES.staff,
       ROUTES.system,
-      ROUTES.imports,
       ROUTES.systemAuditLog,
+      ROUTES.systemQueues,
+      ROUTES.imports,
     ]);
   });
 
@@ -259,7 +261,13 @@ describe('pagesFor', () => {
 
   it('offers an admin every brand tab', () => {
     expect(ids({ role: 'admin', installAdmin: false })).toEqual(
-      expect.arrayContaining(['brandGeneral', 'brandDomains', 'brandImport', 'brandDanger']),
+      expect.arrayContaining([
+        'brandGeneral',
+        'brandDomains',
+        'brandImport',
+        'brandRetention',
+        'brandDanger',
+      ]),
     );
   });
 });

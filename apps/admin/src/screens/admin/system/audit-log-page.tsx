@@ -17,21 +17,13 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronRight,
-  ScrollText,
-  ServerCog,
-  ShieldAlert,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, ScrollText, ServerCog, ShieldAlert } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
-import { Link as RouterLink } from 'react-router';
 import { useT } from '../../../app/i18n.js';
-import { ROUTES } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { EmptyState } from '../../../shell/empty-state.js';
 import { PageHeader } from '../../../shell/page-header.js';
+import { Switch } from '../../../ui/switch.tsx';
 import { useDebounced } from '../../../ui/use-debounced.js';
 import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import {
@@ -84,23 +76,8 @@ export function AuditLogPage({ api }: { readonly api?: SystemApi } = {}): ReactN
     setCursors([null]);
   };
 
-  const back = (
-    <Button
-      component={RouterLink}
-      to={ROUTES.system}
-      variant="outlined"
-      size="small"
-      startIcon={<ArrowLeft size={16} aria-hidden="true" className="mirror-in-rtl" />}
-    >
-      {t('system:auditLog.back')}
-    </Button>
-  );
   const header = (
-    <PageHeader
-      title={t('system:auditLog.title')}
-      caption={t('system:auditLog.caption')}
-      action={back}
-    />
+    <PageHeader title={t('system:auditLog.title')} caption={t('system:auditLog.caption')} />
   );
 
   if (page.error) {
@@ -210,6 +187,7 @@ function FilterBar({
   const actionId = useId();
   const targetId = useId();
   const brandId = useId();
+  const pageViewsHintId = useId();
 
   const label = (id: string, text: string): ReactNode => (
     <Typography component="label" htmlFor={id} sx={{ fontSize: 13, fontWeight: 500 }}>
@@ -349,6 +327,29 @@ function FilterBar({
             }}
             slotProps={{ htmlInput: { 'aria-label': t('system:auditLog.filters.toLabel') } }}
           />
+        </Box>
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, alignSelf: 'center' }}>
+        <Switch
+          checked={filters.includePageViews}
+          label={t('system:auditLog.filters.pageViews')}
+          describedBy={pageViewsHintId}
+          onChange={(includePageViews) => {
+            onChange({ includePageViews });
+          }}
+        />
+        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+          <Typography variant="body2" component="span" sx={{ fontSize: 13, fontWeight: 500 }}>
+            {t('system:auditLog.filters.pageViews')}
+          </Typography>
+          <Typography
+            id={pageViewsHintId}
+            variant="caption"
+            component="span"
+            sx={{ color: 'text.secondary' }}
+          >
+            {t('system:auditLog.filters.pageViewsHint')}
+          </Typography>
         </Box>
       </Box>
       <Button

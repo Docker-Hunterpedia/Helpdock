@@ -35,6 +35,7 @@ import { isTicketingError } from '../../../ticketing/api.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { Label } from '../../../ui/label.tsx';
 import { type CustomFieldDraft, CustomFieldEditor } from './custom-field-editor.tsx';
+import { nameButtonSx } from './name-button.js';
 import { moveBy, moveTo } from './reorder.js';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
 
@@ -282,7 +283,7 @@ export function CustomFieldsTab(): ReactNode {
                                 setCreatingIn(null);
                                 setSelectedId(field.id);
                               }}
-                              sx={{ justifyContent: 'flex-start', paddingInline: 0 }}
+                              sx={nameButtonSx}
                             >
                               {field.label}
                             </Button>

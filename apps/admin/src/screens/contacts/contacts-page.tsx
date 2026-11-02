@@ -7,14 +7,12 @@ import {
   InputAdornment,
   Link as MuiLink,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from '@mui/material';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Plus, Search, TriangleAlert, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { ROUTES } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -58,7 +56,9 @@ export function ContactsPage(): ReactNode {
 
   const brand = currentBrand(session);
   const canWrite = session.user.role !== 'viewer';
-  const tab: Tab = params.get('tab') === 'accounts' ? 'accounts' : 'people';
+  // People and Accounts are two pages of the sidebar's Contacts section.
+  const { pathname } = useLocation();
+  const tab: Tab = pathname === ROUTES.contactsAccounts ? 'accounts' : 'people';
   const search = params.get('q') ?? '';
   const accountId = params.get('account') ?? undefined;
   const openOnly = params.get('open') === 'true';
@@ -162,6 +162,11 @@ export function ContactsPage(): ReactNode {
     !duplicatesOnly;
   const range = pageRange(offset, rows.length, total);
 
+  if (params.get('tab') === 'accounts') {
+    // The address from before Accounts had a page of its own.
+    return <Navigate to={ROUTES.contactsAccounts} replace />;
+  }
+
   return (
     <>
       <PageHeader
@@ -171,7 +176,9 @@ export function ContactsPage(): ReactNode {
           accounts: t('contacts:accountCount', { count: brandAccounts.data?.total ?? 0 }),
         })}
         action={
-          canWrite ? (
+          // The empty state below carries the one button while there is nothing to list.
+          canWrite &&
+          !(tab === 'people' ? firstRun : accounts.isSuccess && accountRows.length === 0) ? (
             <Button
               variant="contained"
               onClick={() => {
@@ -189,21 +196,6 @@ export function ContactsPage(): ReactNode {
       />
 
       <Box sx={{ display: 'flex', gap: 4, alignItems: 'center', marginBlockEnd: 5 }}>
-        <ToggleButtonGroup
-          exclusive
-          size="small"
-          value={tab}
-          aria-label={t('contacts:segment.label')}
-          onChange={(_event, next: Tab | null) => {
-            if (next !== null) {
-              setParam('tab', next === 'people' ? null : next);
-            }
-          }}
-        >
-          <ToggleButton value="people">{t('contacts:segment.people')}</ToggleButton>
-          <ToggleButton value="accounts">{t('contacts:segment.accounts')}</ToggleButton>
-        </ToggleButtonGroup>
-
         <TextField
           id={searchId}
           value={typed}

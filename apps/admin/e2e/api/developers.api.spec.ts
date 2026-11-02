@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { openSettingsArea, settingsTab } from '../flows.js';
+import { clickSettingsTab, openSettingsArea } from '../flows.js';
 import { strings } from '../strings.js';
 import { expect, openAdmin, test } from './admin-session.js';
 import { SKIP_ENV } from './install.js';
@@ -82,7 +82,7 @@ test('an API key shown once answers /api/v1, and is refused once revoked', async
 });
 
 test('an endpoint is refused for a private address and plain http, then added and pinged', async () => {
-  await settingsTab(page, t, 'developers:tabs.webhooks').click();
+  await clickSettingsTab(page, t, 'developers:tabs.webhooks');
   await page
     .getByRole('button', { name: t('developers:webhooks.add') })
     .first()

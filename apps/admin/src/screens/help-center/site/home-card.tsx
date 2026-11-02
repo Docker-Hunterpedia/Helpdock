@@ -20,6 +20,7 @@ import {
 } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { isDirty } from '../../../ui/dirty.js';
 import { SectionCard } from '../../admin/channels/section-card.tsx';
 import { useHelpCenter, useReaderLocale } from '../use-help-center.js';
 import { moved } from './site-draft.js';
@@ -87,6 +88,8 @@ export function HomeCard({
     setDraft({ ...draft, featuredArticleIds: moved(draft.featuredArticleIds, index, delta) });
   };
 
+  const dirty = isDirty(draft, home);
+
   return (
     <SectionCard
       id={`${id}-home`}
@@ -100,10 +103,14 @@ export function HomeCard({
         ? {
             footer: (
               <>
-                <Button variant="text" disabled={save.isPending} onClick={() => setDraft(home)}>
+                <Button
+                  variant="text"
+                  disabled={save.isPending || !dirty}
+                  onClick={() => setDraft(home)}
+                >
                   {t('helpCenter:settings.discard')}
                 </Button>
-                <Button type="submit" variant="contained" disabled={save.isPending}>
+                <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
                   {t('helpCenter:settings.save')}
                 </Button>
               </>

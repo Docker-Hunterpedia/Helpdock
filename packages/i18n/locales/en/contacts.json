@@ -11,7 +11,6 @@
   "searchPlaceholder": "Name, email, phone, @telegram",
   "accountSearchPlaceholder": "Company or domain",
   "segment": {
-    "label": "What to list",
     "people": "People",
     "accounts": "Accounts"
   },

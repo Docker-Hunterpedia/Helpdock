@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.js';
-import { openContact, openContacts, signIn } from './flows.js';
+import { clickSidebarPage, openContact, openContacts, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -120,7 +120,7 @@ test.describe('the contact list', () => {
     await signIn(page, locale);
     await openContacts(page, locale);
 
-    await page.getByRole('button', { name: t('contacts:segment.accounts') }).click();
+    await clickSidebarPage(page, t, 'contacts', t('contacts:segment.accounts'));
 
     const table = page.getByRole('table', { name: t('contacts:accounts.title') });
     await expect(table.getByRole('link', { name: 'Acme GmbH' })).toBeVisible();

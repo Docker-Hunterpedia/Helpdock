@@ -14,6 +14,7 @@ import { PaletteProvider } from '../palette/palette-provider.tsx';
 import { BulkUndoProvider } from '../tickets/bulk-undo.tsx';
 import { BrandMark } from '../ui/brand-mark.tsx';
 import { IdleReturnNotice } from './idle-return-notice.tsx';
+import { useRouteScroll } from './route-scroll.js';
 import { SIDEBAR_WIDTH, Sidebar } from './sidebar.tsx';
 import { useSidebarCollapse } from './sidebar-collapse.js';
 
@@ -57,6 +58,7 @@ function ShellLayout({ flush }: { readonly flush: boolean }): ReactNode {
   const wide = useMediaQuery(SIDEBAR_BREAKPOINT, { noSsr: true });
   const { collapsed, toggle } = useSidebarCollapse();
   useGlobalShortcuts();
+  useRouteScroll(flush);
   // M14-25: the live sounds, off for everybody until they switch one on.
   useNotificationSounds();
   // Only where the sidebar is a column: a toggle nobody can see would

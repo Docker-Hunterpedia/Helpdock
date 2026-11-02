@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { BrowserContext, Page } from '@playwright/test';
-import { openSettingsArea, settingsTab } from '../flows.js';
+import { clickSettingsTab, openSettingsArea } from '../flows.js';
 import { strings } from '../strings.js';
 import { E2E_API_ORIGIN, SKIP_ENV } from './install.js';
 import { expect, openAdmin, test } from './widget-helpers.js';
@@ -60,7 +60,7 @@ test.afterAll(async () => {
 /** The Channels › Widget tag for this install, with the site's origin allowed. */
 const embedFor = async (page: Page, origin: string): Promise<string> => {
   await openSettingsArea(page, t, 'channels');
-  await settingsTab(page, t, 'channels:tabs.widget').click();
+  await clickSettingsTab(page, t, 'channels:tabs.widget');
   const snippet =
     (await page
       .getByRole('region', { name: t('channels:widget.embed.heading') })
@@ -212,7 +212,7 @@ test.describe('the widget against the real api', () => {
 
     // The widget in help center mode.
     await openSettingsArea(admin, t, 'channels');
-    await settingsTab(admin, t, 'channels:tabs.widget').click();
+    await clickSettingsTab(admin, t, 'channels:tabs.widget');
     const appearance = admin.getByRole('region', { name: t('channels:widget.appearance.heading') });
     await appearance
       .getByRole('radio', {

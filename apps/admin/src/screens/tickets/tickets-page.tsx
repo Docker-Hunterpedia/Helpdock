@@ -25,6 +25,7 @@ import {
 import { useShortcutHandlers } from '../../keyboard/keyboard-provider.tsx';
 import type { ShortcutId } from '../../keyboard/registry.js';
 import { EmptyState } from '../../shell/empty-state.tsx';
+import { usePageTitle } from '../../shell/page-title.js';
 import { ticketFieldsFor } from '../../tickets/custom-values.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import { mergePages, moveSelection } from '../../tickets/pages.js';
@@ -293,6 +294,15 @@ export function TicketsPage(): ReactNode {
   });
 
   const tickets = useMemo(() => mergePages(list.data?.pages ?? []), [list.data]);
+  // The tab says which ticket is open, or else which view is on screen.
+  const openTicket = ticketId === null ? undefined : tickets.find((row) => row.id === ticketId);
+  usePageTitle(
+    openTicket === undefined
+      ? view === null
+        ? t('tickets:views.all')
+        : viewLabel(view, locale)
+      : ticketReference(openTicket),
+  );
 
   useDepartmentRooms(
     brand.id,

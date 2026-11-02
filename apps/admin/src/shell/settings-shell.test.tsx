@@ -52,23 +52,36 @@ const open = async (path: string, who: Partial<Session['user']> = {}) => {
       initialEntries: [path],
     },
   );
-  await screen.findByRole('navigation', { name: 'Settings' }, { timeout: 10_000 });
+  await screen.findByRole('list', { name: 'Settings', hidden: true }, { timeout: 10_000 });
   return rendered;
 };
 
+/** A closed group's list is `hidden`, which also hides its name, so it is found through its row. */
+const groupList = (group: string): HTMLElement => {
+  const row = screen.getByRole('button', { name: group });
+  const list = document.querySelector<HTMLElement>(`ul[aria-labelledby="${row.id}"]`);
+  if (list === null) {
+    throw new Error(`no list for ${group}`);
+  }
+  return list;
+};
+
 const groupLinks = (group: string): string[] =>
-  within(screen.getByRole('list', { name: group }))
-    .getAllByRole('link')
+  within(groupList(group))
+    .getAllByRole('link', { hidden: true })
     .map((link) => link.textContent ?? '');
 
 describe('the groups', () => {
   it('draws every group an install admin has, with the pages of each in order', async () => {
     await open('/settings/inbox/slas');
 
-    const nav = screen.getByRole('navigation', { name: 'Settings' });
+    const nav = screen.getByRole('list', { name: 'Settings', hidden: true });
     const groupName = (list: HTMLElement): string | undefined =>
       document.getElementById(list.getAttribute('aria-labelledby') ?? '')?.textContent;
-    expect(within(nav).getAllByRole('list').map(groupName)).toEqual([
+    const groupLists = within(nav)
+      .getAllByRole('list', { hidden: true })
+      .filter((list) => list.hasAttribute('aria-labelledby'));
+    expect(groupLists.map(groupName)).toEqual([
       'Your account',
       'Brand',
       'Inbox',
@@ -83,11 +96,10 @@ describe('the groups', () => {
       'Security',
       'Email signature',
     ]);
-    expect(groupLinks('Brand')).toEqual(['General', 'Domains', 'Danger zone']);
+    expect(groupLinks('Brand')).toEqual(['General', 'Domains', 'Data retention', 'Danger zone']);
     expect(groupLinks('Inbox')).toEqual([
       'Departments',
       'Statuses',
-      'Priorities',
       'Tags',
       'Custom fields',
       'Templates',
@@ -117,6 +129,8 @@ describe('the groups', () => {
       'Single sign-on',
       'Staff and roles',
       'System',
+      'Audit log',
+      'Queues',
       'Imports',
     ]);
   });
@@ -124,8 +138,8 @@ describe('the groups', () => {
   it('hides what the person’s role cannot open, as the old pages did', async () => {
     await open('/settings/account/profile', { role: 'teamLeader', installAdmin: false });
 
-    expect(screen.queryByRole('list', { name: 'Brand' })).toBeNull();
-    expect(screen.queryByRole('list', { name: 'Developers' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Brand' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Developers' })).toBeNull();
     expect(groupLinks('Channels')).toEqual(['Chat widget']);
     expect(groupLinks('AI')).toEqual(['Knowledge', 'Assistant']);
     expect(groupLinks('Install')).toEqual(['Staff and roles']);
@@ -165,7 +179,7 @@ describe('the page header', () => {
     expect(within(crumbs).getByText('Inbox')).toHaveAttribute('aria-current', 'page');
     expect(settingsLink('SLA policies')).toHaveAttribute('aria-current', 'page');
     expect(
-      within(screen.getByRole('navigation', { name: 'Settings' })).getAllByRole('link', {
+      within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link', {
         current: 'page',
       }),
     ).toHaveLength(1);

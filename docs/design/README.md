@@ -219,7 +219,7 @@ Drawn for [M14](../completed/M14-inbox-productivity.md#artboards-to-draw), befor
 | `Admin/Ticketing-FieldFilters` | M14-16, M14-17, M14-26, M14-27 | [Admin-Ticketing-FieldFilters.png](screens/m14/Admin-Ticketing-FieldFilters.png) | [AdminTicketingFieldFilters.dc.html](artboards/AdminTicketingFieldFilters.dc.html) |
 | `Admin/Ticketing-Assignment-Idle` | M14-18 | [Admin-Ticketing-Assignment-Idle.png](screens/m14/Admin-Ticketing-Assignment-Idle.png) | [AdminTicketingAssignmentIdle.dc.html](artboards/AdminTicketingAssignmentIdle.dc.html) |
 | `Admin/M14-Amendments` | M14-26, M14-28, M14-29 | [Admin-M14-Amendments.png](screens/m14/Admin-M14-Amendments.png) | [AdminM14Amendments.dc.html](artboards/AdminM14Amendments.dc.html) |
-| `Admin/Settings-Shell` | M14-21 | [Admin-Settings-Shell.png](screens/m14/Admin-Settings-Shell.png) | [AdminSettingsShell.dc.html](artboards/AdminSettingsShell.dc.html) |
+| `Admin/Settings-Shell` | M14-21 (sidebar and secondary column superseded by `Admin/UX-Fixes-2026-11`) | [Admin-Settings-Shell.png](screens/m14/Admin-Settings-Shell.png) | [AdminSettingsShell.dc.html](artboards/AdminSettingsShell.dc.html) |
 | `Admin/Empty-States` | M14-23 | [Admin-Empty-States.png](screens/m14/Admin-Empty-States.png) | [AdminEmptyStates.dc.html](artboards/AdminEmptyStates.dc.html) |
 
 ### M18 Sign-in options
@@ -241,6 +241,7 @@ Drawn for [M18](../in-development/M18-sign-in-options.md#design-artboards), befo
 | `HelpCenter/WebForm-Verify` | M18-10 | [HelpCenter-WebForm-Verify.png](screens/m18/HelpCenter-WebForm-Verify.png) | [HelpCenterWebFormVerify.dc.html](artboards/HelpCenterWebFormVerify.dc.html) |
 | `Admin/Channels-Widget-BotProtection` | M18-10 | [Admin-Channels-Widget-BotProtection.png](screens/m18/Admin-Channels-Widget-BotProtection.png) | [AdminChannelsWidgetBotProtection.dc.html](artboards/AdminChannelsWidgetBotProtection.dc.html) |
 | `Admin/AcceptInvite-Providers` | M18-07 | [Admin-AcceptInvite-Providers.png](screens/m18/Admin-AcceptInvite-Providers.png) | [AdminAcceptInviteProviders.dc.html](artboards/AdminAcceptInviteProviders.dc.html) |
+| `Admin/UX-Fixes-2026-11` | #451 | [Admin-UX-Fixes-2026-11.png](screens/m18/Admin-UX-Fixes-2026-11.png) | [AdminUxFixes.dc.html](artboards/AdminUxFixes.dc.html) |
 
 ## Gallery
 
@@ -801,6 +802,8 @@ Drawn for [M14](../completed/M14-inbox-productivity.md#artboards-to-draw), befor
 
 #### `Admin/Settings-Shell`
 
+> Superseded by `Admin/UX-Fixes-2026-11` (see the end of this file) for the sidebar and the Settings navigation: Settings is a tree in the main sidebar and has no second column.
+
 ![Admin/Settings-Shell](screens/m14/Admin-Settings-Shell.png)
 
 #### `Admin/Empty-States`
@@ -862,3 +865,11 @@ Drawn for [M18](../in-development/M18-sign-in-options.md#design-artboards), befo
 #### `Admin/AcceptInvite-Providers`
 
 ![Admin/AcceptInvite-Providers](screens/m18/Admin-AcceptInvite-Providers.png)
+
+### UX fixes, 2026-11
+
+Built from [`Admin/UX-Fixes-2026-11`](artboards/AdminUxFixes.dc.html) (issue #451). It supersedes the Settings secondary column of `Admin/Settings-Shell` (M14-21): Settings, Tickets, Contacts and Help center are one tree in the main sidebar, with an icon on every entry. It also defines the Statuses table, the widget live preview by mode, the collapsed-sidebar flyout and the page not found.
+
+#### `Admin/UX-Fixes-2026-11`
+
+![Admin/UX-Fixes-2026-11](screens/m18/Admin-UX-Fixes-2026-11.png)

@@ -81,6 +81,12 @@ export const auditActionFilterSchema = z
 /** The install-wide rows' own filter value, since they carry no brand. */
 export const AUDIT_INSTALL_BRAND = 'install';
 
+/** The action every install-scope page load writes (`apps/api/src/tenant`). */
+export const AUDIT_PAGE_VIEW_ACTION = 'install.scope.access';
+
+/** A boolean in a query string, safe to parse twice (see `contact.ts`'s `queryBoolean`). */
+const queryBoolean = z.union([z.boolean(), z.stringbool()]);
+
 export const auditLogQuerySchema = z
   .object({
     /** A staff member's name or email, or an actor id. */
@@ -96,6 +102,12 @@ export const auditLogQuerySchema = z
     brand: z.union([z.uuid(), z.literal(AUDIT_INSTALL_BRAND)]).optional(),
     from: z.iso.datetime({ offset: true }).optional(),
     to: z.iso.datetime({ offset: true }).optional(),
+    /**
+     * Every admin page load writes an `install.scope.access` row, which buries
+     * the real changes. They are left out unless this is `true`, or the
+     * `action` filter asks for them by name. The rows are written either way.
+     */
+    includePageViews: queryBoolean.default(false),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(AUDIT_PAGE_SIZE),
   })

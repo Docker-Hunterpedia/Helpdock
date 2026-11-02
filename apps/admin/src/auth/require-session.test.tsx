@@ -56,12 +56,18 @@ describe('RequireSession', () => {
     expect(await screen.findByRole('heading', { name: 'My open' })).toBeInTheDocument();
   });
 
-  it('sends an unknown path to the default screen', async () => {
-    renderApp(<AppRoutes />, {
+  it('draws "Page not found" for an unknown path, and the default screen for the bare address', async () => {
+    const { unmount } = renderApp(<AppRoutes />, {
       ...signedIn(await signedInMockApis()),
       initialEntries: ['/nowhere'],
     });
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+    unmount();
 
+    renderApp(<AppRoutes />, {
+      ...signedIn(await signedInMockApis()),
+      initialEntries: ['/'],
+    });
     expect(await screen.findByRole('heading', { name: 'My open' })).toBeInTheDocument();
   });
 });

@@ -31,15 +31,6 @@ describe('SystemQueuesPage', () => {
     ).toBeVisible();
   });
 
-  it('offers the way back to the System page', async () => {
-    renderApp(<SystemQueuesPage api={apiReturning()} />);
-
-    expect(await screen.findByRole('link', { name: 'Back' })).toHaveAttribute(
-      'href',
-      '/settings/install/system',
-    );
-  });
-
   it('draws a refusal as "Not allowed"', async () => {
     renderApp(<SystemQueuesPage api={apiThrowing(new NotAllowedError())} />);
 

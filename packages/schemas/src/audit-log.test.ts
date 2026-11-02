@@ -22,6 +22,14 @@ describe('auditLogQuerySchema', () => {
     expect(auditLogQuerySchema.parse({}).limit).toBe(AUDIT_PAGE_SIZE);
   });
 
+  it('leaves the page-view rows out unless asked, in a query string or as a boolean', () => {
+    expect(auditLogQuerySchema.parse({}).includePageViews).toBe(false);
+    expect(auditLogQuerySchema.parse({ includePageViews: 'true' }).includePageViews).toBe(true);
+    // A query is parsed twice (the global pipe, then the route's): the boolean must survive it.
+    expect(auditLogQuerySchema.parse({ includePageViews: true }).includePageViews).toBe(true);
+    expect(auditLogQuerySchema.safeParse({ includePageViews: 'maybe' }).success).toBe(false);
+  });
+
   it('takes a brand id or the install', () => {
     expect(auditLogQuerySchema.safeParse({ brand: 'install' }).success).toBe(true);
     expect(auditLogQuerySchema.safeParse({ brand: 'acme' }).success).toBe(false);

@@ -47,7 +47,14 @@ export function BrandSwitcher({
         <SidebarMenuTrigger label={label} menuId={menuId} open={anchor !== null} onOpen={setAnchor}>
           {mark}
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="bodyStrong" noWrap component="span" sx={{ display: 'block' }}>
+            {/* dir="auto": a Latin name keeps its start (and loses its end) in the Arabic UI. */}
+            <Typography
+              variant="bodyStrong"
+              noWrap
+              component="span"
+              dir="auto"
+              sx={{ display: 'block', textAlign: 'start' }}
+            >
               {brand.name}
             </Typography>
             <Typography
@@ -89,7 +96,7 @@ export function BrandSwitcher({
               <Box sx={{ width: 16, display: 'grid', placeItems: 'center' }}>
                 {isCurrent ? <Check size={16} aria-hidden="true" /> : null}
               </Box>
-              {candidate.name}
+              <bdi>{candidate.name}</bdi>
             </MenuItem>
           );
         })}

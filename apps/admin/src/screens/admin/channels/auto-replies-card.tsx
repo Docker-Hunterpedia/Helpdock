@@ -13,6 +13,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'reac
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { useEmailApi } from '../../../auth/session.tsx';
+import { isDirty } from '../../../ui/dirty.js';
 import { SectionCard, useEmailAction } from './section-card.tsx';
 import { TemplateDialog } from './template-dialog.tsx';
 
@@ -94,6 +95,8 @@ export function AutoRepliesCard({
     }
   };
 
+  const dirty = isDirty(draft, draftOf(stored));
+
   const templateLinks = (kind: AutoReplyKind): ReactNode => (
     <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBlockStart: 1 }}>
       {(['en', 'ar'] as const).map((locale) => (
@@ -132,7 +135,7 @@ export function AutoRepliesCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               setDraft(draftOf(stored));
               setCapWrong(false);
@@ -140,7 +143,7 @@ export function AutoRepliesCard({
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:autoReplies.save')}
           </Button>
         </>

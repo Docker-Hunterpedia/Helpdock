@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 // Each configured locale runs this UI fixture; native API/profile checks use
@@ -12,7 +12,7 @@ test('connects Zoho in the selected region after correcting an invalid organizat
   const t = strings(locale);
   await signIn(page, locale);
   await openSettingsArea(page, t, 'brand');
-  await settingsTab(page, t, 'brand:tabs.import').click();
+  await clickSettingsTab(page, t, 'brand:tabs.import');
   await page.getByRole('button', { name: /Zoho Desk/ }).click();
   await expect(page.getByText(t('imports:connection.zoho.caption'))).toBeVisible();
   await page.getByRole('combobox', { name: t('imports:connection.zoho.region') }).click();

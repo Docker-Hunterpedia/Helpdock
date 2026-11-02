@@ -27,7 +27,7 @@
     "all": "All tickets",
     "partialCount": "{{count}}+",
     "mine": "Mine",
-    "new": "Save as a view",
+    "new": "New view",
     "actions": "Actions for {{name}}",
     "edit": "Edit filters",
     "rename": "Rename",

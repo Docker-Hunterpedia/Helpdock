@@ -19,7 +19,6 @@
   "searchPlaceholder": "الاسم أو البريد أو الهاتف أو @تيليجرام",
   "accountSearchPlaceholder": "الشركة أو النطاق",
   "segment": {
-    "label": "ماذا تعرض",
     "people": "الأشخاص",
     "accounts": "الشركات"
   },

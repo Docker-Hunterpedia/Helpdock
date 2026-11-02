@@ -24,6 +24,7 @@ import { useSemanticTokens } from '../../../app/tokens.js';
 import { useEmailApi } from '../../../auth/session.tsx';
 import { SmtpPasswordRequiredError } from '../../../email/api.js';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
+import { isDirty } from '../../../ui/dirty.js';
 import { Field } from '../../../ui/field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { addedOn } from '../ticketing/spam-format.js';
@@ -151,6 +152,8 @@ export function SmtpCard({
     setDraft((held) => ({ ...held, ...patch }));
   };
 
+  const dirty = isDirty(draft, draftOf(settings));
+
   const stored = settings.smtp;
 
   return (
@@ -163,7 +166,7 @@ export function SmtpCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               setDraft(draftOf(settings));
               setProblem(null);
@@ -171,7 +174,7 @@ export function SmtpCard({
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:smtp.save')}
           </Button>
         </>

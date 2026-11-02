@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -33,7 +33,7 @@ const openRouting = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
   await openSettingsArea(page, t, 'automation');
-  await settingsTab(page, t, 'rules:tabs.routing').click();
+  await clickSettingsTab(page, t, 'rules:tabs.routing');
   await page.getByRole('heading', { name: t('rules:routing.heading') }).waitFor();
 };
 

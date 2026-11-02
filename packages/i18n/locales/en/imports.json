@@ -24,7 +24,8 @@
     "caption": "Choose where your history is now. Connectors read through the source API; files work with other tools.",
     "automatic": "Automatic",
     "manual": "Manual mapping",
-    "unavailable": "This connector is not available on this install."
+    "unavailable": "This connector is not available on this install.",
+    "unavailableGroup": "Not available on this install"
   },
   "descriptions": {
     "zendesk": "Tickets, comments, users, organizations, ratings and Guide articles.",

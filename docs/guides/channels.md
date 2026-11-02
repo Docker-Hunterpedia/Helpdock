@@ -79,3 +79,13 @@ bots before the first message**, then pick a **Provider**
 
 Slack and Discord are on the v1.1 backlog
 ([REQUIREMENTS §6](../planning/REQUIREMENTS.md#6-add-on-features-v11-backlog)).
+
+## The widget's live preview
+
+**Channels › Chat widget** shows a live preview beside Appearance from a 1200 px window and keeps it in view while you scroll the form (below that it sits under the card). It draws the widget as a visitor would see it with the changes you have not saved yet:
+
+- the selected **Mode**: Chat (greeting and a composer), Chat and suggested articles (the articles above the composer), Help center (a search, articles and **Contact us**) or Contact form (an email and a message box with **Send**);
+- the **Light or dark** choice: Light and Dark fix the preview and hide its theme toggle, and Auto keeps the toggle so you can look at both;
+- the visitor's language, with its own English and Arabic toggle, whatever language the admin is in.
+
+The caption says whether the pre-chat form is on only for the two chat modes, which are the ones that show it. Save and Discard on every card of the page stay disabled until the card has a change.

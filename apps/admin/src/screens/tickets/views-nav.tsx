@@ -1,7 +1,21 @@
 import type { TicketView, TicketViewCount } from '@helpdock/schemas';
 import { Box, IconButton, ListItemIcon, Menu, MenuItem, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, Ellipsis, ListFilter, Pencil, Plus, Share2, Trash2 } from 'lucide-react';
+import {
+  AlarmClock,
+  CircleArrowUp,
+  ClockAlert,
+  Ellipsis,
+  Inbox,
+  ListFilter,
+  type LucideIcon,
+  Pencil,
+  Plus,
+  Share2,
+  Trash2,
+  UserCheck,
+  UserX,
+} from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
@@ -9,7 +23,6 @@ import { usePreferences } from '../../app/providers.tsx';
 import { ROUTES } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useSession, useTicketsApi } from '../../auth/session.tsx';
-import { useViewsCollapsed } from '../../shell/views-collapse.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import {
   ALL_VIEW,
@@ -42,16 +55,28 @@ import { RenameViewDialog, ShareViewDialog } from './view-dialogs.tsx';
 
 const COUNT_STALE_MS = 30_000;
 
+/** The icon of a view's row (`Admin/UX-Fixes-2026-11`, icon sheet); a custom view is a filter. */
+const viewIcon = (view: TicketView): LucideIcon => {
+  switch (view.builtIn) {
+    case 'my_open':
+      return UserCheck;
+    case 'unassigned':
+      return UserX;
+    case 'overdue':
+      return ClockAlert;
+    case 'escalated':
+      return CircleArrowUp;
+    case 'snoozed':
+      return AlarmClock;
+    default:
+      return ListFilter;
+  }
+};
+
 export function TicketViewsNav({
   onNavigate,
-  foldable = true,
 }: {
   readonly onNavigate?: (() => void) | undefined;
-  /**
-   * The group folds under its label, and the fold is remembered per person
-   * (M14-21). The rail's popover lists the views and has nothing to fold.
-   */
-  readonly foldable?: boolean;
 }): ReactNode {
   const t = useT();
   const { locale } = usePreferences();
@@ -60,14 +85,10 @@ export function TicketViewsNav({
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
   const [params] = useSearchParams();
-  const labelId = useId();
   const mineId = useId();
   const palette = useSemanticTokens();
   const brand = currentBrand(session);
   const actions = useViewActions();
-  const fold = useViewsCollapsed(session.user.id);
-  const folded = foldable && fold.collapsed;
-  const listId = useId();
 
   const [menuFor, setMenuFor] = useState<{ view: TicketView; anchor: HTMLElement } | null>(null);
   const [renaming, setRenaming] = useState<TicketView | null>(null);
@@ -114,6 +135,7 @@ export function TicketViewsNav({
     <ViewLink
       key={view.id}
       label={viewLabel(view, locale)}
+      icon={viewIcon(view)}
       to={`${ROUTES.tickets}${viewSearch(view.id)}`}
       active={selected === view.id}
       count={countOf(view)}
@@ -139,83 +161,13 @@ export function TicketViewsNav({
   return (
     <>
       <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          paddingInline: 3,
-          marginBlock: '16px 4px',
-        }}
-      >
-        {foldable ? (
-          <Box
-            component="button"
-            type="button"
-            id={labelId}
-            aria-expanded={!folded}
-            aria-controls={listId}
-            onClick={fold.toggle}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              flex: 1,
-              minWidth: 0,
-              height: 24,
-              padding: 0,
-              border: 0,
-              background: 'none',
-              color: 'text.secondary',
-              font: 'inherit',
-              fontSize: 12,
-              textAlign: 'start',
-              cursor: 'pointer',
-              '&:focus-visible': {
-                outline: `2px solid ${palette['border.focus']}`,
-                outlineOffset: 2,
-              },
-            }}
-          >
-            <ChevronDown
-              size={14}
-              aria-hidden="true"
-              style={{
-                flexShrink: 0,
-                transform: folded ? `rotate(${locale === 'ar' ? 90 : -90}deg)` : undefined,
-              }}
-            />
-            {t('tickets:views.label')}
-          </Box>
-        ) : (
-          <Typography
-            id={labelId}
-            component="p"
-            variant="caption"
-            sx={{ color: 'text.secondary', flex: 1 }}
-          >
-            {t('tickets:views.label')}
-          </Typography>
-        )}
-        <IconButton
-          size="small"
-          component={Link}
-          to={saveLink}
-          onClick={onNavigate}
-          aria-label={t('tickets:views.new')}
-          sx={{ width: 24, height: 24 }}
-        >
-          <Plus size={14} aria-hidden="true" />
-        </IconButton>
-      </Box>
-
-      <Box
-        id={listId}
-        hidden={folded}
         component="ul"
-        aria-labelledby={labelId}
+        aria-label={t('tickets:views.label')}
         sx={{ listStyle: 'none', margin: 0, padding: 0 }}
       >
         <ViewLink
           label={t('tickets:views.all')}
+          icon={Inbox}
           to={`${ROUTES.tickets}${viewSearch(ALL_VIEW)}`}
           active={selected === ALL_VIEW}
           onNavigate={onNavigate}
@@ -223,7 +175,7 @@ export function TicketViewsNav({
         {shared.map(row)}
       </Box>
 
-      {mine.length === 0 || folded ? null : (
+      {mine.length === 0 ? null : (
         <>
           <Typography
             id={mineId}
@@ -246,6 +198,21 @@ export function TicketViewsNav({
           </Box>
         </>
       )}
+
+      <Link
+        to={saveLink}
+        onClick={onNavigate}
+        style={{ textDecoration: 'none', color: palette['action.primary'], display: 'block' }}
+      >
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: 32, paddingInline: 3 }}
+        >
+          <Plus size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+          <Typography component="span" variant="body2" sx={{ color: 'inherit' }}>
+            {t('tickets:views.new')}
+          </Typography>
+        </Box>
+      </Link>
 
       <Menu
         anchorEl={menuFor?.anchor ?? null}
@@ -393,6 +360,7 @@ export function TicketViewsNav({
 
 function ViewLink({
   label,
+  icon: Icon,
   to,
   active,
   count,
@@ -402,6 +370,7 @@ function ViewLink({
   menuLabel,
 }: {
   readonly label: string;
+  readonly icon: LucideIcon;
   readonly to: string;
   readonly active: boolean;
   readonly count?: string | undefined;
@@ -446,6 +415,7 @@ function ViewLink({
             fontWeight: active ? 500 : 400,
           }}
         >
+          <Icon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
           <Typography
             component="span"
             variant="body2"

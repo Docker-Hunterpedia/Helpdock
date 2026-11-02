@@ -9,6 +9,8 @@ import { channelsRoute, ROUTES } from '../../../app/route-paths.js';
 import { currentBrand, useEmailApi, useSession } from '../../../auth/session.tsx';
 import { emailKeys } from '../../../email/api.js';
 import { PageHeader } from '../../../shell/page-header.tsx';
+import { telegramKeys } from '../../../telegram/api.js';
+import { useTelegramApi } from '../../../telegram/context.tsx';
 import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
@@ -43,6 +45,14 @@ export function ChannelsPage(): ReactNode {
   const { tab: segment, botId, accountId } = useParams();
   const tabs = channelsTabsFor(session.user.role);
   const [addingBot, setAddingBot] = useState(false);
+  // The same read the Telegram list makes: with no bots its empty state carries the one "Add bot" button.
+  const telegram = useTelegramApi();
+  const bots = useQuery({
+    queryKey: telegramKeys.bots(brand.id),
+    queryFn: () => telegram.bots(brand.id),
+    enabled: segment === 'telegram',
+  });
+  const noBots = bots.data?.bots.length === 0;
   const [connecting, setConnecting] = useState(false);
 
   // The two account pages are routes of their own, so the tab comes from which
@@ -71,16 +81,18 @@ export function ChannelsPage(): ReactNode {
               {t('channels:addMailbox')}
             </Button>
           ) : tab.key === 'telegram' && botId === undefined ? (
-            <Button
-              variant="contained"
-              aria-haspopup="dialog"
-              startIcon={<Plus size={16} aria-hidden="true" />}
-              onClick={() => {
-                setAddingBot(true);
-              }}
-            >
-              {t('channels:addBot')}
-            </Button>
+            noBots ? undefined : (
+              <Button
+                variant="contained"
+                aria-haspopup="dialog"
+                startIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={() => {
+                  setAddingBot(true);
+                }}
+              >
+                {t('channels:addBot')}
+              </Button>
+            )
           ) : tab.key === 'meta' && accountId === undefined ? (
             <Button
               variant="contained"

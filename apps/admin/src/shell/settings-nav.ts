@@ -1,5 +1,57 @@
 import type { StaffRole } from '@helpdock/schemas';
 import {
+  Activity,
+  Archive,
+  Bell,
+  BookMarked,
+  Bot,
+  CircleDot,
+  CircleUser,
+  ClipboardList,
+  Clock,
+  Code,
+  Download,
+  Globe,
+  Hourglass,
+  IdCard,
+  Inbox,
+  KeyRound,
+  LayoutTemplate,
+  ListFilter,
+  ListOrdered,
+  LockKeyhole,
+  LogIn,
+  type LucideIcon,
+  Mail,
+  MessageCircle,
+  MessageSquare,
+  MessagesSquare,
+  Network,
+  Palette,
+  PenLine,
+  Plug,
+  Reply,
+  Route,
+  ScrollText,
+  Send,
+  Server,
+  Settings,
+  Shield,
+  ShieldBan,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
+  Tag,
+  TextCursorInput,
+  Timer,
+  TriangleAlert,
+  UserCheck,
+  UsersRound,
+  Webhook,
+  Workflow,
+  Zap,
+} from 'lucide-react';
+import {
   aiRoute,
   automationRoute,
   brandRoute,
@@ -48,6 +100,8 @@ export interface SettingsEntry {
   readonly group: SettingsGroupId;
   readonly path: string;
   readonly labelKey: CatalogKey;
+  /** A 16 px Lucide icon, drawn beside the label wherever the page is listed. */
+  readonly icon: LucideIcon;
   /** The Danger zone is drawn in the danger hue (DESIGN §2.3). */
   readonly danger?: true;
   readonly visibleTo: (viewer: SettingsViewer) => boolean;
@@ -65,6 +119,66 @@ export const SETTINGS_GROUPS: readonly SettingsGroupId[] = [
 
 export const settingsGroupLabelKey = (group: SettingsGroupId): CatalogKey =>
   `admin:settings.groups.${group}`;
+
+/**
+ * The 16 px icon of each page (`Admin/UX-Fixes-2026-11`, icon sheet), keyed by
+ * entry id. Kept beside the entries so a new page cannot be added without one:
+ * the unit test fails on a page that falls back to the gear.
+ */
+const ICON_OF: Readonly<Record<string, LucideIcon>> = {
+  accountProfile: IdCard,
+  yourNotifications: Bell,
+  accountSecurity: Shield,
+  accountSignature: PenLine,
+  brandGeneral: SlidersHorizontal,
+  brandDomains: Globe,
+  brandRetention: Archive,
+  brandDanger: TriangleAlert,
+  ticketingDepartments: Network,
+  ticketingStatuses: CircleDot,
+  ticketingTags: Tag,
+  ticketingCustomFields: TextCursorInput,
+  ticketingTemplates: LayoutTemplate,
+  ticketingViews: ListFilter,
+  ticketingAssignment: UserCheck,
+  ticketingBusinessHours: Clock,
+  ticketingSlas: Timer,
+  ticketingSpam: ShieldBan,
+  ticketingFeedback: Star,
+  automationRules: Workflow,
+  automationTimeBased: Hourglass,
+  automationMacros: Zap,
+  automationRouting: Route,
+  channelsMailboxes: Mail,
+  channelsOutgoing: Reply,
+  channelsTelegram: Send,
+  channelsMeta: MessageCircle,
+  channelsWidget: MessageSquare,
+  channelsWebForm: ClipboardList,
+  aiProviders: Plug,
+  aiKnowledge: BookMarked,
+  aiAssistant: Bot,
+  developersApi: KeyRound,
+  developersWebhooks: Webhook,
+  settings: LockKeyhole,
+  sso: LogIn,
+  staff: UsersRound,
+  system: Activity,
+  systemAuditLog: ScrollText,
+  systemQueues: ListOrdered,
+  brandImport: Download,
+};
+
+/** The icon and label of each Settings group of the sidebar tree. */
+export const SETTINGS_GROUP_ICONS: Readonly<Record<SettingsGroupId, LucideIcon>> = {
+  account: CircleUser,
+  brand: Palette,
+  inbox: Inbox,
+  channels: MessagesSquare,
+  ai: Sparkles,
+  developers: Code,
+  install: Server,
+};
 
 const everyone = (): boolean => true;
 
@@ -98,7 +212,15 @@ const entry = (
   labelKey: CatalogKey,
   visibleTo: SettingsEntry['visibleTo'],
   extra: { danger?: true } = {},
-): SettingsEntry => ({ id, group, path, labelKey, visibleTo, ...extra });
+): SettingsEntry => ({
+  id,
+  group,
+  path,
+  labelKey,
+  icon: ICON_OF[id] ?? Settings,
+  visibleTo,
+  ...extra,
+});
 
 const ticketing = (id: string, segment: string, labelKey: CatalogKey): SettingsEntry =>
   entry(id, 'inbox', ticketingRoute(segment), labelKey, offeredBy('ticketing'));
@@ -117,13 +239,19 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
 
   entry('brandGeneral', 'brand', brandRoute('general'), 'brand:tabs.general', offeredBy('brand')),
   entry('brandDomains', 'brand', brandRoute('domains'), 'brand:tabs.domains', offeredBy('brand')),
+  entry(
+    'brandRetention',
+    'brand',
+    brandRoute('retention'),
+    'brand:tabs.retention',
+    offeredBy('brand'),
+  ),
   entry('brandDanger', 'brand', brandRoute('danger'), 'brand:tabs.danger', offeredBy('brand'), {
     danger: true,
   }),
 
   ticketing('ticketingDepartments', 'departments', 'ticketing:tabs.departments'),
   ticketing('ticketingStatuses', 'statuses', 'ticketing:tabs.statuses'),
-  ticketing('ticketingPriorities', 'priorities', 'ticketing:tabs.priorities'),
   ticketing('ticketingTags', 'tags', 'ticketing:tabs.tags'),
   ticketing('ticketingCustomFields', 'custom-fields', 'ticketing:tabs.customFields'),
   ticketing('ticketingTemplates', 'templates', 'ticketing:tabs.templates'),
@@ -252,6 +380,16 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
   entry('sso', 'install', ROUTES.sso, 'sso:title', installAdminOnly),
   entry('staff', 'install', ROUTES.staff, 'admin:nav.staff', offeredBy('staff')),
   entry('system', 'install', ROUTES.system, 'admin:nav.system', installAdminOnly),
+  // The two pages that hang off System are pages of the Install group, so the
+  // sidebar tree reaches them and neither page needs a "Back" button.
+  entry(
+    'systemAuditLog',
+    'install',
+    ROUTES.systemAuditLog,
+    'system:auditLog.title',
+    installAdminOnly,
+  ),
+  entry('systemQueues', 'install', ROUTES.systemQueues, 'system:queues.title', installAdminOnly),
   entry(
     'brandImport',
     'install',

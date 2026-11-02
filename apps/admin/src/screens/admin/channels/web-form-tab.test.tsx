@@ -60,7 +60,7 @@ describe('Channels › Web form', () => {
 
     await user.click(within(hosted).getByRole('checkbox', { name: 'Show Plan' }));
     await user.click(within(hosted).getByRole('checkbox', { name: 'Plan is required' }));
-    await user.click(within(hosted).getByRole('checkbox', { name: 'The form is on' }));
+    await user.click(within(hosted).getByRole('checkbox', { name: 'Turn this form on' }));
     await user.click(within(hosted).getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('Web form saved')).toBeVisible();

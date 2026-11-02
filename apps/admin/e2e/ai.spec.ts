@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -26,7 +26,7 @@ const openAi = async (page: Page, locale: Locale): Promise<void> => {
 const openAssistant = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await openAi(page, locale);
-  await settingsTab(page, t, 'aiSettings:tabs.assistant').click();
+  await clickSettingsTab(page, t, 'aiSettings:tabs.assistant');
   await page.getByRole('region', { name: t('aiSettings:modes.heading') }).waitFor();
 };
 
@@ -147,7 +147,7 @@ test.describe('AI knowledge', () => {
   const openKnowledge = async (page: Page, locale: Locale): Promise<void> => {
     const t = strings(locale);
     await openAi(page, locale);
-    await settingsTab(page, t, 'aiSettings:tabs.knowledge').click();
+    await clickSettingsTab(page, t, 'aiSettings:tabs.knowledge');
     await page.getByRole('table', { name: t('aiSettings:knowledge.tableLabel') }).waitFor();
   };
 

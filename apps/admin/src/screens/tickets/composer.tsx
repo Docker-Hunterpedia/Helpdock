@@ -31,6 +31,7 @@ import {
   useShortcutHandlers,
 } from '../../keyboard/keyboard-provider.tsx';
 import type { ShortcutId } from '../../keyboard/registry.js';
+import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { PlaceholderPicker } from '../admin/automation/placeholder-picker.tsx';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import {
@@ -609,6 +610,8 @@ export function Composer({
           size="small"
           value={thenStatusId}
           label={t('tickets:composer.thenSetStatus')}
+          // One toolbar row (`Admin/Ticket-CompactComposer`): the name is for the screen reader, the box says what it does.
+          slotProps={{ inputLabel: { sx: visuallyHidden } }}
           onChange={(event) => {
             onThenStatusChange(event.target.value);
           }}

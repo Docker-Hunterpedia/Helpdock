@@ -5,7 +5,6 @@
   "tabs": {
     "departments": "الأقسام",
     "statuses": "الحالات",
-    "priorities": "الأولويات",
     "tags": "الوسوم",
     "customFields": "الحقول المخصّصة",
     "templates": "القوالب",
@@ -15,10 +14,6 @@
     "feedback": "الملاحظات",
     "businessHours": "ساعات العمل",
     "slas": "اتفاقيات مستوى الخدمة"
-  },
-  "soon": {
-    "heading": "لم تُبنَ بعد",
-    "body": "تصل {{tab}} مع {{milestone}}."
   },
   "departments": {
     "add": "إضافة قسم",
@@ -167,11 +162,11 @@
       "systemState": "حالة النظام",
       "pausesSla": "توقف مؤقّت لاتفاقية الخدمة",
       "awaitingCustomer": "بانتظار العميل",
-      "tickets": "التذاكر",
       "rowActions": "إجراءات {{name}}",
       "dragHandle": "إعادة ترتيب {{name}}",
       "select": "تحرير {{name}}",
-      "checked": "نعم"
+      "checked": "نعم",
+      "type": "النوع"
     },
     "chips": {
       "default": "افتراضية",
@@ -220,7 +215,13 @@
       "reopenRefused_two": "تحتوي «{{name}}» على تذكرتين مغلقتين. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
       "reopenRefused_few": "تحتوي «{{name}}» على {{count, number(numberingSystem: latn)}} تذاكر مغلقة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
       "reopenRefused_many": "تحتوي «{{name}}» على {{count, number(numberingSystem: latn)}} تذكرة مغلقة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
-      "reopenRefused_other": "تحتوي «{{name}}» على {{count, number(numberingSystem: latn)}} تذكرة مغلقة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة."
+      "reopenRefused_other": "تحتوي «{{name}}» على {{count, number(numberingSystem: latn)}} تذكرة مغلقة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
+      "ticketCount_one": "تذكرة واحدة في هذه الحالة",
+      "ticketCount_other": "{{count}} تذكرة في هذه الحالة",
+      "ticketCount_zero": "لا توجد تذاكر في هذه الحالة",
+      "ticketCount_two": "تذكرتان في هذه الحالة",
+      "ticketCount_few": "{{count}} تذاكر في هذه الحالة",
+      "ticketCount_many": "{{count}} تذكرة في هذه الحالة"
     },
     "colours": {
       "info": "أزرق",
@@ -472,7 +473,7 @@
       "subject": "الموضوع",
       "subjectHint": "العناصر النائبة التي يمكنك استخدامها:",
       "body": "النص",
-      "bodyHint": "نص عادي في هذا الإصدار. المحرر الغني يصل مع M5.",
+      "bodyHint": "نص عادي حاليًا.",
       "defaultTags": "الوسوم الافتراضية",
       "defaultTagsHint": "تُطبَّق على كل تذكرة تُنشأ من هذا القالب.",
       "customDefaults": "القيم الافتراضية للحقول المخصصة",

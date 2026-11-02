@@ -36,13 +36,13 @@ const itemFor = (domain: string): HTMLElement => {
 };
 
 describe('Brand › Domains', () => {
-  it('sits between General and Danger zone, and is selected', async () => {
+  it('sits between General and Data retention, and is selected', async () => {
     await renderDomains();
 
     const brand = within(screen.getByRole('list', { name: 'Brand' }))
       .getAllByRole('link')
       .map((link) => link.textContent);
-    expect(brand).toEqual(['General', 'Domains', 'Danger zone']);
+    expect(brand).toEqual(['General', 'Domains', 'Data retention', 'Danger zone']);
     expect(settingsLink('Domains')).toHaveAttribute('aria-current', 'page');
   });
 

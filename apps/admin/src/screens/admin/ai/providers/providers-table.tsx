@@ -14,6 +14,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../../../app/i18n.js';
 import { usePreferences } from '../../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../../app/tokens.js';
+import { EmptyState } from '../../../../shell/empty-state.tsx';
 import { EnvChip } from '../../../../ui/env-locked-field.tsx';
 import { visuallyHidden } from '../../../../ui/visually-hidden.js';
 import { SectionCard } from '../../channels/section-card.tsx';
@@ -37,58 +38,63 @@ export function ProvidersTable({
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
+  const empty = overview.providers.length === 0;
+  const addButton = (
+    <Button variant="contained" startIcon={<Plus size={16} aria-hidden="true" />} onClick={onAdd}>
+      {t('aiSettings:providers.add')}
+    </Button>
+  );
 
   return (
     <SectionCard
       id="ai-providers"
       heading={t('aiSettings:providers.heading')}
       caption={t('aiSettings:providers.caption')}
-      aside={
-        overview.locked.providers ? (
-          <EnvChip />
-        ) : (
-          <Button
-            variant="contained"
-            startIcon={<Plus size={16} aria-hidden="true" />}
-            onClick={onAdd}
-          >
-            {t('aiSettings:providers.add')}
-          </Button>
-        )
-      }
+      aside={overview.locked.providers ? <EnvChip /> : empty ? undefined : addButton}
     >
-      <Box sx={{ marginInline: -5, marginBlock: -5, overflowX: 'auto' }}>
-        <Table size="small" aria-label={t('aiSettings:providers.tableLabel')}>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: tokens['bg.muted'] }}>
-              <TableCell>{t('aiSettings:providers.columns.provider')}</TableCell>
-              <TableCell>{t('aiSettings:providers.columns.credential')}</TableCell>
-              <TableCell>
-                <Box component="span" sx={visuallyHidden}>
-                  {t('aiSettings:providers.columns.actions')}
-                </Box>
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {overview.providers.map((provider) => (
-              <ProviderRow
-                key={provider.id}
-                provider={provider}
-                isDefault={overview.defaults.providerId === provider.id}
-                lockedByEnv={overview.locked.providers}
-                open={provider.id === selected}
-                onOpen={() => {
-                  onOpen(provider.id);
-                }}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </Box>
-      <Typography variant="caption" sx={{ color: 'text.secondary', paddingBlockStart: 4 }}>
-        {t('aiSettings:providers.footer')}
-      </Typography>
+      {empty ? (
+        <EmptyState
+          icon={Server}
+          heading={t('aiSettings:providers.emptyState.heading')}
+          body={t('aiSettings:providers.emptyState.body')}
+          action={overview.locked.providers ? undefined : addButton}
+        />
+      ) : (
+        <>
+          <Box sx={{ marginInline: -5, marginBlock: -5, overflowX: 'auto' }}>
+            <Table size="small" aria-label={t('aiSettings:providers.tableLabel')}>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: tokens['bg.muted'] }}>
+                  <TableCell>{t('aiSettings:providers.columns.provider')}</TableCell>
+                  <TableCell>{t('aiSettings:providers.columns.credential')}</TableCell>
+                  <TableCell>
+                    <Box component="span" sx={visuallyHidden}>
+                      {t('aiSettings:providers.columns.actions')}
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {overview.providers.map((provider) => (
+                  <ProviderRow
+                    key={provider.id}
+                    provider={provider}
+                    isDefault={overview.defaults.providerId === provider.id}
+                    lockedByEnv={overview.locked.providers}
+                    open={provider.id === selected}
+                    onOpen={() => {
+                      onOpen(provider.id);
+                    }}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+          <Typography variant="caption" sx={{ color: 'text.secondary', paddingBlockStart: 4 }}>
+            {t('aiSettings:providers.footer')}
+          </Typography>
+        </>
+      )}
     </SectionCard>
   );
 }

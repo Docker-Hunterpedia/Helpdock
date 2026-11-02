@@ -174,7 +174,8 @@ describe('Channels › Telegram', () => {
     expect(
       await screen.findByRole('heading', { name: 'No Telegram bots yet' }, LOAD),
     ).toBeVisible();
-    expect(screen.getAllByRole('button', { name: 'Add bot' })).toHaveLength(2);
+    // The empty state carries the one button; the header does not repeat it.
+    expect(screen.getAllByRole('button', { name: 'Add bot' })).toHaveLength(1);
   });
 });
 

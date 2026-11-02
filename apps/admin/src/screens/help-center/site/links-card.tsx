@@ -19,6 +19,9 @@ import { useSiteSave } from './use-site.js';
 
 type Place = keyof HcLinks;
 
+import { isDirty } from '../../../ui/dirty.js';
+import { visuallyHidden } from '../../../ui/visually-hidden.js';
+
 /**
  * "Header and footer links" (M5-06, `Admin/HelpCenter-Settings`): two ordered
  * tables of links, each a label per language and an address. A row moves with
@@ -51,6 +54,8 @@ export function LinksCard({
     setDraft({ ...draft, [place]: rows });
   };
 
+  const dirty = isDirty(draft, links);
+
   return (
     <SectionCard
       id={`${id}-links`}
@@ -67,10 +72,14 @@ export function LinksCard({
         ? {
             footer: (
               <>
-                <Button variant="text" disabled={save.isPending} onClick={() => setDraft(links)}>
+                <Button
+                  variant="text"
+                  disabled={save.isPending || !dirty}
+                  onClick={() => setDraft(links)}
+                >
                   {t('helpCenter:settings.discard')}
                 </Button>
-                <Button type="submit" variant="contained" disabled={save.isPending}>
+                <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
                   {t('helpCenter:settings.save')}
                 </Button>
               </>
@@ -149,16 +158,24 @@ function LinkTable({
           }}
         >
           {canManage ? (
-            <Box role="columnheader" sx={visuallyHidden}>
-              {t('helpCenter:site.links.order')}
+            <Box role="columnheader">
+              {/* Hidden text in a visible cell: an absolutely positioned header
+                  would leave the grid and push the others one column left. */}
+              <Box component="span" sx={visuallyHidden}>
+                {t('helpCenter:site.links.order')}
+              </Box>
             </Box>
           ) : null}
           <Box role="columnheader">{t('helpCenter:site.links.english')}</Box>
           <Box role="columnheader">{t('helpCenter:site.links.arabic')}</Box>
           <Box role="columnheader">{t('helpCenter:site.links.address')}</Box>
           {canManage ? (
-            <Box role="columnheader" sx={visuallyHidden}>
-              {t('helpCenter:site.links.removeColumn')}
+            <Box role="columnheader">
+              {/* Hidden text in a visible cell: an absolutely positioned header
+                  would leave the grid and push the others one column left. */}
+              <Box component="span" sx={visuallyHidden}>
+                {t('helpCenter:site.links.removeColumn')}
+              </Box>
             </Box>
           ) : null}
         </Box>
@@ -278,12 +295,3 @@ function LinkTable({
     </Box>
   );
 }
-
-const visuallyHidden = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  overflow: 'hidden',
-  clipPath: 'inset(50%)',
-  whiteSpace: 'nowrap',
-} as const;

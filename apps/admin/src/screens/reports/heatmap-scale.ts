@@ -33,3 +33,19 @@ export const heatmapGrid = (busiest: ReportSummary['busiestHours']): number[][] 
         busiest.find((cell) => cell.weekday === weekday && cell.hour === hour)?.created ?? 0,
     ),
   );
+
+/** Hex values of one `PALETTE.teal` ramp, lightest first, for the six steps. */
+type Ramp = readonly [string, string, string, string, string, string];
+
+/**
+ * The cell colour of a count: zero is a neutral muted cell in both themes and
+ * never part of the scale; every other count takes the step its threshold
+ * gives, and the ramp rises with the count (darker in light mode, brighter in
+ * dark mode, so "more" always stands out from the surface).
+ */
+export const heatmapColour = (
+  count: number,
+  thresholds: readonly number[],
+  ramp: Ramp,
+  neutral: string,
+): string => (count <= 0 ? neutral : (ramp[stepOf(count, thresholds)] ?? ramp[5]));

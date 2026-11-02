@@ -3,13 +3,13 @@ import type { Page } from '@playwright/test';
 import { MOCK_EMAIL } from '../src/auth/mock-api.js';
 import { expect, test } from './fixtures.js';
 import {
+  clickSettingsTab,
   openContact,
   openContacts,
   openSettingsArea,
   openTicket,
   openTicketing,
   openTickets,
-  settingsTab,
   signIn,
   submitPassword,
 } from './flows.js';
@@ -209,7 +209,7 @@ test.describe('reference screens @screenshot', () => {
     await page.clock.setFixedTime(FIXED_CLOCK);
     await signInToShell(page, locale);
     await openSettingsArea(page, t, 'channels');
-    await settingsTab(page, t, 'channels:tabs.outgoing').click();
+    await clickSettingsTab(page, t, 'channels:tabs.outgoing');
     await page.getByRole('heading', { name: t('channels:smtp.heading') }).waitFor();
     // Not delivered rows come last, once the failed-message query settles.
     await page
@@ -242,7 +242,7 @@ test.describe('reference screens @screenshot', () => {
     await page.setViewportSize({ width: 1280, height: 1900 });
     await signInToShell(page, locale);
     await openTicketing(page, locale);
-    await settingsTab(page, t, 'ticketing:tabs.businessHours').click();
+    await clickSettingsTab(page, t, 'ticketing:tabs.businessHours');
     await page
       .getByRole('heading', { name: t('ticketing:businessHours.heading'), level: 2 })
       .waitFor();
@@ -256,7 +256,7 @@ test.describe('reference screens @screenshot', () => {
     await page.clock.setFixedTime(FIXED_CLOCK);
     await signInToShell(page, locale);
     await openTicketing(page, locale);
-    await settingsTab(page, t, 'ticketing:tabs.slas').click();
+    await clickSettingsTab(page, t, 'ticketing:tabs.slas');
     await page.getByRole('form', { name: t('ticketing:slas.editor.form') }).waitFor();
 
     await expect(page).toHaveScreenshot('ticketing-slas.png', { fullPage: true });

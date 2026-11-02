@@ -52,6 +52,8 @@ const draftOf = (access: Access): AccessDraft => ({
 const PROVIDERS: readonly CaptchaProvider[] = ['pow', 'turnstile', 'hcaptcha'];
 const DIFFICULTIES: readonly CaptchaDifficulty[] = ['low', 'medium'];
 
+import { isDirty } from '../../../../ui/dirty.js';
+
 /**
  * "Where the widget may run" (M4-03; artboard `AdminWidget`), Admins only:
  * the allowed origins (DESIGN §6.3 OriginList) and the bot check before the
@@ -144,6 +146,8 @@ export function AccessCard({
         ? t('channels:widget.access.secretSavedBySystem', { date: date(stamp.setAt) })
         : t('channels:widget.access.secretSaved', { date: date(stamp.setAt), name: stamp.setBy });
 
+  const dirty = isDirty(draft, draftOf(access));
+
   return (
     <SectionCard
       id={`${id}-access`}
@@ -155,7 +159,7 @@ export function AccessCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               setDraft(draftOf(access));
               setOriginProblem(null);
@@ -164,7 +168,7 @@ export function AccessCard({
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:widget.save')}
           </Button>
         </>

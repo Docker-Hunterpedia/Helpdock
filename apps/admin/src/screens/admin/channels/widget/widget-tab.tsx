@@ -124,7 +124,10 @@ function WidgetCards({
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 1fr) 420px' },
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr)',
+            '@media (min-width:1200px)': 'minmax(0, 1fr) minmax(300px, 360px)',
+          },
           gap: 6,
           alignItems: 'start',
         }}

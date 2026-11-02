@@ -214,6 +214,7 @@ describe('Developers › Webhooks', () => {
 
     await renderWebhooks(developers, 'No endpoints yet');
 
-    expect(screen.getAllByRole('button', { name: 'Add endpoint' })).toHaveLength(2);
+    // The empty state carries the one button; the header does not repeat it.
+    expect(screen.getAllByRole('button', { name: 'Add endpoint' })).toHaveLength(1);
   });
 });

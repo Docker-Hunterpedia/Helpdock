@@ -9,6 +9,7 @@ import {
 } from '../src/staff/mock-api.js';
 import { expect, test } from './fixtures.js';
 import {
+  clickSettingsTab,
   openContact,
   openContacts,
   openSecurity,
@@ -18,7 +19,7 @@ import {
   openTicketing,
   openTicketingTab,
   openTickets,
-  settingsTab,
+  seededStatusName,
   signIn,
   submitPassword,
 } from './flows.js';
@@ -106,12 +107,12 @@ test.describe('accessibility', () => {
     await signIn(page, locale);
     await page.getByRole('button', { name: t('admin:nav.collapse') }).click();
     // From the icon before it, so the focus is a keyboard one and draws the tooltip.
-    await page.getByRole('link', { name: t('admin:nav.tickets'), exact: true }).focus();
+    await page.getByRole('button', { name: t('admin:nav.tickets'), exact: true }).focus();
     await page.keyboard.press('Tab');
-    await page.getByRole('tooltip', { name: t('tickets:views.label') }).waitFor();
+    await page.getByRole('tooltip', { name: t('admin:nav.contacts') }).waitFor();
     expect(await violations(page)).toEqual([]);
 
-    await page.getByRole('button', { name: t('tickets:views.label') }).click();
+    await page.getByRole('button', { name: t('admin:nav.tickets'), exact: true }).click();
     await page.getByRole('dialog', { name: t('tickets:views.label') }).waitFor();
 
     expect(await violations(page)).toEqual([]);
@@ -169,9 +170,11 @@ test.describe('accessibility', () => {
 
     await signIn(page, locale);
     await openTicketing(page, locale);
-    await settingsTab(page, t, 'ticketing:tabs.statuses').click();
+    await clickSettingsTab(page, t, 'ticketing:tabs.statuses');
     await page
-      .getByRole('button', { name: t('ticketing:statuses.table.select', { name: 'Open' }) })
+      .getByRole('button', {
+        name: t('ticketing:statuses.table.select', { name: seededStatusName(locale, 'Open') }),
+      })
       .waitFor();
     expect(await violations(page)).toEqual([]);
 
@@ -179,7 +182,9 @@ test.describe('accessibility', () => {
     // exist in — including the two disabled flags of a seeded row.
     await page
       .getByRole('button', {
-        name: t('ticketing:statuses.table.select', { name: 'Awaiting customer' }),
+        name: t('ticketing:statuses.table.select', {
+          name: seededStatusName(locale, 'Awaiting customer'),
+        }),
       })
       .click();
     await page.getByText(t('ticketing:statuses.editor.systemNote')).waitFor();
@@ -188,7 +193,9 @@ test.describe('accessibility', () => {
     // And with the confirmation open, which is a focus trap and a live region.
     await page
       .getByRole('button', {
-        name: t('ticketing:statuses.table.select', { name: 'Waiting on supplier' }),
+        name: t('ticketing:statuses.table.select', {
+          name: seededStatusName(locale, 'Waiting on supplier'),
+        }),
       })
       .click();
     await page

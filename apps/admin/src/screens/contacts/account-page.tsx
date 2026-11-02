@@ -67,7 +67,7 @@ export function AccountPage(): ReactNode {
   return (
     <>
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        <MuiLink component={Link} to={`${ROUTES.contacts}?tab=accounts`}>
+        <MuiLink component={Link} to={ROUTES.contactsAccounts}>
           {t('contacts:accounts.breadcrumb')}
         </MuiLink>
         {' / '}

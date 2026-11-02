@@ -1,12 +1,12 @@
 {
   "title": "Brand",
-  "subtitle": "{{brand}} · identity, locale and domains for this brand only",
   "tabList": "Brand sections",
   "tabs": {
     "general": "General",
     "domains": "Domains",
     "import": "Import",
-    "danger": "Danger zone"
+    "danger": "Danger zone",
+    "retention": "Data retention"
   },
   "general": {
     "heading": "Identity",
@@ -192,5 +192,11 @@
     "restore": "Restore",
     "restored": "{{name}} is restored.",
     "restoreFailed": "The brand could not be restored. Try again."
+  },
+  "subtitles": {
+    "general": "{{brand}} · name, prefix, language and time zone of this brand",
+    "domains": "{{brand}} · the addresses this brand's help center answers on",
+    "retention": "{{brand}} · how long this brand keeps tickets, chats and logs before they are purged",
+    "danger": "{{brand}} · actions that cannot be undone"
   }
 }

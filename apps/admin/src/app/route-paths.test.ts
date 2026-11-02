@@ -145,6 +145,7 @@ const OLD_ADDRESSES: readonly (readonly [string, string])[] = [
   ['/admin/brand', '/settings/brand'],
   ['/admin/brand/general', '/settings/brand/general'],
   ['/admin/brand/domains', '/settings/brand/domains'],
+  ['/admin/brand/retention', '/settings/brand/retention'],
   ['/admin/brand/danger', '/settings/brand/danger'],
   ['/admin/brand/import', '/settings/install/imports'],
   [`/admin/brand/import/${RUN}`, `/settings/install/imports/${RUN}`],

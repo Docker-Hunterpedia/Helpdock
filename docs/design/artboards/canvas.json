@@ -995,6 +995,13 @@
    "w": 2000,
    "x": 5760,
    "y": 64300
+  },
+  "AdminUxFixes.dc.html": {
+   "h": 3194,
+   "title": "Admin/UX-Fixes-2026-11",
+   "w": 1700,
+   "x": 0,
+   "y": 66000
   }
  },
  "createdOnFiles": {
@@ -1351,7 +1358,8 @@
   "AdminM14Amendments.dc.html",
   "AdminSettingsShell.dc.html",
   "AdminEmptyStates.dc.html",
-  "AdminAcceptInviteProviders.dc.html"
+  "AdminAcceptInviteProviders.dc.html",
+  "AdminUxFixes.dc.html"
  ],
  "pages": [],
  "title": "Helpdock Design System"

@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { ROUTES } from '../app/route-paths.js';
+import { usePageTitle } from './page-title.js';
 import { useSettingsHeader } from './settings-header.js';
 
 /**
@@ -23,6 +24,7 @@ export function PageHeader({
   readonly action?: ReactNode | undefined;
 }): ReactNode {
   const settings = useSettingsHeader();
+  usePageTitle(settings?.title ?? title);
 
   return (
     <Box
@@ -30,11 +32,13 @@ export function PageHeader({
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'space-between',
+        // A header with actions wraps under the title on a narrow window.
+        flexWrap: 'wrap',
         gap: 6,
         marginBlockEnd: 8,
       }}
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
         <SettingsBreadcrumb />
         <Typography variant="h1" component="h1">
           {settings?.title ?? title}

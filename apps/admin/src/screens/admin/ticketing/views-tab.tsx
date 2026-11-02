@@ -43,6 +43,7 @@ import { Label } from '../../../ui/label.tsx';
 import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { useFilterSummary } from '../../tickets/filter-summary.js';
 import { useWorkspaceData } from '../../tickets/use-workspace-data.js';
+import { nameButtonSx } from './name-button.js';
 import { moveBy, moveTo } from './reorder.js';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
 import { createRequestOf, updateRequestOf, type ViewDraft } from './view-draft.js';
@@ -289,7 +290,7 @@ export function ViewsTab(): ReactNode {
                               setCreating(false);
                               setSelectedId(view.id);
                             }}
-                            sx={{ justifyContent: 'flex-start', paddingInline: 0, minWidth: 0 }}
+                            sx={nameButtonSx}
                           >
                             {name}
                           </Button>

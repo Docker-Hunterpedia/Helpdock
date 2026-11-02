@@ -24,24 +24,12 @@ const renderSecurity = async () => {
   return rendered;
 };
 
-describe('your details', () => {
-  it('shows the account and leaves the address to an administrator', async () => {
+describe('the page', () => {
+  it('no longer carries the account details, which live on Profile', async () => {
     await renderSecurity();
 
-    expect(await screen.findByLabelText('Name')).toHaveValue('Lina Haddad');
-    // Read-only rather than disabled, so the address stays selectable and legible.
-    expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
-  });
-
-  it('saves a new name', async () => {
-    const { user } = await renderSecurity();
-
-    const field = await screen.findByLabelText('Name');
-    await user.clear(field);
-    await user.type(field, 'Lina H.');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    expect(await screen.findByText('Saved.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Your details' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
   });
 });
 

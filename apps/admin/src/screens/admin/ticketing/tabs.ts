@@ -1,26 +1,21 @@
 /**
- * The tab row of `Admin/Ticketing`. Every tab exists from M1-01 so the row is
- * whole and the other M1 deliverables have a place to land; the ones no
- * deliverable has filled yet draw the "not built yet" empty state.
- *
- * The milestone is on the tab rather than in prose so the empty state can name
- * it, and so the row itself is the list of what M1 still owes.
+ * The pages of the Inbox settings, in the order the Settings navigation lists
+ * them. A segment that is not here (the old `priorities`) opens Departments.
  */
 
 export const TICKETING_TABS = [
-  { key: 'departments', segment: 'departments', milestone: 'M1-01' },
-  { key: 'statuses', segment: 'statuses', milestone: 'M1-08' },
-  { key: 'priorities', segment: 'priorities', milestone: 'M1-02' },
-  { key: 'tags', segment: 'tags', milestone: 'M1-06' },
-  { key: 'customFields', segment: 'custom-fields', milestone: 'M1-06' },
-  { key: 'templates', segment: 'templates', milestone: 'M1-06' },
-  { key: 'views', segment: 'views', milestone: 'M1-05' },
-  { key: 'assignment', segment: 'assignment', milestone: 'M1-07' },
-  { key: 'spam', segment: 'spam', milestone: 'M1-11' },
-  { key: 'feedback', segment: 'feedback', milestone: 'M1-12' },
+  { key: 'departments', segment: 'departments' },
+  { key: 'statuses', segment: 'statuses' },
+  { key: 'tags', segment: 'tags' },
+  { key: 'customFields', segment: 'custom-fields' },
+  { key: 'templates', segment: 'templates' },
+  { key: 'views', segment: 'views' },
+  { key: 'assignment', segment: 'assignment' },
+  { key: 'spam', segment: 'spam' },
+  { key: 'feedback', segment: 'feedback' },
   // M3-01 and M3-02.
-  { key: 'businessHours', segment: 'business-hours', milestone: 'M3-01' },
-  { key: 'slas', segment: 'slas', milestone: 'M3-02' },
+  { key: 'businessHours', segment: 'business-hours' },
+  { key: 'slas', segment: 'slas' },
 ] as const;
 
 export type TicketingTab = (typeof TICKETING_TABS)[number];

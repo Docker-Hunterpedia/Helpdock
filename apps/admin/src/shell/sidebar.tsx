@@ -1,8 +1,9 @@
 import { monoFontStyle } from '@helpdock/ui';
-import { Box, Popover, Typography } from '@mui/material';
-import { Layers, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
-import { NavLink } from 'react-router';
+import { Box } from '@mui/material';
+import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useId } from 'react';
+import { useLocation } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { useSemanticTokens } from '../app/tokens.js';
@@ -12,14 +13,13 @@ import { useAriaKeyShortcuts } from '../keyboard/keyboard-provider.tsx';
 import { isMac } from '../keyboard/keys.js';
 import { shortcutById } from '../keyboard/registry.js';
 import { usePalette } from '../palette/palette-provider.tsx';
-import { TicketViewsNav } from '../screens/tickets/views-nav.tsx';
 import { BrandSwitcher } from './brand-switcher.tsx';
-import { CountBadge } from './count-badge.tsx';
-import { ADMIN_NAV, type NavItem, navFor, PRIMARY_NAV } from './nav-items.js';
 import { NotificationBell } from './notification-bell.tsx';
 import { RailTooltip } from './rail-tooltip.tsx';
 import { SetupChecklistEntry } from './setup-checklist.tsx';
 import { useSidebarScroll } from './sidebar-scroll.js';
+import { sectionAt, sectionsFor } from './sidebar-sections.js';
+import { RailSection, SidebarTree } from './sidebar-tree.tsx';
 import { UserMenu } from './user-menu.tsx';
 
 export const SIDEBAR_WIDTH = 220;
@@ -30,177 +30,6 @@ export const RAIL_WIDTH = 56;
 export interface SidebarCollapse {
   readonly collapsed: boolean;
   readonly onToggle: () => void;
-}
-
-function NavItemLink({
-  item,
-  count,
-  onNavigate,
-}: {
-  readonly item: NavItem;
-  readonly count?: number | undefined;
-  readonly onNavigate?: (() => void) | undefined;
-}): ReactNode {
-  const t = useT();
-  const tokens = useSemanticTokens();
-  const Icon = item.icon;
-
-  return (
-    // NavLink puts `aria-current="page"` on the anchor itself when it matches.
-    <NavLink
-      to={item.path}
-      // Settings is the entry for a whole area, so it stays current on every page under it.
-      end={item.key !== 'settings'}
-      onClick={onNavigate}
-      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-    >
-      {({ isActive }) => (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 3,
-            height: 36,
-            paddingInline: 3,
-            borderRadius: '6px',
-            fontWeight: isActive ? 500 : 400,
-            backgroundColor: isActive ? tokens['bg.muted'] : 'transparent',
-            '&:hover': { backgroundColor: tokens['bg.muted'] },
-          }}
-        >
-          <Icon size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-          <Typography
-            component="span"
-            variant="body2"
-            noWrap
-            sx={{ flex: 1, fontWeight: 'inherit' }}
-          >
-            {t(item.labelKey)}
-          </Typography>
-          {count === undefined ? null : (
-            <Typography component="span" variant="mono" sx={{ color: 'text.secondary' }}>
-              {count}
-            </Typography>
-          )}
-        </Box>
-      )}
-    </NavLink>
-  );
-}
-
-/**
- * A destination on the collapsed rail: a 36 px icon link named by its label,
- * with the full count in the name ("Tickets · 38") and a badge drawn on the
- * icon, and the label in a Tooltip on hover and focus.
- */
-function RailLink({
-  item,
-  count,
-}: {
-  readonly item: NavItem;
-  readonly count?: number | undefined;
-}): ReactNode {
-  const t = useT();
-  const tokens = useSemanticTokens();
-  const Icon = item.icon;
-  const label = t(item.labelKey);
-
-  return (
-    <RailTooltip title={label}>
-      <NavLink
-        to={item.path}
-        end={item.key !== 'settings'}
-        aria-label={count === undefined ? label : t('admin:nav.withCount', { label, count })}
-        style={{ textDecoration: 'none', color: 'inherit', display: 'block', borderRadius: 6 }}
-      >
-        {({ isActive }) => (
-          <Box
-            sx={{
-              position: 'relative',
-              width: 36,
-              height: 36,
-              display: 'grid',
-              placeItems: 'center',
-              borderRadius: '6px',
-              backgroundColor: isActive ? tokens['bg.muted'] : 'transparent',
-              '&:hover': { backgroundColor: tokens['bg.muted'] },
-            }}
-          >
-            <Icon size={16} aria-hidden="true" />
-            {count === undefined ? null : <CountBadge count={count} />}
-          </Box>
-        )}
-      </NavLink>
-    </RailTooltip>
-  );
-}
-
-/**
- * The Views group on the rail: one `Layers` icon that opens the same list the
- * column shows, in a popover at the rail's inline end.
- */
-function RailViews(): ReactNode {
-  const t = useT();
-  const tokens = useSemanticTokens();
-  const { locale } = usePreferences();
-  const popoverId = useId();
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const label = t('tickets:views.label');
-  // MUI anchors by physical side, so the inline end is spelled per direction.
-  const end = locale === 'ar' ? 'left' : 'right';
-  const start = locale === 'ar' ? 'right' : 'left';
-  const close = (): void => {
-    setAnchor(null);
-  };
-
-  return (
-    <>
-      <RailTooltip title={label}>
-        <Box
-          component="button"
-          type="button"
-          aria-label={label}
-          aria-haspopup="dialog"
-          aria-expanded={anchor !== null}
-          aria-controls={anchor === null ? undefined : popoverId}
-          onClick={(event) => {
-            setAnchor(event.currentTarget);
-          }}
-          sx={{
-            width: 36,
-            height: 36,
-            display: 'grid',
-            placeItems: 'center',
-            border: 0,
-            borderRadius: '6px',
-            color: 'inherit',
-            cursor: 'pointer',
-            backgroundColor: anchor === null ? 'transparent' : tokens['bg.muted'],
-            '&:hover': { backgroundColor: tokens['bg.muted'] },
-          }}
-        >
-          <Layers size={16} aria-hidden="true" />
-        </Box>
-      </RailTooltip>
-      <Popover
-        id={popoverId}
-        open={anchor !== null}
-        anchorEl={anchor}
-        onClose={close}
-        anchorOrigin={{ vertical: 'top', horizontal: end }}
-        transformOrigin={{ vertical: 'top', horizontal: start }}
-        slotProps={{
-          paper: {
-            role: 'dialog',
-            'aria-label': label,
-            sx: { width: SIDEBAR_WIDTH, padding: 2, marginInlineStart: 1 },
-          },
-        }}
-      >
-        <TicketViewsNav onNavigate={close} foldable={false} />
-      </Popover>
-    </>
-  );
 }
 
 /**
@@ -398,10 +227,10 @@ export function Sidebar({
   // Chrome only: the api refuses the request whatever the sidebar draws.
   // "Staff and roles" is for the two roles that hold `staff:manage`; "System"
   // is install-wide and is offered to an install admin alone.
-  // Views hang under Tickets (`Admin/Settings-Shell`), so the primary group is
-  // drawn in two runs around them, and Settings closes the last.
-  const [ticketsNav, ...otherNav] = navFor(PRIMARY_NAV, session.user);
-  const lowerNav = [...otherNav, ...navFor(ADMIN_NAV, session.user)];
+  // One tree (`Admin/UX-Fixes-2026-11`): Tickets, Contacts, Help center, Reports
+  // and Settings, each opening onto its own pages.
+  const { pathname } = useLocation();
+  const sections = sectionsFor(session.user);
 
   return (
     <Box
@@ -535,49 +364,18 @@ export function Sidebar({
                   gap: 1,
                 }}
               >
-                {ticketsNav === undefined ? null : (
-                  <Box component="li">
-                    <RailLink item={ticketsNav} count={counts[ticketsNav.key]} />
-                  </Box>
-                )}
-                <Box component="li">
-                  <RailViews />
-                </Box>
-                {lowerNav.map((item) => (
-                  <Box component="li" key={item.key}>
-                    <RailLink item={item} count={counts[item.key]} />
+                {sections.map((section) => (
+                  <Box component="li" key={section.key}>
+                    <RailSection
+                      section={section}
+                      count={counts[section.nav]}
+                      current={sectionAt(pathname) === section.key}
+                    />
                   </Box>
                 ))}
               </Box>
             ) : (
-              <>
-                {ticketsNav === undefined ? null : (
-                  <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                    <Box component="li">
-                      <NavItemLink
-                        item={ticketsNav}
-                        count={counts[ticketsNav.key]}
-                        onNavigate={onNavigate}
-                      />
-                    </Box>
-                  </Box>
-                )}
-
-                {/* DESIGN §6.5: the "Views" group sits under Tickets, because it
-                is a set of ways into that destination (M1-15), and folds. */}
-                <TicketViewsNav onNavigate={onNavigate} />
-
-                <Box
-                  component="ul"
-                  sx={{ listStyle: 'none', margin: 0, padding: 0, marginBlockStart: 2 }}
-                >
-                  {lowerNav.map((item) => (
-                    <Box component="li" key={item.key}>
-                      <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
-                    </Box>
-                  ))}
-                </Box>
-              </>
+              <SidebarTree onNavigate={onNavigate} />
             )}
           </Box>
         </Box>

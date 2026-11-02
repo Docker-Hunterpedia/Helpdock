@@ -43,7 +43,7 @@ for (const collapsed of [false, true]) {
         await page.setViewportSize({ width: 1280, height });
         const menuBounds = await userMenu.boundingBox();
         if (menuBounds === null) throw new Error('missing user menu');
-        for (const row of await nav.locator(':scope > div > ul > li > a').all()) {
+        for (const row of await nav.locator(':scope > div > ul > li > div:first-child').all()) {
           const rowBounds = await row.boundingBox();
           if (rowBounds === null) throw new Error('missing nav row');
           expect(appLocale === 'ar' ? rowBounds.x : rowBounds.x + rowBounds.width).toBeCloseTo(
@@ -54,7 +54,7 @@ for (const collapsed of [false, true]) {
       }
     } else {
       const menuBounds = await userMenu.boundingBox();
-      const iconBounds = await nav.locator('a[href] svg').first().boundingBox();
+      const iconBounds = await nav.locator('a[href] svg, button svg').first().boundingBox();
       if (menuBounds === null || iconBounds === null) throw new Error('missing rail controls');
       expect(iconBounds.x + iconBounds.width / 2).toBeCloseTo(
         menuBounds.x + menuBounds.width / 2,
@@ -63,7 +63,10 @@ for (const collapsed of [false, true]) {
     }
     await expect(nav).toHaveAttribute('data-scroll-bottom', 'true');
     await expect(nav).toHaveAttribute('data-scroll-top', 'false');
-    const row = nav.locator('a[href]').first();
+    // The first row of the column is the whole 36 px row (link and chevron); the rail's is an icon.
+    const row = collapsed
+      ? nav.locator('a[href], button').first()
+      : nav.locator(':scope > div > ul > li > div').first();
     const rowBounds = await row.boundingBox();
     if (rowBounds === null) throw new Error('missing first nav row');
     for (const pseudo of ['::before', '::after']) {
@@ -86,7 +89,7 @@ for (const collapsed of [false, true]) {
         nav.evaluate((el) => getComputedStyle(el.parentElement as HTMLElement, '::after').opacity),
       )
       .toBe('1');
-    const stops = nav.locator('a[href], button:not([disabled])');
+    const stops = nav.locator('a[href]:visible, button:not([disabled]):visible');
     await page.keyboard.press('Tab');
     await stops.first().focus();
     if (collapsed) {
@@ -176,7 +179,7 @@ test('focus in the portalled Views dialog does not request sidebar scrolling', a
   await signIn(page, appLocale);
   const t = strings(appLocale);
   await page.getByRole('button', { name: t('admin:nav.collapse') }).click();
-  await page.getByRole('button', { name: t('tickets:views.label') }).click();
+  await page.getByRole('button', { name: t('admin:nav.tickets'), exact: true }).click();
   const dialog = page.getByRole('dialog', { name: t('tickets:views.label') });
   // Observe the browser scrolling boundary: React focus bubbles through the portal.
   const scrollRequests = await dialog

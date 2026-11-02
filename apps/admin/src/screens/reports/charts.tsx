@@ -1,8 +1,9 @@
 import { tokens as designTokens } from '@helpdock/ui';
 import { Box, Tooltip, Typography } from '@mui/material';
 import { type ReactNode, useState } from 'react';
+import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { HOURS, heatmapThresholds, stepOf, WEEKDAYS } from './heatmap-scale.js';
+import { HOURS, heatmapColour, heatmapThresholds, WEEKDAYS } from './heatmap-scale.js';
 
 /**
  * The plots of `Admin/Reports` as plain SVG (no charting dependency is in the
@@ -25,14 +26,25 @@ export const SERIES_PRIMARY = categorical(0);
 export const SERIES_SECONDARY = categorical(1);
 /** The hue of the n-th series of a chart; the sixth, "Other", is n500. */
 export const seriesColour = (index: number): string => categorical(Math.min(index, 5));
-/** The Heatmap's six steps, teal100 to teal500 and teal700. */
-const SEQUENTIAL = [
+/**
+ * The Heatmap's six steps. Light mode darkens with the count (teal100 to
+ * teal500 and teal700); dark mode brightens with it (teal900 up to teal300).
+ */
+const SEQUENTIAL_LIGHT = [
   PALETTE.teal.teal100,
   PALETTE.teal.teal200,
   PALETTE.teal.teal300,
   PALETTE.teal.teal400,
   PALETTE.teal.teal500,
   PALETTE.teal.teal700,
+] as const;
+const SEQUENTIAL_DARK = [
+  PALETTE.teal.teal900,
+  PALETTE.teal.teal800,
+  PALETTE.teal.teal700,
+  PALETTE.teal.teal600,
+  PALETTE.teal.teal500,
+  PALETTE.teal.teal300,
 ] as const;
 
 const WIDTH = 720;
@@ -489,6 +501,9 @@ export function Heatmap({
   readonly tooltipOf: (weekdayIndex: number, hour: number, count: number) => string;
 }): ReactNode {
   const semantic = useSemanticTokens();
+  const { mode } = usePreferences();
+  const ramp = mode === 'dark' ? SEQUENTIAL_DARK : SEQUENTIAL_LIGHT;
+  const neutral = semantic['bg.muted'];
   const thresholds = heatmapThresholds(Math.max(0, ...grid.flat()));
   const width = DAY_LABEL_WIDTH + HOURS.length * (CELL_WIDTH + CELL_GAP);
   const height = WEEKDAYS.length * (CELL_HEIGHT + CELL_GAP) + HOUR_LABEL_HEIGHT;
@@ -503,21 +518,13 @@ export function Heatmap({
           component="ul"
           sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', gap: 1 }}
         >
+          <LegendStep colour={neutral} label="0" />
           {thresholds.map((bound, index) => (
-            <Box component="li" key={bound} sx={{ display: 'grid', justifyItems: 'center' }}>
-              <Box
-                component="span"
-                aria-hidden="true"
-                sx={{
-                  width: 32,
-                  height: 12,
-                  backgroundColor: SEQUENTIAL[index] ?? PALETTE.teal.teal500,
-                }}
-              />
-              <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
-                {`${bound}+`}
-              </Typography>
-            </Box>
+            <LegendStep
+              key={bound}
+              colour={ramp[index] ?? ramp[5]}
+              label={`${index === 0 ? 1 : bound}+`}
+            />
           ))}
         </Box>
       </Box>
@@ -549,7 +556,7 @@ export function Heatmap({
                       y={y}
                       width={CELL_WIDTH}
                       height={CELL_HEIGHT}
-                      fill={SEQUENTIAL[stepOf(count, thresholds)] ?? PALETTE.teal.teal500}
+                      fill={heatmapColour(count, thresholds, ramp, neutral)}
                     />
                   </Tooltip>
                 ))}
@@ -571,6 +578,27 @@ export function Heatmap({
           </g>
         </svg>
       </Box>
+    </Box>
+  );
+}
+
+function LegendStep({
+  colour,
+  label,
+}: {
+  readonly colour: string;
+  readonly label: string;
+}): ReactNode {
+  return (
+    <Box component="li" sx={{ display: 'grid', justifyItems: 'center' }}>
+      <Box
+        component="span"
+        aria-hidden="true"
+        sx={{ width: 32, height: 12, backgroundColor: colour }}
+      />
+      <Typography variant="mono" component="span" sx={{ fontSize: 12 }}>
+        {label}
+      </Typography>
     </Box>
   );
 }

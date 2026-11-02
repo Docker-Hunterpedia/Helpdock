@@ -39,6 +39,8 @@ const draftOf = (appearance: HcAppearance): Draft => ({
   favicon: appearance.favicon,
 });
 
+import { isDirty } from '../../../ui/dirty.js';
+
 /**
  * "Theme" (M5-06, `Admin/HelpCenter-Settings`): the accent with the contrast
  * line DESIGN §8 asks for, the surface tone, the corner radius, light or dark,
@@ -92,6 +94,8 @@ export function ThemeCard({
   const radiusId = `${id}-radius`;
   const fontId = `${id}-font`;
 
+  const dirty = isDirty(draft, draftOf(appearance));
+
   return (
     <SectionCard
       id={`${id}-theme`}
@@ -104,14 +108,14 @@ export function ThemeCard({
               <>
                 <Button
                   variant="text"
-                  disabled={save.isPending}
+                  disabled={save.isPending || !dirty}
                   onClick={() => {
                     setDraft(draftOf(appearance));
                   }}
                 >
                   {t('helpCenter:settings.discard')}
                 </Button>
-                <Button type="submit" variant="contained" disabled={save.isPending}>
+                <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
                   {t('helpCenter:settings.save')}
                 </Button>
               </>

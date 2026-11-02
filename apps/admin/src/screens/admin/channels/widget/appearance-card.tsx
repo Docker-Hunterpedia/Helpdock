@@ -25,6 +25,8 @@ const MODES: readonly { readonly mode: WidgetMode; readonly icon: typeof Message
   { mode: 'form', icon: FileText },
 ];
 
+import { isDirty } from '../../../../ui/dirty.js';
+
 /**
  * "Appearance" (M4-05, M4-06; artboard `AdminWidget`): the widget's mode, as
  * four radio cards (DESIGN §6.1 RadioCard), and its theme — the accent with
@@ -76,6 +78,8 @@ export function AppearanceCard({
         ? t('channels:widget.appearance.contrastPass', { ratio: accent.ratio.toFixed(1) })
         : t('channels:widget.appearance.contrastFail', { ratio: accent.ratio.toFixed(1) });
 
+  const dirty = isDirty(draft, saved);
+
   return (
     <SectionCard
       id={`${id}-appearance`}
@@ -86,14 +90,14 @@ export function AppearanceCard({
         <>
           <Button
             variant="text"
-            disabled={save.isPending}
+            disabled={save.isPending || !dirty}
             onClick={() => {
               onChange(saved);
             }}
           >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:widget.save')}
           </Button>
         </>
@@ -108,7 +112,7 @@ export function AppearanceCard({
           aria-label={t('channels:widget.appearance.mode')}
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' },
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
             gap: 3,
           }}
         >
@@ -163,23 +167,21 @@ export function AppearanceCard({
       </Box>
 
       <Box
-        component="fieldset"
+        role="group"
+        aria-labelledby={`${id}-theme`}
         sx={{
-          margin: 0,
-          padding: 0,
           paddingBlockStart: 5,
-          border: 0,
           borderBlockStart: `1px solid ${tokens['border.default']}`,
           minWidth: 0,
         }}
       >
-        <Typography component="legend" sx={{ fontSize: 14, fontWeight: 600, marginBlockEnd: 4 }}>
+        <Typography id={`${id}-theme`} sx={{ fontSize: 14, fontWeight: 600, marginBlockEnd: 4 }}>
           {t('channels:widget.appearance.theme')}
         </Typography>
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' },
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
             gap: '16px 20px',
           }}
         >
@@ -309,7 +311,7 @@ export function Segmented<V extends string>({
   const id = useId();
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
-      <Typography id={`${id}-label`} sx={{ fontSize: 13, fontWeight: 500 }}>
+      <Typography id={`${id}-label`} sx={{ fontSize: 13, fontWeight: 500, lineHeight: '20px' }}>
         {label}
       </Typography>
       <ToggleButtonGroup

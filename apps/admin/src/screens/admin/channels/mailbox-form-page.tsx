@@ -503,9 +503,8 @@ function MailboxForm({
         sx={{
           position: 'sticky',
           insetBlockEnd: 0,
-          marginInline: -8,
           paddingBlock: 3,
-          paddingInline: 8,
+          paddingInline: 4,
           borderBlockStart: `1px solid ${tokens['border.default']}`,
           backgroundColor: tokens['bg.surface'],
           display: 'flex',

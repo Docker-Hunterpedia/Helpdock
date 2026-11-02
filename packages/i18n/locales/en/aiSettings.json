@@ -243,6 +243,10 @@
         "not-html": "not an HTML page",
         "error": "it could not be fetched"
       }
+    },
+    "emptyState": {
+      "heading": "No knowledge sources yet",
+      "body": "Add a website, files, Notion or Google Drive so the assistant can answer from your own content."
     }
   },
   "loadFailed": "This could not be loaded. Check your connection and try again.",
@@ -315,7 +319,11 @@
     "default": "Default",
     "edit": "Edit {{name}}",
     "editShort": "Edit",
-    "footer": "Credentials are encrypted with APP_MASTER_KEY and never sent back to the browser. Keys set in .env override what is saved here and are locked."
+    "footer": "Credentials are encrypted with APP_MASTER_KEY and never sent back to the browser. Keys set in .env override what is saved here and are locked.",
+    "emptyState": {
+      "heading": "No providers yet",
+      "body": "Add an AI provider so the assistant and its suggestions have a model to use."
+    }
   },
   "provider": {
     "addHeading": "Add provider",

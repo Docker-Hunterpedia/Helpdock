@@ -8,8 +8,8 @@
   },
   "exportFailed": "The CSV could not be downloaded. Try again.",
   "comparedWith": "Compared with {{range}}",
-  "rolledUp": "Rolled up at {{time}} by stats.rollup · today so far is live",
-  "notRolledUp": "Not rolled up yet: stats.rollup runs hourly",
+  "rolledUp": "Updated at {{time}} · today so far is live",
+  "notRolledUp": "Not updated yet. Reports update every hour.",
   "tableNote": "Every chart has a table. \"Table\" on a card swaps the chart for the same numbers as an accessible table, and \"Export CSV\" downloads those rows with the filters above. Charts carry a text summary for screen readers; colour is never the only label.",
   "empty": "Nothing in this period.",
   "of_one": "of {{count}}",
@@ -221,6 +221,6 @@
     "costTitle": "AI cost",
     "costCaption": "What the AI provider charged this period · tokens in and out",
     "costSentence": "{{calls}} calls · {{tokensIn}} tokens in · {{tokensOut}} out",
-    "unavailable": "Not available until the AI assistant records its calls (M7)."
+    "unavailable": "Not available until the AI assistant is set up."
   }
 }

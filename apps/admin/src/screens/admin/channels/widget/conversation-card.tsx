@@ -27,6 +27,7 @@ import { useT } from '../../../../app/i18n.js';
 import { ticketingRoute } from '../../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { useChannelsApi } from '../../../../auth/session.tsx';
+import { isDirty } from '../../../../ui/dirty.js';
 import { Field } from '../../../../ui/field.tsx';
 import { visuallyHidden } from '../../../../ui/visually-hidden.js';
 import { SectionCard, useEmailAction } from '../section-card.tsx';
@@ -105,6 +106,8 @@ export function ConversationCard({
     }
   };
 
+  const dirty = isDirty(draft, saved);
+
   return (
     <SectionCard
       id={`${id}-conversation`}
@@ -113,10 +116,14 @@ export function ConversationCard({
       onSubmit={submit}
       footer={
         <>
-          <Button variant="text" disabled={save.isPending} onClick={() => onChange(saved)}>
+          <Button
+            variant="text"
+            disabled={save.isPending || !dirty}
+            onClick={() => onChange(saved)}
+          >
             {t('channels:discard')}
           </Button>
-          <Button type="submit" variant="contained" disabled={save.isPending}>
+          <Button type="submit" variant="contained" disabled={save.isPending || !dirty}>
             {t('channels:widget.save')}
           </Button>
         </>

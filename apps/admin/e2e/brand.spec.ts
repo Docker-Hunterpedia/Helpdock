@@ -1,11 +1,11 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSettingsArea, settingsTab, signIn } from './flows.js';
+import { clickSettingsTab, openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
- * `Admin/Brand · Danger zone` and its Data retention card (M1-14), in a real
+ * Brand › Data retention (M1-14, moved out of the Danger zone), in a real
  * browser, in both languages: a select that opens where it can be clicked, a
  * number field typed into for real, and an Arabic layout that is a different
  * layout rather than the same one mirrored by hand (DESIGN §7).
@@ -20,9 +20,8 @@ const openBrand = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
   await openSettingsArea(page, t, 'brand');
-  // The page opens on General; the retention card is on the last tab.
-  await settingsTab(page, t, 'brand:tabs.danger').click();
-  await page.getByRole('heading', { name: t('brand:retention.heading') }).waitFor();
+  await clickSettingsTab(page, t, 'brand:tabs.retention');
+  await page.getByRole('heading', { name: t('brand:retention.heading'), level: 2 }).waitFor();
 };
 
 const rowFor = (page: Page, label: string) =>
@@ -44,7 +43,10 @@ test.describe('data retention', () => {
     const t = strings(locale);
     await openBrand(page, locale);
 
-    await expect(settingsTab(page, t, 'brand:tabs.danger')).toHaveAttribute('aria-current', 'page');
+    await expect(settingsTab(page, t, 'brand:tabs.retention')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     await expect(
       rowFor(page, t('brand:retention.rows.spamTickets')).getByText(
         t('brand:retention.rowCount', { count: 62 }),

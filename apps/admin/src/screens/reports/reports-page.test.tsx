@@ -83,7 +83,7 @@ describe('ReportsPage (M8-04)', () => {
     for (const title of ['AI deflection rate', 'AI cost']) {
       const card = screen.getByRole('region', { name: title });
       expect(
-        within(card).getByText('Not available until the AI assistant records its calls (M7).'),
+        within(card).getByText('Not available until the AI assistant is set up.'),
       ).toBeVisible();
       expect(within(card).queryByRole('button', { name: /Export CSV/ })).not.toBeInTheDocument();
     }

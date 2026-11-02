@@ -1,7 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSecurity, openSettingsArea, openTicket, settingsTab, signIn } from './flows.js';
+import {
+  clickSettingsTab,
+  openSecurity,
+  openSettingsArea,
+  openTicket,
+  settingsTab,
+  signIn,
+} from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -31,7 +38,7 @@ const openOutgoing = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
   await openSettingsArea(page, t, 'channels');
   // Channels opens on Mailboxes; Outgoing email is the second tab.
-  await settingsTab(page, t, 'channels:tabs.outgoing').click();
+  await clickSettingsTab(page, t, 'channels:tabs.outgoing');
   await page.getByRole('heading', { name: t('channels:smtp.heading') }).waitFor();
 };
 
@@ -162,7 +169,7 @@ test.describe('Your account › Email signature', () => {
     const t = strings(locale);
     await signIn(page, locale);
     await openSecurity(page, locale);
-    await settingsTab(page, t, 'me:account.tabs.signature').click();
+    await clickSettingsTab(page, t, 'me:account.tabs.signature');
     await page.getByRole('heading', { name: t('me:signature.heading'), level: 2 }).waitFor();
     expect(await violations(page)).toEqual([]);
 

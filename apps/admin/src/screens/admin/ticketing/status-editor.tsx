@@ -49,6 +49,7 @@ export interface StatusDraft {
 export function StatusEditor({
   status,
   ticketCount,
+  usageKnown = false,
   fallbackName,
   busy,
   closedTicketsCount,
@@ -60,6 +61,8 @@ export function StatusEditor({
   readonly status: TicketStatus | null;
   /** How many tickets the delete link says would move. */
   readonly ticketCount: number;
+  /** The count is a query per selection; it is printed only once it has answered. */
+  readonly usageKnown?: boolean;
   /** Where they would move to: the brand's default open status. */
   readonly fallbackName: string;
   readonly busy: boolean;
@@ -248,6 +251,12 @@ export function StatusEditor({
           ))}
         </Select>
       </Field>
+
+      {status !== null && usageKnown ? (
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          {t('ticketing:statuses.editor.ticketCount', { count: ticketCount })}
+        </Typography>
+      ) : null}
 
       {locked ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>

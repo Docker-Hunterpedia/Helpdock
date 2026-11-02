@@ -78,6 +78,28 @@ test.describe('the audit log', () => {
     expect(await violations(page)).toEqual([]);
   });
 
+  test('leaves the page views out until "Show page views" is switched on', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const asked: (string | null)[] = [];
+    await stub(page);
+    await page.route('**/api/install/audit-log**', async (route) => {
+      asked.push(new URL(route.request().url()).searchParams.get('includePageViews'));
+      await route.fallback();
+    });
+    await openAuditLog(page, locale);
+    const toggle = page.getByRole('switch', { name: t('system:auditLog.filters.pageViews') });
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(asked.at(-1)).toBeNull();
+
+    await toggle.click();
+
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(() => asked.at(-1)).toBe('true');
+  });
+
   test('says so when the filters match nothing', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await stub(page);

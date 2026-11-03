@@ -81,10 +81,7 @@ const openTicketIn = async (admin: Page, brandName: string, reference: string): 
   await admin.getByRole('button', { name: t('admin:brandSwitcher.action') }).click();
   await admin.getByRole('menuitemradio', { name: brandName }).click();
   await expect(admin.getByRole('menuitemradio', { name: brandName })).toBeHidden();
-  await admin
-    .getByRole('link', { name: new RegExp(t('admin:nav.tickets')) })
-    .first()
-    .click();
+  // The admin is already in Tickets, whose views are open; a click on the section's row would fold them.
   await admin.getByRole('link', { name: t('tickets:views.all'), exact: true }).click();
   await admin.getByRole('link', { name: new RegExp(reference) }).click();
 };

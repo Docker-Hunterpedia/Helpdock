@@ -70,10 +70,13 @@ test('an API key shown once answers /api/v1, and is refused once revoked', async
   await page
     .getByRole('button', { name: t('developers:keys.revokeLabel', { name: KEY_NAME }) })
     .click();
-  await page
-    .getByRole('dialog', { name: t('developers:keys.revokeConfirm.title', { name: KEY_NAME }) })
-    .getByRole('button', { name: t('developers:keys.revokeConfirm.action') })
-    .click();
+  const revoke = page.getByRole('dialog', {
+    name: t('developers:keys.revokeConfirm.title', { name: KEY_NAME }),
+  });
+  await revoke.getByRole('button', { name: t('developers:keys.revokeConfirm.action') }).click();
+  // While it closes the shell is hidden from the accessibility tree, and the next test would take
+  // the Settings tree for folded and fold it with a click on the row.
+  await expect(revoke).toBeHidden();
   await expect(
     page.getByText(t('developers:keys.toast.revoked', { name: KEY_NAME })),
   ).toBeVisible();

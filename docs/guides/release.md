@@ -183,6 +183,9 @@ the next patch ([security scanning](security-scanning.md)).
   Do not tie this assertion to `apps/api/package.json`: Changesets bumps it before the release image exists,
   while templates must continue pointing at an already published image.
 
+- A release updates the website's version number, not its images. When the
+  admin's `ticket-view.png` baselines changed, refresh the site's copies as
+  [the website guide](website.md#images) describes.
 - Check that the website shows the new version (Actions › Pages). If the dispatch
   failed, the release run shows a warning instead of failing; run
   **Pages › Run workflow** by hand.

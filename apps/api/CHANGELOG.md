@@ -1,5 +1,11 @@
 # @helpdock/api
 
+## 1.4.2
+
+### Patch Changes
+
+- [#456](https://github.com/Docker-Hunterpedia/Helpdock/pull/456) [`059c9c5`](https://github.com/Docker-Hunterpedia/Helpdock/commit/059c9c545aaa250fe869c616c57bbbd5faf5f421) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - The composer's status box says "Leave the status" when no status is chosen, instead of showing a blank box.
+
 ## 1.4.1
 
 ### Patch Changes

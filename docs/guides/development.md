@@ -445,7 +445,9 @@ Actions tab or with `gh`, then commit what comes back:
 
 ```bash
 gh workflow run screenshots.yml --ref <your-branch>
-gh run download <run-id> --name screenshot-baselines --dir apps/admin/e2e/__screenshots__
+# gh will not overwrite existing files, so download elsewhere and copy them in.
+gh run download <run-id> --name screenshot-baselines --dir /tmp/screenshot-baselines
+cp -R /tmp/screenshot-baselines/ apps/admin/e2e/__screenshots__/
 git add apps/admin/e2e/__screenshots__
 ```
 

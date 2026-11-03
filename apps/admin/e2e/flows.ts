@@ -98,7 +98,12 @@ const say = (t: Translate, key: string): string => (t as (key: string) => string
  */
 export async function openSettingsTree(page: Page | Locator, t: Translate): Promise<void> {
   const tree = settingsTree(page, t);
-  if (!(await tree.isVisible())) {
+  // A closing dialog still hides the shell from the accessibility tree. Read that as folded and
+  // the click below would fold a tree that is open, so this looks past `aria-hidden`.
+  const unfolded = page
+    .getByRole('navigation', { name: t('admin:nav.label'), includeHidden: true })
+    .getByRole('list', { name: t('admin:settings.navLabel'), includeHidden: true });
+  if (!(await unfolded.isVisible())) {
     await page
       .getByRole('navigation', { name: t('admin:nav.label') })
       .getByRole('link', { name: t('admin:nav.settings'), exact: true })

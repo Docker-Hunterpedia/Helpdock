@@ -611,7 +611,7 @@ export function Composer({
           value={thenStatusId}
           label={t('tickets:composer.thenSetStatus')}
           // One toolbar row (`Admin/Ticket-CompactComposer`): the name is for the screen reader, the box says what it does.
-          slotProps={{ inputLabel: { sx: visuallyHidden } }}
+          slotProps={{ inputLabel: { sx: visuallyHidden }, select: { displayEmpty: true } }}
           onChange={(event) => {
             onThenStatusChange(event.target.value);
           }}

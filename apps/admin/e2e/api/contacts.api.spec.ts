@@ -40,7 +40,7 @@ test.describe('contacts against the real api', () => {
 
     await expect(page.getByText(t('contacts:empty.heading'))).toBeVisible();
 
-    await page.getByRole('button', { name: t('contacts:newContact') }).click();
+    await page.getByRole('button', { name: t('contacts:empty.action') }).click();
     const form = page.getByRole('dialog');
     await form.getByLabel(t('contacts:dialog.nameLabel'), { exact: true }).fill(CONTACT_NAME);
     await form

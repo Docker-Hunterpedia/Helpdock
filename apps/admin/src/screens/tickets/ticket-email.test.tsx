@@ -57,6 +57,14 @@ describe('the composer on an email ticket', () => {
     vi.unstubAllGlobals();
   });
 
+  it('says the status stays as it is when nothing is chosen, not a blank box', async () => {
+    await open(MOCK_TICKET_REFUND);
+
+    expect(within(composer()).getByRole('combobox', { name: 'Then set status' })).toHaveTextContent(
+      'Leave the status',
+    );
+  });
+
   it('is one line until it is opened, then shows From, To, Cc and the signature', async () => {
     const { user } = await open(MOCK_TICKET_REFUND);
 

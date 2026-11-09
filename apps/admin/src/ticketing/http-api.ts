@@ -33,6 +33,7 @@ import type {
   MacroList,
   MacroListQuery,
   MacroUpdateRequest,
+  PriorityLabelsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
@@ -305,6 +306,17 @@ export class HttpTicketingApi implements TicketingApi {
   ): Promise<BrandSettings> {
     return brandSettingsSchema.parse(
       await this.#transport.request('PATCH', `${this.#brand(brandId)}/ticketing/feedback`, request),
+    );
+  }
+
+  // ---------------------------------------------------------------- M1-02
+
+  async updatePriorityLabels(
+    brandId: string,
+    request: PriorityLabelsUpdateRequest,
+  ): Promise<BrandSettings> {
+    return brandSettingsSchema.parse(
+      await this.#transport.request('PUT', `${this.#brand(brandId)}/priority-labels`, request),
     );
   }
 

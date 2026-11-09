@@ -105,6 +105,14 @@ export function useTicketingApi(): TicketingApi {
   return api;
 }
 
+/**
+ * The ticketing api when there is one, and `null` below a provider that has
+ * none. For shell-level readers that must not throw in a preview or a test.
+ */
+export function useOptionalTicketingApi(): TicketingApi | null {
+  return useContext(TicketingApiContext);
+}
+
 export function useContactsApi(): ContactsApi {
   const api = useContext(ContactsApiContext);
   if (!api) {

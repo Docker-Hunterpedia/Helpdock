@@ -24,6 +24,7 @@ import { assistKeys, isAssistError } from '../../../assist/api.js';
 import { useAssistApi } from '../../../assist/context.tsx';
 import { helpCenterKeys } from '../../../help-center/api.js';
 import { useHelpCenterApi } from '../../../help-center/context.tsx';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import type { ThreadAssist } from '../thread.tsx';
 import { AssistLogDisclosure } from './ai-log-disclosure.tsx';
@@ -98,6 +99,7 @@ export interface TicketAssist {
 export function useTicketAssist(input: TicketAssistInput): TicketAssist {
   const { brandId, ticketId, ticket, canWrite } = input;
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
   const api = useAssistApi();
   const helpCenter = useHelpCenterApi();
@@ -280,14 +282,14 @@ export function useTicketAssist(input: TicketAssistInput): TicketAssist {
         departments: input.departments,
         ticket,
         locale,
-        priorityName: (priority) => t(`tickets:priority.${priority}`),
+        priorityName: priorityLabel,
         labels: {
           tag: t('tickets:assist.fields.tag'),
           priority: t('tickets:assist.fields.priority'),
           department: t('tickets:assist.fields.department'),
         },
       }),
-    [state.data?.suggestions, input.tags, input.departments, ticket, locale, t],
+    [state.data?.suggestions, input.tags, input.departments, ticket, locale, t, priorityLabel],
   );
 
   const setView = (messageId: string, patch: MessageView): void => {

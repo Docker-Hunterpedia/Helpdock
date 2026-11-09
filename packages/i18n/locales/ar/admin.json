@@ -271,6 +271,7 @@
       "brandDanger": "حذف العلامة, استعادة, مسح",
       "ticketingDepartments": "فرق, مجموعات, توجيه",
       "ticketingStatuses": "مفتوحة, مغلقة, معلقة, إيقاف اتفاقية الخدمة, حالات",
+      "ticketingPriorities": "أسماء الأولويات, إعادة تسمية, أولوية, عاجلة, عالية, متوسطة, منخفضة",
       "ticketingTags": "علامات, تصنيفات",
       "ticketingCustomFields": "حقول إضافية, حقول النموذج, خصائص",
       "ticketingTemplates": "قوالب التذاكر, نماذج, قيم افتراضية",

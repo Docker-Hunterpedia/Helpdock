@@ -20,6 +20,7 @@ import { usePreferences } from '../../app/providers.tsx';
 import { contactRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { initialsOf } from '../contacts/format.js';
 import { AssigneePicker } from './assignee-picker.tsx';
 import { ChannelLabel } from './badges.tsx';
@@ -137,6 +138,7 @@ export function DetailsPanel({
   onChange,
 }: DetailsPanelProps): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const assigneeId = useId();
@@ -309,7 +311,7 @@ export function DetailsPanel({
       >
         {ticketPrioritySchema.options.map((priority) => (
           <MenuItem key={priority} value={priority}>
-            {t(`tickets:priority.${priority}`)}
+            {priorityLabel(priority)}
           </MenuItem>
         ))}
       </DetailsSelect>

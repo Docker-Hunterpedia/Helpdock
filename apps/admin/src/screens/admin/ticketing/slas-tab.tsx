@@ -1,4 +1,9 @@
-import type { BrandSettings, SlaPolicy, SlaPolicyCreateRequest } from '@helpdock/schemas';
+import type {
+  BrandSettings,
+  SlaPolicy,
+  SlaPolicyCreateRequest,
+  TicketPriority,
+} from '@helpdock/schemas';
 import { Box, Button, IconButton, Typography } from '@mui/material';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GripVertical, Plus } from 'lucide-react';
@@ -7,6 +12,7 @@ import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useStaffApi, useTicketingApi } from '../../../auth/session.tsx';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
@@ -40,6 +46,7 @@ type Selection = { readonly kind: 'policy'; readonly id: string } | { readonly k
  */
 export function SlasTab(): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const api = useTicketingApi();
   const staffApi = useStaffApi();
   const session = useSession();
@@ -218,7 +225,7 @@ export function SlasTab(): ReactNode {
                   .map((value) =>
                     condition.field === 'department'
                       ? departmentName(value)
-                      : t(`tickets:priority.${value as 'low'}`),
+                      : priorityLabel(value as TicketPriority),
                   )
                   .join(t('ticketing:slas.list.or')),
               },
@@ -389,7 +396,7 @@ export function SlasTab(): ReactNode {
                     .map((gap) =>
                       t('ticketing:slas.list.gap', {
                         department: departmentName(gap.departmentId),
-                        priority: t(`tickets:priority.${gap.priority}`),
+                        priority: priorityLabel(gap.priority),
                       }),
                     )
                     .join(t('ticketing:slas.list.and')),

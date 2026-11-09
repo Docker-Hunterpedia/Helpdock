@@ -32,6 +32,7 @@ import { SsoError } from '../sso/api.js';
 import { StaffError } from '../staff/api.js';
 import { TelegramError } from '../telegram/api.js';
 import { TicketingError } from '../ticketing/api.js';
+import { type FieldIssue, FieldValidationError } from '../ticketing/field-errors.js';
 import { TicketLifecycleError } from '../tickets/api.js';
 import { AuthError } from './api.js';
 
@@ -270,6 +271,7 @@ const toError = async (
   | TicketingError
   | TicketLifecycleError
   | WebhooksError
+  | FieldValidationError
 > => {
   let auth: AuthErrorBody | undefined;
   let staff: StaffRefusal | undefined;
@@ -292,6 +294,7 @@ const toError = async (
   let webhooks: { reason: WebhooksRefusal; address?: string | undefined } | undefined;
   let sso: { reason: SsoRefusal; domains?: string[] | undefined } | undefined;
   let smtpPasswordRequired = false;
+  let invalidFields: readonly FieldIssue[] | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -311,6 +314,7 @@ const toError = async (
     webhooks = body.webhooks;
     sso = body.sso;
     smtpPasswordRequired = body.setup?.reason === 'smtp-password-required';
+    invalidFields = body.code === 'validation_failed' ? body.fields : undefined;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -374,6 +378,10 @@ const toError = async (
 
   if (sso !== undefined) {
     return new SsoError(sso.reason, sso.domains);
+  }
+
+  if (invalidFields !== undefined && invalidFields.length > 0) {
+    return new FieldValidationError(invalidFields);
   }
 
   const retryAfter = Number(response.headers.get('Retry-After'));

@@ -11,6 +11,7 @@ import {
   Clock,
   Code,
   Download,
+  Flag,
   Globe,
   Hourglass,
   IdCard,
@@ -136,6 +137,7 @@ const ICON_OF: Readonly<Record<string, LucideIcon>> = {
   brandDanger: TriangleAlert,
   ticketingDepartments: Network,
   ticketingStatuses: CircleDot,
+  ticketingPriorities: Flag,
   ticketingTags: Tag,
   ticketingCustomFields: TextCursorInput,
   ticketingTemplates: LayoutTemplate,
@@ -252,6 +254,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
 
   ticketing('ticketingDepartments', 'departments', 'ticketing:tabs.departments'),
   ticketing('ticketingStatuses', 'statuses', 'ticketing:tabs.statuses'),
+  ticketing('ticketingPriorities', 'priorities', 'ticketing:tabs.priorities'),
   ticketing('ticketingTags', 'tags', 'ticketing:tabs.tags'),
   ticketing('ticketingCustomFields', 'custom-fields', 'ticketing:tabs.customFields'),
   ticketing('ticketingTemplates', 'templates', 'ticketing:tabs.templates'),

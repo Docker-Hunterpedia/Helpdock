@@ -22,6 +22,7 @@ import { type ReactNode, useId, useMemo, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useTicketingApi, useTicketsApi } from '../../../auth/session.tsx';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import type { BulkChoice } from '../../../tickets/bulk.js';
 import { ticketKeys } from '../../../tickets/keys.js';
 import { tagLabel } from '../../../tickets/tags.js';
@@ -93,6 +94,7 @@ export function BulkBar({
   onClear,
 }: BulkBarProps): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
   const id = useId();
   const [open, setOpen] = useState<{ name: MenuName; anchor: HTMLElement } | null>(null);
@@ -195,7 +197,7 @@ export function BulkBar({
       >
         {ticketPrioritySchema.options.map((priority) => (
           <MenuItem key={priority} onClick={pick({ kind: 'priority', priority })}>
-            {t(`tickets:priority.${priority}`)}
+            {priorityLabel(priority)}
           </MenuItem>
         ))}
       </ChoiceMenu>

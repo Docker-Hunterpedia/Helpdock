@@ -27,6 +27,7 @@ import {
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { Field } from '../../../ui/field.tsx';
 import { CustomDefaultField } from './custom-default-field.tsx';
 import { TagChip } from './tag-chip.tsx';
@@ -84,6 +85,7 @@ export function TemplateEditor({
   onDelete?: (() => void) | undefined;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const nameId = useId();
   const departmentId = useId();
@@ -198,7 +200,7 @@ export function TemplateEditor({
         >
           {ticketPrioritySchema.options.map((candidate) => (
             <MenuItem key={candidate} value={candidate}>
-              {t(`ticketing:templates.priorities.${candidate}`)}
+              {priorityLabel(candidate)}
             </MenuItem>
           ))}
         </Select>

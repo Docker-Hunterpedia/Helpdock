@@ -32,6 +32,7 @@ import {
 import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { PriorityBadge } from '../../tickets/badges.tsx';
 import { type ActionPick, ActionPickerDialog, type PickOptions } from './sla-action-picker.tsx';
 import { type DraftIssues, issueCount, type PolicyDraft, type TargetUnit } from './sla-draft.js';
@@ -398,13 +399,14 @@ function ConditionRow({
   onRemove(): void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const fieldName = t(`ticketing:slas.editor.field.${condition.field}`);
   const choices: readonly { id: string; label: string }[] =
     condition.field === 'department'
       ? options.departments.map((department) => ({ id: department.id, label: department.name }))
       : SLA_PRIORITIES.map((priority) => ({
           id: priority,
-          label: t(`tickets:priority.${priority}`),
+          label: priorityLabel(priority),
         }));
 
   return (
@@ -500,6 +502,7 @@ function TargetsTable({
   onChange(draft: PolicyDraft): void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const columns = { xs: '1fr', md: '120px minmax(0, 1fr) minmax(0, 1fr)' };
 
@@ -532,7 +535,7 @@ function TargetsTable({
                 inputMode: 'numeric',
                 'aria-label': t('ticketing:slas.editor.targetLabel', {
                   clock: clockName,
-                  priority: t(`tickets:priority.${priority}`),
+                  priority: priorityLabel(priority),
                 }),
                 'aria-invalid': invalid,
               },
@@ -550,7 +553,7 @@ function TargetsTable({
               htmlInput: {
                 'aria-label': t('ticketing:slas.editor.unitLabel', {
                   clock: clockName,
-                  priority: t(`tickets:priority.${priority}`),
+                  priority: priorityLabel(priority),
                 }),
               },
             }}

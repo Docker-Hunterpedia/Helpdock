@@ -639,6 +639,7 @@ describe.skipIf(!hasDocker)('the api', () => {
           timerStartsWithComposer: false,
           aiCountsAsFirstResponse: true,
           slaCountReopens: false,
+          priorityLabels: {},
         },
       });
     });

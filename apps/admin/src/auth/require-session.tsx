@@ -4,6 +4,7 @@ import { Navigate, Outlet, useLocation } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { RETURN_TO_PARAM, ROUTES } from '../app/route-paths.js';
 import { RealtimeProvider } from '../realtime/realtime-provider.tsx';
+import { PriorityLabelsProvider } from '../ticketing/priority-labels.tsx';
 import { SessionProvider, useSessionQuery } from './session.tsx';
 
 /**
@@ -40,7 +41,9 @@ export function RequireSession(): ReactNode {
       {/* Below the session, because a socket needs a principal, a brand and a
           token, and none of the three exists on the sign-in screen (M0-13). */}
       <RealtimeProvider>
-        <Outlet />
+        <PriorityLabelsProvider>
+          <Outlet />
+        </PriorityLabelsProvider>
       </RealtimeProvider>
     </SessionProvider>
   );

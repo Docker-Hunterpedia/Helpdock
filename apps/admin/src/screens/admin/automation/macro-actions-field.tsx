@@ -9,6 +9,7 @@ import { Plus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { statusName } from '../../tickets/format.js';
 import type { DraftAction } from './macro-draft.js';
 
@@ -56,6 +57,7 @@ export function MacroActionsField({
   onChange(actions: readonly DraftAction[]): void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
 
   const replace = (index: number, next: DraftAction | null): void => {
@@ -78,7 +80,7 @@ export function MacroActionsField({
       case 'set_priority':
         return PRIORITIES.map((priority) => ({
           value: priority,
-          label: t(`tickets:priority.${priority}`),
+          label: priorityLabel(priority),
         }));
       case 'add_tag':
       case 'remove_tag':

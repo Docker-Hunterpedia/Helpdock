@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { departmentName, doorName } from './routing-steps.tsx';
 import type { RuleText } from './rule-text.js';
@@ -208,6 +209,7 @@ export function RoutingResult({
   readonly text: RuleText;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
   const timeOf = useTimeOfDay();
   const { entry } = result;
@@ -255,7 +257,7 @@ export function RoutingResult({
       ? []
       : [
           result.ticket.team?.name,
-          t(`rules:priorities.${result.ticket.priority}`),
+          priorityLabel(result.ticket.priority),
           ...result.ticket.tagNames.map((tag) => t('rules:testRun.tag', { tag })),
         ].filter((fact): fact is string => fact !== undefined && fact !== '');
 

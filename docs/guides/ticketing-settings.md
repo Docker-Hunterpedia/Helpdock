@@ -8,11 +8,11 @@ at `/settings/inbox/<page>`; the old `/admin/ticketing/…` addresses redirect).
 This guide follows them in their order.
 
 The Inbox group holds these pages: **Departments** (M1-01), **Statuses**
-(M1-08), **Tags**, **Custom fields** and **Templates** (M1-06),
+(M1-08), **Priorities** (M1-02), **Tags**, **Custom fields** and **Templates** (M1-06),
 **Views** (M1-05), **Assignment** (M1-07), **Business hours** and **SLA
 policies** ([SLAs](slas.md)), **Spam** (M1-11) and **Feedback** (M1-12), then
 Rules, Time-based, Routing and Macros ([Automation](automation.md),
-[Macros](macros.md)). What each role is offered there is the table below. There is no Priorities page: tickets have the four fixed priorities (low, medium, high, urgent), and editing their labels is not built; `/settings/inbox/priorities` and the old `/admin/ticketing/priorities` open Departments.
+[Macros](macros.md)). What each role is offered there is the table below. The old `/admin/ticketing/priorities` address opens Priorities too.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short
@@ -27,6 +27,7 @@ version:
 | Put somebody on a team, or take them off | anybody | Agents and Viewers only | no |
 | Add, edit, reorder or delete a status | yes | yes | no |
 | Change the reply behaviour and the reopen policy | yes | yes | no |
+| Rename the four priorities | yes | yes | no |
 | Change the brand's name, language, time zone or settings | yes | no | no |
 | Read the tags, custom fields and templates | yes | yes | yes |
 | Add, edit, reorder or delete tags, custom fields and templates | yes | yes | no |
@@ -232,6 +233,46 @@ restarted for it.
 The brand's own, and what every picker draws. Reordering has three ways in and
 one path out: drag the handle, focus it and press `↑`/`↓`, or use **Move up** /
 **Move down** in the row menu. All three send the whole list.
+
+## Priorities
+
+Settings › Inbox › Priorities (`/settings/inbox/priorities`, artboard
+`Admin/Ticketing-Priorities`) renames the four priorities for your team. The
+set is fixed: **Low, Medium, High, Urgent**, in that order, with the colours of
+the pills unchanged. Only the words change, and only on staff screens.
+
+A row has an English field and an Arabic field. A staff member sees the name in
+their own interface language; an empty field means the default name, which is
+shown as the placeholder. Under a renamed pill a muted line says what the
+default is ("Default: High"). The reset button on a row clears both of its fields
+(it still needs **Save**), and is disabled while the row has no name of its own.
+
+| Rule | Detail |
+|---|---|
+| Length | 1 to 24 characters after trimming, on one line, no control characters. |
+| Unique | Within one language two priorities cannot share a name, compared without regard to case. The default of a row you left empty counts: you cannot call High "Urgent" while Urgent keeps its default. Swapping two defaults is allowed. |
+| Where the error shows | Under the field you edited last. **Save** moves focus to the first invalid field and sends nothing. |
+| Saving | One form. Save writes all four rows at once, shows "Priority names saved", and redraws every open screen without a reload. A refused or failed save keeps what you typed and shows a banner above the table. |
+
+**What the names reach.** The ticket list (the priority dot's accessible name),
+the ticket header and details panel, the priority menus (ticket, bulk edit, new
+ticket, split, templates, saved views, macros), the activity lines and the
+routing trail, automation rules and their text, the test run, SLA policies and
+the SLA card, the filters and their chips, and the reports. **What it does not
+reach:** the API and the public API, webhooks, imports, rules and SLA targets
+(they keep `low | medium | high | urgent`), the CSV exports, the widget, the help
+center, customer emails and the staff notification email, which still say
+"Urgent". A customer never sees a priority.
+
+**Where they are stored.** `brands.settings.priorityLabels`, a partial map of
+`{ en?, ar? }` per priority; only the names a brand changed are stored. No new
+table and no migration. They travel with the brand's `settings`, so everyone who
+can read tickets (`brand:read`) receives them; the page and its `PUT` need
+`ticketing:manage`, like Statuses. Each change writes a
+`brand.priority_labels.updated` audit row that holds the changed names as
+`before` and `after` (`null` is the default), and nothing when nothing changed.
+`PATCH /api/brands/:brandId` replaces the whole `settings` object, so a caller
+of that route that omits `priorityLabels` clears them; the Brand page never does.
 
 ## Reply behaviour
 
@@ -822,6 +863,7 @@ there as well as in the brand it creates.
 | `PATCH …/ticket-statuses/:statusId` | `@Requires('ticketing:manage')` | Name, Arabic name, colour, and — on a custom row — state, flags and default. |
 | `DELETE …/ticket-statuses/:statusId` | `@Requires('ticketing:manage')` | Custom rows only. Moves their tickets to the default open status. |
 | `PATCH …/ticketing/reply-behaviour` | `@Requires('ticketing:manage')` | The two settings of §2.3. Team Leaders included. |
+| `PUT …/priority-labels` | `@Requires('ticketing:manage')` | The whole four-row map of priority names; an empty row or language goes back to the default. 400 with the field path for a name that is too long or taken. Team Leaders included (M1-02). |
 | `PATCH …/ticketing/feedback` | `@Requires('ticketing:manage')` | CSAT, time tracking and the composer timer (M1-12). Team Leaders included. |
 | `PATCH /api/brands/:brandId` | `@Requires('brand:manage')` | Name, default locale, time zone, settings. Never the prefix. |
 | `POST /api/install/brands` | `@Requires('install:admin')` | An additional brand. Audited. |

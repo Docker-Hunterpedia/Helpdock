@@ -1002,6 +1002,13 @@
    "w": 1700,
    "x": 0,
    "y": 66000
+  },
+  "AdminTicketingPriorities.dc.html": {
+   "h": 3000,
+   "title": "Admin/Ticketing-Priorities",
+   "w": 1880,
+   "x": 0,
+   "y": 94500
   }
  },
  "createdOnFiles": {
@@ -1359,7 +1366,8 @@
   "AdminSettingsShell.dc.html",
   "AdminEmptyStates.dc.html",
   "AdminAcceptInviteProviders.dc.html",
-  "AdminUxFixes.dc.html"
+  "AdminUxFixes.dc.html",
+  "AdminTicketingPriorities.dc.html"
  ],
  "pages": [],
  "title": "Helpdock Design System"

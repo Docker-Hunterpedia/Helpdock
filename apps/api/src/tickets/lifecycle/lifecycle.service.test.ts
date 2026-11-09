@@ -116,6 +116,7 @@ const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
   timerStartsWithComposer: false,
   aiCountsAsFirstResponse: true,
   slaCountReopens: false,
+  priorityLabels: {},
 });
 
 const harness = (options: {

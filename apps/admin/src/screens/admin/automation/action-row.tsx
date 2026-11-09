@@ -15,6 +15,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { Choice } from './choice.tsx';
 import { newAction } from './rule-draft.js';
 
@@ -98,6 +99,7 @@ export function ActionRow({
   readonly onMove: (offset: number) => void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const n = index + 1;
@@ -146,7 +148,7 @@ export function ActionRow({
           >
             {ticketPrioritySchema.options.map((priority) => (
               <option key={priority} value={priority}>
-                {t(`rules:priorities.${priority}`)}
+                {priorityLabel(priority)}
               </option>
             ))}
           </Choice>

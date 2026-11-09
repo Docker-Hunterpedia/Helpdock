@@ -25,6 +25,7 @@ import { Trans } from 'react-i18next';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { CHANNEL_ICONS } from './badges.tsx';
 import { messageTime } from './format.js';
 
@@ -111,6 +112,7 @@ function By({ by }: { readonly by: RoutingActor }): ReactNode {
 /** What one step moved, without its actor. */
 function Change({ change }: { readonly change: RoutingChange }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
   const bdi = { bdi: <bdi /> };
   switch (change.kind) {
@@ -155,7 +157,7 @@ function Change({ change }: { readonly change: RoutingChange }): ReactNode {
                 ? 'routing.change.priorityRaised'
                 : 'routing.change.priorityLowered'
           }
-          values={{ priority: t(`tickets:priority.${change.to}`) }}
+          values={{ priority: priorityLabel(change.to) }}
         />
       );
     case 'assigned':

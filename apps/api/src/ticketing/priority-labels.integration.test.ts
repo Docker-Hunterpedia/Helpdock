@@ -14,7 +14,7 @@ import type { BrandSettings } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { and, eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
@@ -101,7 +101,7 @@ describe.skipIf(!hasDocker)('editable priority labels', () => {
     }) as Env;
 
   const call = <T>(
-    method: 'GET' | 'PUT',
+    method: 'GET' | 'PUT' | 'PATCH',
     path: string,
     who: Person,
     payload?: unknown,
@@ -120,6 +120,8 @@ describe.skipIf(!hasDocker)('editable priority labels', () => {
         status: response.statusCode,
         body: (response.body === '' ? undefined : response.json()) as T,
       }));
+
+  const brandPath = (): string => `/api/brands/${seeded.brandId}`;
 
   const labelsPath = (brandId: string): string => `/api/brands/${brandId}/priority-labels`;
 
@@ -204,12 +206,24 @@ describe.skipIf(!hasDocker)('editable priority labels', () => {
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
   });
 
+  /** Every case starts from a brand that has never been configured, and seeds what it needs. */
+  beforeEach(async () => {
+    for (const brandId of [seeded.brandId, otherBrand]) {
+      await withSystem(runtime.db, brandId, (tx) =>
+        tx.update(brands).set({ settings: {} }).where(eq(brands.id, brandId)),
+      );
+    }
+  });
+
+  const put = (brandId: string, who: Person, body: unknown) =>
+    call<BrandSettings>('PUT', labelsPath(brandId), who, body);
+
   it('starts with no overrides', async () => {
     expect(await storedLabels(seeded.brandId, sam)).toEqual({});
   });
 
   it('persists the names, returns them, and every role that reads the brand receives them', async () => {
-    const saved = await call<BrandSettings>('PUT', labelsPath(seeded.brandId), ada, {
+    const saved = await put(seeded.brandId, ada, {
       low: { en: '', ar: '' },
       high: { en: ' P2 ', ar: 'عالية جدًا' },
       urgent: { en: 'P1' },
@@ -226,31 +240,23 @@ describe.skipIf(!hasDocker)('editable priority labels', () => {
   });
 
   it('lets a Team Leader write, as ticketing:manage says', async () => {
-    const saved = await call<BrandSettings>('PUT', labelsPath(seeded.brandId), tia, {
-      high: { en: 'P2' },
-    });
+    const saved = await put(seeded.brandId, tia, { high: { en: 'P2' } });
 
     expect(saved.status).toBe(200);
     expect(saved.body.priorityLabels).toEqual({ high: { en: 'P2' } });
   });
 
   it('removes an override when its row is cleared, and the other rows stay', async () => {
-    await call('PUT', labelsPath(seeded.brandId), ada, {
-      high: { en: 'P2' },
-      urgent: { en: 'P1', ar: 'حرجة' },
-    });
+    await put(seeded.brandId, ada, { high: { en: 'P2' }, urgent: { en: 'P1', ar: 'حرجة' } });
 
-    const cleared = await call<BrandSettings>('PUT', labelsPath(seeded.brandId), ada, {
-      high: { en: '' },
-      urgent: { en: 'P1' },
-    });
+    const cleared = await put(seeded.brandId, ada, { high: { en: '' }, urgent: { en: 'P1' } });
 
     expect(cleared.body.priorityLabels).toEqual({ urgent: { en: 'P1' } });
     expect(await storedLabels(seeded.brandId, ada)).toEqual({ urgent: { en: 'P1' } });
   });
 
-  it('refuses a duplicate at the later of the two overrides, or at the override that meets a default, and keeps what was stored', async () => {
-    await call('PUT', labelsPath(seeded.brandId), ada, { urgent: { en: 'P1' } });
+  it('refuses a duplicate at the later of the two overrides, or at the override that meets a default', async () => {
+    await put(seeded.brandId, ada, { urgent: { en: 'P1' } });
 
     const refused = await call<FieldRefusal>('PUT', labelsPath(seeded.brandId), ada, {
       high: { en: 'p1' },
@@ -259,50 +265,123 @@ describe.skipIf(!hasDocker)('editable priority labels', () => {
     const againstDefault = await call<FieldRefusal>('PUT', labelsPath(seeded.brandId), ada, {
       low: { ar: 'عاجلة' },
     });
+    const lookAlike = await call<FieldRefusal>('PUT', labelsPath(seeded.brandId), ada, {
+      low: { ar: 'عــاجلة' },
+    });
 
     expect(refused.status).toBe(400);
     expect(refused.body.error.fields?.map((field) => field.path)).toEqual(['urgent.en']);
     expect(againstDefault.status).toBe(400);
     expect(againstDefault.body.error.fields?.map((field) => field.path)).toEqual(['low.ar']);
+    expect(lookAlike.status).toBe(400);
     expect(await storedLabels(seeded.brandId, ada)).toEqual({ urgent: { en: 'P1' } });
   });
 
-  it('refuses a name that is too long or has a line break at its field', async () => {
+  it('refuses a name that is too long, has a line break or is invisible, at its field', async () => {
     const long = await call<FieldRefusal>('PUT', labelsPath(seeded.brandId), ada, {
       low: { en: 'x'.repeat(25) },
     });
     const broken = await call<FieldRefusal>('PUT', labelsPath(seeded.brandId), ada, {
       medium: { ar: 'a\nb' },
     });
+    const invisible = await call<FieldRefusal>('PUT', labelsPath(seeded.brandId), ada, {
+      high: { en: 'High\u200b' },
+    });
 
     expect(long.status).toBe(400);
     expect(long.body.error.fields?.[0]?.path).toBe('low.en');
     expect(broken.status).toBe(400);
     expect(broken.body.error.fields?.[0]?.path).toBe('medium.ar');
+    expect(invisible.status).toBe(400);
+    expect(invisible.body.error.fields?.[0]?.path).toBe('high.en');
   });
 
   it('refuses an Agent and a Viewer, who may read the names but not write them', async () => {
+    await put(seeded.brandId, ada, { urgent: { en: 'P1' } });
+
     for (const who of [sam, vic]) {
-      const refused = await call('PUT', labelsPath(seeded.brandId), who, { low: { en: 'Meh' } });
+      const refused = await put(seeded.brandId, who, { low: { en: 'Meh' } });
       expect(refused.status).toBe(403);
     }
     expect(await storedLabels(seeded.brandId, ada)).toEqual({ urgent: { en: 'P1' } });
   });
 
   it('keeps each brand’s names to itself', async () => {
-    const theirs = await call<BrandSettings>('PUT', labelsPath(otherBrand), ola, {
-      urgent: { en: 'Fire' },
-    });
+    await put(seeded.brandId, ada, { urgent: { en: 'P1' } });
+
+    const theirs = await put(otherBrand, ola, { urgent: { en: 'Fire' } });
 
     expect(theirs.status).toBe(200);
     expect(await storedLabels(otherBrand, ola)).toEqual({ urgent: { en: 'Fire' } });
     expect(await storedLabels(seeded.brandId, ada)).toEqual({ urgent: { en: 'P1' } });
     // Brand B's Admin can neither read nor write brand A's.
     expect((await call('GET', `/api/brands/${seeded.brandId}`, ola)).status).toBe(403);
-    expect(
-      (await call('PUT', labelsPath(seeded.brandId), ola, { low: { en: 'Nope' } })).status,
-    ).toBe(403);
+    expect((await put(seeded.brandId, ola, { low: { en: 'Nope' } })).status).toBe(403);
     expect(await storedLabels(seeded.brandId, ada)).toEqual({ urgent: { en: 'P1' } });
+  });
+
+  describe('the other settings of the same column', () => {
+    const settingsOf = async (): Promise<BrandSettings> =>
+      (await call<{ settings: BrandSettings }>('GET', `/api/brands/${seeded.brandId}`, ada)).body
+        .settings;
+
+    it('are untouched by a labels write', async () => {
+      await call('PATCH', `${brandPath()}/ticketing/reply-behaviour`, ada, {
+        reopenPolicy: { kind: 'never' },
+      });
+      await call('PATCH', `${brandPath()}/ticketing/feedback`, ada, { csatEnabled: false });
+
+      await put(seeded.brandId, ada, { high: { en: 'P2' } });
+
+      expect(await settingsOf()).toMatchObject({
+        reopenPolicy: { kind: 'never' },
+        csatEnabled: false,
+        priorityLabels: { high: { en: 'P2' } },
+      });
+    });
+
+    it('write without touching the names', async () => {
+      await put(seeded.brandId, ada, { high: { en: 'P2' } });
+
+      await call('PATCH', `${brandPath()}/ticketing/reply-behaviour`, ada, {
+        reopenPolicy: { kind: 'always' },
+      });
+      await call('PATCH', `${brandPath()}/ticketing/feedback`, ada, { timeTrackingEnabled: true });
+
+      expect(await settingsOf()).toMatchObject({
+        reopenPolicy: { kind: 'always' },
+        timeTrackingEnabled: true,
+        priorityLabels: { high: { en: 'P2' } },
+      });
+    });
+
+    it('keep the names when the brand is patched without settings', async () => {
+      await put(seeded.brandId, ada, { high: { en: 'P2' } });
+
+      const patched = await call('PATCH', brandPath(), ada, { name: 'Renamed brand' });
+
+      expect(patched.status).toBe(200);
+      expect((await settingsOf()).priorityLabels).toEqual({ high: { en: 'P2' } });
+    });
+
+    it('survive stored names that stopped being valid by reading as none, not as all defaults', async () => {
+      await call('PATCH', `${brandPath()}/ticketing/reply-behaviour`, ada, {
+        reopenPolicy: { kind: 'never' },
+      });
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .update(brands)
+          .set({
+            settings: sql`${brands.settings} || '{"priorityLabels":{"high":{"en":"Low"}}}'::jsonb`,
+          })
+          .where(eq(brands.id, seeded.brandId)),
+      );
+
+      expect(await settingsOf()).toMatchObject({
+        reopenPolicy: { kind: 'never' },
+        priorityLabels: {},
+      });
+    });
   });
 
   it('audits only the names that changed, with their values, and nothing for a repeat', async () => {
@@ -319,11 +398,12 @@ describe.skipIf(!hasDocker)('editable priority labels', () => {
           )
           .orderBy(auditLog.createdAt),
       );
+    await put(seeded.brandId, ada, { urgent: { en: 'P1' } });
     const body = { urgent: { en: 'P1', ar: 'حرجة' } };
 
-    await call('PUT', labelsPath(seeded.brandId), ada, body);
+    await put(seeded.brandId, ada, body);
     const afterRename = await auditRows();
-    await call('PUT', labelsPath(seeded.brandId), ada, body);
+    await put(seeded.brandId, ada, body);
     const afterRepeat = await auditRows();
 
     expect(afterRepeat).toHaveLength(afterRename.length);

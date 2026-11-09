@@ -171,8 +171,21 @@ export type FeedbackSettingsUpdateRequest = z.infer<typeof feedbackSettingsUpdat
  */
 export const parseBrandSettings = (value: unknown): BrandSettings => {
   const parsed = brandSettingsSchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
+  }
 
-  return parsed.success ? parsed.data : defaultBrandSettings();
+  // Names that stopped being valid (a rule tightened since they were saved)
+  // must not take the reopen policy and every other setting down with them:
+  // retry without them before falling back to the defaults.
+  if (typeof value === 'object' && value !== null) {
+    const withoutLabels = brandSettingsSchema.safeParse({ ...value, priorityLabels: {} });
+    if (withoutLabels.success) {
+      return withoutLabels.data;
+    }
+  }
+
+  return defaultBrandSettings();
 };
 
 /**

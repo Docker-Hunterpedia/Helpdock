@@ -4,6 +4,7 @@ import {
   compactPriorityLabels,
   DEFAULT_PRIORITY_NAMES,
   effectivePriorityName,
+  normalisePriorityName,
   PRIORITY_KEYS,
   priorityLabelConflicts,
   priorityLabelNameSchema,
@@ -20,7 +21,8 @@ describe('PRIORITY_KEYS', () => {
 
 describe('priorityLabelNameSchema', () => {
   it('trims and accepts 1 to 24 characters', () => {
-    expect(priorityLabelNameSchema.parse('  P1  ')).toBe('P1');
+    expect(priorityLabelNameSchema.safeParse('  P1  ').success).toBe(true);
+    expect(normalisePriorityName('  P1  ')).toBe('P1');
     expect(priorityLabelNameSchema.parse('a'.repeat(24))).toHaveLength(24);
   });
 
@@ -63,6 +65,47 @@ describe('priorityLabelConflicts', () => {
       { priority: 'high', locale: 'ar', takenBy: 'urgent' },
     ]);
     expect(priorityLabelConflicts({ high: { en: 'Same' }, urgent: { ar: 'Same' } })).toEqual([]);
+  });
+});
+
+describe('names that look alike (M1-02 review)', () => {
+  it('normalises to NFC, so a decomposed and a composed spelling are one name', () => {
+    const decomposed = 'E\u0301leve\u0301';
+    const composed = '\u00c9lev\u00e9';
+
+    expect(compactPriorityLabels({ low: { en: decomposed } })).toEqual({ low: { en: composed } });
+    expect(priorityLabelConflicts({ low: { en: decomposed }, medium: { en: composed } })).toEqual([
+      { priority: 'medium', locale: 'en', takenBy: 'low' },
+    ]);
+  });
+
+  it('counts tatweel and vowel marks as the same Arabic name as the default', () => {
+    expect(priorityLabelConflicts({ low: { ar: 'عــاجلة' } })).toEqual([
+      { priority: 'low', locale: 'ar', takenBy: 'urgent' },
+    ]);
+    expect(priorityLabelConflicts({ low: { ar: 'عَاجِلَةٌ' } })).toHaveLength(1);
+  });
+
+  it('compares compatibility forms and case together', () => {
+    expect(priorityLabelConflicts({ low: { en: 'ＨＩＧＨ' } })).toHaveLength(1);
+  });
+
+  it('refuses an invisible name in a request, at its field', () => {
+    const result = priorityLabelsUpdateRequestSchema.safeParse({ low: { en: 'High\u200b' } });
+
+    expect(result.error?.issues[0]?.path).toEqual(['low', 'en']);
+  });
+});
+
+describe('parseBrandSettings with names that stopped being valid', () => {
+  it('keeps the other settings and drops only the names', () => {
+    const settings = parseBrandSettings({
+      reopenPolicy: { kind: 'never' },
+      priorityLabels: { high: { en: 'Low' } },
+    });
+
+    expect(settings.reopenPolicy).toEqual({ kind: 'never' });
+    expect(settings.priorityLabels).toEqual({});
   });
 });
 

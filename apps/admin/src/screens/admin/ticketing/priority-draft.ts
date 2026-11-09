@@ -1,6 +1,7 @@
 import {
   compactPriorityLabels,
   DEFAULT_PRIORITY_NAMES,
+  isValidPriorityName,
   PRIORITY_KEYS,
   PRIORITY_LABEL_LOCALES,
   type PriorityLabelLocale,
@@ -108,3 +109,11 @@ export const firstInvalid = (keys: readonly FieldKey[]): FieldKey | undefined =>
 
   return FIELD_ORDER.find((candidate) => paths.has(fieldPath(candidate)));
 };
+
+/** Fields whose typed name the api would refuse for its form: too long, a line break, invisible characters. */
+export const formatIssues = (draft: PriorityDraft): FieldKey[] =>
+  FIELD_ORDER.filter((key) => {
+    const value = draft[key.priority][key.locale];
+
+    return value.trim() !== '' && !isValidPriorityName(value);
+  });

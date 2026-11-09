@@ -265,7 +265,7 @@
     "defaultName": "Default: {{name}}",
     "hint": "Leave a field empty to keep the default name. Up to 24 characters.",
     "duplicate": "{{name}} already uses this name",
-    "invalid": "Use 1 to 24 characters on one line.",
+    "invalid": "Use 1 to 24 visible characters on one line.",
     "failed": "Could not save the priority names. Nothing was changed. Try again.",
     "discard": "Discard",
     "save": "Save"

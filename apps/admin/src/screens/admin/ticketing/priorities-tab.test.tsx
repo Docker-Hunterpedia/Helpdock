@@ -133,7 +133,40 @@ describe('the Priorities page', () => {
     await user.type(field('Medium in English'), 'Normal');
     await user.click(save());
 
-    expect(await screen.findByText('Use 1 to 24 characters on one line.')).toBeVisible();
+    expect(await screen.findByText('Use 1 to 24 visible characters on one line.')).toBeVisible();
     expect(field('Medium in English')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('keeps what is being typed when the brand is read again with the same names', async () => {
+    const { user, ticketing, queryClient } = await renderPriorities();
+    const read = vi.spyOn(ticketing, 'brand');
+
+    await user.type(field('Medium in English'), 'Normal');
+    await queryClient.invalidateQueries({ queryKey: ['brand'] });
+
+    await waitFor(() => {
+      expect(read).toHaveBeenCalled();
+    });
+    expect(field('Medium in English')).toHaveValue('Normal');
+  });
+
+  it('refuses an invisible character before asking the api', async () => {
+    const { user, ticketing } = await renderPriorities();
+    const update = vi.spyOn(ticketing, 'updatePriorityLabels');
+
+    await user.type(field('Low in English'), 'Minor\u200b');
+    await user.click(save());
+
+    expect(await screen.findByText('Use 1 to 24 visible characters on one line.')).toBeVisible();
+    expect(field('Low in English')).toHaveFocus();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('keeps table semantics for assistive technology', async () => {
+    await renderPriorities();
+
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getAllByRole('row')).toHaveLength(5);
+    expect(screen.getAllByRole('columnheader')).toHaveLength(4);
   });
 });

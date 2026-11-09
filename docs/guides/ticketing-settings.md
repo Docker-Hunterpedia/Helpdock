@@ -249,8 +249,8 @@ default is ("Default: High"). The reset button on a row clears both of its field
 
 | Rule | Detail |
 |---|---|
-| Length | 1 to 24 characters after trimming, on one line, no control characters. |
-| Unique | Within one language two priorities cannot share a name, compared without regard to case. The default of a row you left empty counts: you cannot call High "Urgent" while Urgent keeps its default. Swapping two defaults is allowed. |
+| Length and form | 1 to 24 characters after trimming, on one line. No control characters and no invisible ones (zero-width spaces, bidirectional marks and other format characters), which would let two names look alike. Names are stored in Unicode normal form C. |
+| Unique | Within one language two priorities cannot share a name, compared without regard to case. The default of a row you left empty counts: you cannot call High "Urgent" while Urgent keeps its default. Swapping two defaults is allowed. The comparison also ignores width and composed-or-decomposed spelling (NFKC), and for Arabic the tatweel and the vowel marks, so "عاجلة" and "عَاجِلَة" are one name. |
 | Where the error shows | Under the field you edited last. **Save** moves focus to the first invalid field and sends nothing. |
 | Saving | One form. Save writes all four rows at once, shows "Priority names saved", and redraws every open screen without a reload. A refused or failed save keeps what you typed and shows a banner above the table. |
 
@@ -261,8 +261,9 @@ routing trail, automation rules and their text, the test run, SLA policies and
 the SLA card, the filters and their chips, and the reports. **What it does not
 reach:** the API and the public API, webhooks, imports, rules and SLA targets
 (they keep `low | medium | high | urgent`), the CSV exports, the widget, the help
-center, customer emails and the staff notification email, which still say
-"Urgent". A customer never sees a priority.
+center and customer emails. The staff notification email for an SLA warning,
+breach or escalation does use the brand's name, in the recipient's language.
+A customer never sees a priority.
 
 **Where they are stored.** `brands.settings.priorityLabels`, a partial map of
 `{ en?, ar? }` per priority; only the names a brand changed are stored. No new

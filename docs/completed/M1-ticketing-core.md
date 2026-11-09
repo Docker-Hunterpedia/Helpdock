@@ -129,7 +129,7 @@ Written down and carried forward. None of them blocks M2, M3 or M5.
 | Gap | Why it was accepted | Where it is written down |
 |---|---|---|
 | **A Team Leader reads the whole brand's roster and contact timeline counts**, not only their own departments | DOMAIN-RULES §1.2 does not narrow *reading* them, and narrowing is a product decision nobody has taken. | [staff-and-roles](../guides/staff-and-roles.md#known-gaps) |
-| ~~Priority labels are not editable~~ | Closed by M1-02 (#453): Settings › Inbox › Priorities renames the four priorities per language; the names are display-only on staff screens, and the API values stay `low | medium | high | urgent`. The staff notification email still says the default name. | [ticketing settings](../guides/ticketing-settings.md#priorities) |
+| ~~Priority labels are not editable~~ | Closed by M1-02 (#453): Settings › Inbox › Priorities renames the four priorities per language; the names are display-only on staff screens, and the API values stay `low | medium | high | urgent`. | [ticketing settings](../guides/ticketing-settings.md#priorities) |
 | **Nothing re-routes a ticket nobody was eligible for** | It shows in Unassigned, which is where a person looks. Re-routing later is a rule (M3). | [M1-07 notes](#m1-07-assignment) |
 | ~~Auto-unassign ignores business hours~~ | Closed in M9: the job reads M3-01's calendar and waits for the next opening. | [ticketing settings](../guides/ticketing-settings.md#the-offline-timer) |
 | **Deactivation unassigns in one brand** | The hook fires for the brand the action was taken in; the rotation never picks the account anywhere. | [staff-and-roles](../guides/staff-and-roles.md#known-gaps) |

@@ -2,6 +2,7 @@ import {
   PRIORITY_KEYS,
   PRIORITY_LABEL_MAX_LENGTH,
   type PriorityLabelLocale,
+  type PriorityLabelsInput,
   type TicketPriority,
 } from '@helpdock/schemas';
 import {
@@ -37,6 +38,7 @@ import {
   type FieldKey,
   fieldPath,
   firstInvalid,
+  formatIssues,
   hasOverride,
   isDirty,
   type PriorityDraft,
@@ -83,6 +85,9 @@ export function PrioritiesTab(): ReactNode {
     queryFn: () => api.brand(brand.id),
   });
   const stored = brandQuery.data?.settings.priorityLabels;
+  // A background refetch hands back a new object with the same names; only a
+  // change of the names themselves may replace what is being typed.
+  const storedKey = stored === undefined ? null : JSON.stringify(stored);
 
   const [draft, setDraft] = useState<PriorityDraft | null>(null);
   const [lastEdited, setLastEdited] = useState<FieldKey | null>(null);
@@ -95,12 +100,12 @@ export function PrioritiesTab(): ReactNode {
   // Re-filled when the stored names change under the form (after a save, or
   // after another page wrote them), and not on every keystroke.
   useEffect(() => {
-    if (brandQuery.data !== undefined) {
-      setDraft(draftOf(brandQuery.data.settings.priorityLabels));
+    if (storedKey !== null) {
+      setDraft(draftOf(JSON.parse(storedKey) as PriorityLabelsInput));
       setLastEdited(null);
       setServerIssues(new Set());
     }
-  }, [brandQuery.data]);
+  }, [storedKey]);
 
   const save = useMutation({
     mutationFn: (next: PriorityDraft) => api.updatePriorityLabels(brand.id, toRequest(next)),
@@ -140,6 +145,7 @@ export function PrioritiesTab(): ReactNode {
     return <LoadingSkeleton />;
   }
 
+  const invalidFormat = new Set(formatIssues(draft).map(fieldPath));
   const dirty = isDirty(draft, stored);
   const busy = save.isPending;
 
@@ -149,7 +155,9 @@ export function PrioritiesTab(): ReactNode {
       return t('ticketing:priorities.duplicate', { name: defaultName(duplicate.takenBy) });
     }
 
-    return serverIssues.has(fieldPath(key)) ? t('ticketing:priorities.invalid') : undefined;
+    return serverIssues.has(fieldPath(key)) || invalidFormat.has(fieldPath(key))
+      ? t('ticketing:priorities.invalid')
+      : undefined;
   };
 
   const edit = (key: FieldKey, value: string): void => {
@@ -170,6 +178,7 @@ export function PrioritiesTab(): ReactNode {
     event.preventDefault();
     const invalid = firstInvalid([
       ...duplicates.map((issue) => issue.key),
+      ...formatIssues(draft),
       ...[...serverIssues].map((path) => {
         const [priority, language] = path.split('.');
         return { priority: priority as TicketPriority, locale: language as PriorityLabelLocale };
@@ -214,7 +223,7 @@ export function PrioritiesTab(): ReactNode {
           backgroundColor: tokens['bg.surface'],
         }}
       >
-        <Table sx={{ tableLayout: 'fixed', [NARROW]: { display: 'block' } }}>
+        <Table role="table" sx={{ tableLayout: 'fixed', [NARROW]: { display: 'block' } }}>
           <colgroup>
             <col style={{ inlineSize: 180 }} />
             <col />
@@ -222,35 +231,37 @@ export function PrioritiesTab(): ReactNode {
             <col style={{ inlineSize: 56 }} />
           </colgroup>
           <TableHead
+            role="rowgroup"
             sx={{
               backgroundColor: tokens['bg.muted'],
               [NARROW]: { ...visuallyHidden },
             }}
           >
-            <TableRow>
-              <TableCell component="th" scope="col" sx={mutedHeader}>
+            <TableRow role="row">
+              <TableCell component="th" scope="col" role="columnheader" sx={mutedHeader}>
                 {t('ticketing:priorities.columns.priority')}
               </TableCell>
-              <TableCell component="th" scope="col" sx={mutedHeader}>
+              <TableCell component="th" scope="col" role="columnheader" sx={mutedHeader}>
                 {t('ticketing:priorities.columns.en')}
               </TableCell>
-              <TableCell component="th" scope="col" sx={mutedHeader}>
+              <TableCell component="th" scope="col" role="columnheader" sx={mutedHeader}>
                 {t('ticketing:priorities.columns.ar')}
               </TableCell>
-              <TableCell component="th" scope="col" sx={mutedHeader}>
+              <TableCell component="th" scope="col" role="columnheader" sx={mutedHeader}>
                 <Box component="span" sx={visuallyHidden}>
                   {t('ticketing:priorities.columns.reset')}
                 </Box>
               </TableCell>
             </TableRow>
           </TableHead>
-          <TableBody sx={{ [NARROW]: { display: 'block' } }}>
+          <TableBody role="rowgroup" sx={{ [NARROW]: { display: 'block' } }}>
             {PRIORITY_KEYS.map((priority) => {
               const overridden = showsDefault(draft, priority, locale);
 
               return (
                 <TableRow
                   key={priority}
+                  role="row"
                   sx={{
                     verticalAlign: 'top',
                     [NARROW]: {
@@ -267,6 +278,7 @@ export function PrioritiesTab(): ReactNode {
                   <TableCell
                     component="th"
                     scope="row"
+                    role="rowheader"
                     sx={{
                       height: 'auto',
                       verticalAlign: 'top',
@@ -311,6 +323,7 @@ export function PrioritiesTab(): ReactNode {
                     return (
                       <TableCell
                         key={language}
+                        role="cell"
                         sx={{
                           height: 'auto',
                           verticalAlign: 'top',
@@ -389,6 +402,7 @@ export function PrioritiesTab(): ReactNode {
                   })}
 
                   <TableCell
+                    role="cell"
                     sx={{
                       height: 'auto',
                       verticalAlign: 'top',

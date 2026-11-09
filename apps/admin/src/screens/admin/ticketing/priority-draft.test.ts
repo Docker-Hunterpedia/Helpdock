@@ -3,6 +3,7 @@ import {
   draftOf,
   duplicateIssues,
   firstInvalid,
+  formatIssues,
   hasOverride,
   isDirty,
   pillName,
@@ -95,5 +96,21 @@ describe('priority draft', () => {
       ]),
     ).toEqual({ priority: 'high', locale: 'en' });
     expect(firstInvalid([])).toBeUndefined();
+  });
+
+  it('finds names the api would refuse for their form', () => {
+    const draft = withField(
+      withField(draftOf({}), { priority: 'low', locale: 'en' }, 'Minor\u200b'),
+      { priority: 'high', locale: 'ar' },
+      'x'.repeat(30),
+    );
+
+    expect(formatIssues(draft)).toEqual([
+      { priority: 'low', locale: 'en' },
+      { priority: 'high', locale: 'ar' },
+    ]);
+    expect(formatIssues(withField(draftOf({}), { priority: 'low', locale: 'en' }, '  '))).toEqual(
+      [],
+    );
   });
 });

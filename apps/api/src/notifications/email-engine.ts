@@ -390,7 +390,7 @@ export class NotificationEmailEngine {
     const { repository, appUrl } = this.#deps;
     const [only] = items;
     if (batch.kind === 'immediate' && items.length === 1 && only !== undefined) {
-      return this.#renderSingle(tx, only.id);
+      return this.#renderSingle(tx, brandId, only.id);
     }
 
     const [recipient, brand] = await Promise.all([
@@ -423,7 +423,11 @@ export class NotificationEmailEngine {
     );
   }
 
-  async #renderSingle(tx: DbTransaction, notificationId: string): Promise<EmailMessage | null> {
+  async #renderSingle(
+    tx: DbTransaction,
+    brandId: string,
+    notificationId: string,
+  ): Promise<EmailMessage | null> {
     const { notifications, appUrl } = this.#deps;
     const notification = await notifications.delivery(tx, notificationId);
     const ticket =
@@ -434,13 +438,14 @@ export class NotificationEmailEngine {
       return null;
     }
 
-    const [assigneeName, message] = await Promise.all([
+    const [assigneeName, message, priorityLabels] = await Promise.all([
       ticket.assigneeId === null
         ? Promise.resolve(null)
         : notifications.userName(tx, ticket.assigneeId),
       notification.messageId === null
         ? Promise.resolve(undefined)
         : notifications.message(tx, notification.messageId),
+      notifications.priorityLabels(tx, brandId),
     ]);
     const locale = notification.userLocale;
 
@@ -463,6 +468,7 @@ export class NotificationEmailEngine {
           assigneeId: ticket.assigneeId,
           assigneeName: assigneeName ?? null,
         },
+        priorityLabels,
         actorName: notification.actorName,
         messageText: message?.bodyText ?? null,
         detail: notification.detail,

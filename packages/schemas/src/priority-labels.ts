@@ -36,14 +36,35 @@ export const DEFAULT_PRIORITY_NAMES: Readonly<
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: refusing control characters is the point.
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
+/** Zero-width, bidi-control and other format characters: invisible, so two names could look alike. */
+const FORMAT_CHARACTERS = /\p{Cf}/u;
 
-/** One name as typed: trimmed, 1 to 24 characters, one line. */
+/** A name as it is stored: trimmed, in Unicode normal form C. */
+export const normalisePriorityName = (value: string): string => value.trim().normalize('NFC');
+
+/**
+ * Whether a typed name (not empty) may be stored: 1 to 24 characters on one
+ * line, with no control or invisible format characters. Shared by the form and
+ * the api, so the two cannot disagree.
+ */
+export const isValidPriorityName = (value: string): boolean => {
+  const name = normalisePriorityName(value);
+
+  return (
+    name.length >= 1 &&
+    name.length <= PRIORITY_LABEL_MAX_LENGTH &&
+    !CONTROL_CHARACTERS.test(name) &&
+    !FORMAT_CHARACTERS.test(name)
+  );
+};
+
+/** One name as typed; the stored form is {@link normalisePriorityName}. */
 export const priorityLabelNameSchema = z
   .string()
-  .trim()
-  .min(1, 'Use 1 to 24 characters')
-  .max(PRIORITY_LABEL_MAX_LENGTH, 'Use 1 to 24 characters')
-  .refine((value) => !CONTROL_CHARACTERS.test(value), 'Use one line without control characters');
+  .refine(
+    isValidPriorityName,
+    'Use 1 to 24 visible characters on one line, without control or invisible characters',
+  );
 
 const priorityLabelRowSchema = z.object({
   en: priorityLabelNameSchema.optional(),
@@ -72,6 +93,17 @@ export const effectivePriorityName = (
   locale: PriorityLabelLocale,
 ): string => labels?.[priority]?.[locale] ?? DEFAULT_PRIORITY_NAMES[locale][priority];
 
+/**
+ * What two names are compared by: compatibility-normalised (so a full-width or
+ * decomposed spelling matches), without Arabic tatweel and vowel marks, then
+ * lower-cased. "عاجلة" and "عــاجِلة" are the same name.
+ */
+export const uniquenessKey = (name: string, locale: PriorityLabelLocale): string =>
+  name
+    .normalize('NFKC')
+    .replace(/[\u0640\u064B-\u065F\u0670]/gu, '')
+    .toLocaleLowerCase(locale);
+
 export interface PriorityLabelConflict {
   readonly priority: TicketPriority;
   readonly locale: PriorityLabelLocale;
@@ -92,7 +124,7 @@ export const priorityLabelConflicts = (
   for (const locale of PRIORITY_LABEL_LOCALES) {
     const seen = new Map<string, TicketPriority>();
     for (const priority of PRIORITY_KEYS) {
-      const key = effectivePriorityName(labels, priority, locale).toLocaleLowerCase(locale);
+      const key = uniquenessKey(effectivePriorityName(labels, priority, locale), locale);
       const owner = seen.get(key);
       if (owner === undefined) {
         seen.set(key, priority);
@@ -126,11 +158,9 @@ export const priorityLabelsSchema = z.object(priorityLabelShape).superRefine(wit
 
 const priorityLabelDraftNameSchema = z
   .string()
-  .trim()
-  .refine((value) => value === '' || !CONTROL_CHARACTERS.test(value), 'Use one line')
   .refine(
-    (value) => value.length <= PRIORITY_LABEL_MAX_LENGTH,
-    `Use up to ${PRIORITY_LABEL_MAX_LENGTH} characters`,
+    (value) => value.trim() === '' || isValidPriorityName(value),
+    'Use 1 to 24 visible characters on one line, without control or invisible characters',
   );
 
 const priorityLabelDraftRowSchema = z.object({
@@ -162,9 +192,13 @@ export const compactPriorityLabels = (value: PriorityLabelsInput): PriorityLabel
   for (const priority of PRIORITY_KEYS) {
     const row: PriorityLabelRow = {};
     for (const locale of PRIORITY_LABEL_LOCALES) {
-      const name = value[priority]?.[locale]?.trim();
-      if (name !== undefined && name !== '') {
-        row[locale] = name;
+      const name = value[priority]?.[locale];
+      if (name === undefined) {
+        continue;
+      }
+      const stored = normalisePriorityName(name);
+      if (stored !== '') {
+        row[locale] = stored;
       }
     }
     if (Object.keys(row).length > 0) {

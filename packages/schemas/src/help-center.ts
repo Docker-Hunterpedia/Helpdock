@@ -52,6 +52,19 @@ export const hcSlugSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'lower-case letters, digits and single hyphens');
 
 /**
+ * Strips hyphens from both ends by index. A `-+$` pattern retries from every
+ * hyphen in the string, which CodeQL reports as a polynomial regular expression.
+ */
+const trimHyphens = (text: string): string => {
+  let start = 0;
+  let end = text.length;
+  while (start < end && text[start] === '-') start += 1;
+  while (end > start && text[end - 1] === '-') end -= 1;
+
+  return text.slice(start, end);
+};
+
+/**
  * A slug from a title: ASCII letters and digits kept, everything else a
  * hyphen. An Arabic-only title has none, and gets `fallback` instead.
  */
@@ -60,12 +73,10 @@ export const slugify = (text: string, fallback: string): string => {
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, HC_SLUG_MAX)
-    .replace(/-+$/, '');
+    .replace(/[^a-z0-9]+/g, '-');
+  const trimmed = trimHyphens(trimHyphens(slug).slice(0, HC_SLUG_MAX));
 
-  return slug === '' ? fallback : slug;
+  return trimmed === '' ? fallback : trimmed;
 };
 
 export const hcArticleStatusSchema = z.enum(['draft', 'scheduled', 'published', 'archived']);

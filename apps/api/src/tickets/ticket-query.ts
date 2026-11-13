@@ -237,17 +237,28 @@ const exactTicketIds = (brandId: string, words: string): SQL => sql`
  * leakproof too — so the similarity is computed on a handful of words rather
  * than on every visible ticket. A typo in the first three letters is the price
  * of that, and it is documented in the tickets guide.
+ *
+ * The two ends of the range are computed once per word in `wanted`, not inside
+ * the lateral subquery: PostgreSQL 17.12 stopped using an expression over the
+ * outer word as an index condition under the row-level-security policy, and
+ * applied it as a filter over every token of the brand instead.
  */
 const fuzzyTicketIds = (brandId: string, words: string): SQL => sql`(
   SELECT ${tokens.ticketId} FROM ${TOKENS}
   JOIN (
     SELECT DISTINCT wanted.word, candidate.token
-    FROM unnest(${lexemesOf(words)}) WITH ORDINALITY AS wanted(lexeme, word)
+    FROM (
+      SELECT lexeme, word,
+        left(lexeme, ${PREFIX}) AS range_start,
+        left(lexeme, ${PREFIX}) || chr(1114111) AS range_end
+      FROM unnest(${lexemesOf(words)}) WITH ORDINALITY AS listed(lexeme, word)
+      OFFSET 0
+    ) wanted
     CROSS JOIN LATERAL (
       SELECT DISTINCT ${near.token} AS token FROM ${NEAR}
       WHERE ${near.brandId} = ${brandId}
-        AND ${near.token} >= left(wanted.lexeme, ${PREFIX})
-        AND ${near.token} < left(wanted.lexeme, ${PREFIX}) || chr(1114111)
+        AND ${near.token} >= wanted.range_start
+        AND ${near.token} < wanted.range_end
       -- Keeps the subquery from being flattened, so the range stays an index
       -- condition per word. Flattened, the planner read every token of the
       -- brand and applied the range as a join filter (151 ms at 50k tickets).

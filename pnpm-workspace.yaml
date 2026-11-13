@@ -40,8 +40,8 @@ overrides:
   'fastify@<5.12.6': '>=5.12.6'
   # critical, via @changesets/cli > launch-editor
   'shell-quote@<1.11.0': '>=1.11.0'
-  # high, via @mariozechner/pi-ai > proxy-agent > pac-proxy-agent > get-uri
-  'basic-ftp@<=6.2.0': '>=6.2.1'
+  # high, then moderate (GHSA-5pm8-86m8-9m6r, GHSA-r4jh-29pc-gfqr), via @mariozechner/pi-ai > proxy-agent > pac-proxy-agent > get-uri
+  'basic-ftp@<6.2.4': '>=6.2.4'
   # high, via vitest > vite > postcss
   'source-map-js@<1.2.2': '>=1.2.2'
   # high, via @changesets/cli > launch-editor (GHSA-587h-7wmj-h5pm, GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw)
@@ -60,7 +60,9 @@ overrides:
   # medium, via googleapis > googleapis-common (GHSA-6pq8-jhm2-2vcw)
   'qs@>=6.7.0 <6.16.1': '6.16.2'
   # medium, via imapflow > socks and @mariozechner/pi-ai > proxy-agent > socks-proxy-agent (GHSA-rxp7-6hxx-x8q5)
-  'ip-address@<10.7.4': '10.7.6'
+  'ip-address@>=10.0.0 <10.7.4': '10.7.6'
+  # low, via site > @astrojs/rss (GHSA-474x-hrwr-fgx4)
+  'fast-xml-parser@>=5.0.0 <5.12.0': '5.12.0'
   # medium, via drizzle-kit and its @esbuild-kit/esm-loader (GHSA-67mh-4wv8-2f99)
   'esbuild@<0.25.0': '0.25.12'
   # medium, via testcontainers > archiver > archiver-utils (GHSA-3g3m-2fjr-6pw4); @fastify/static pins 14 itself

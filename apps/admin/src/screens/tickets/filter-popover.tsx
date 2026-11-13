@@ -11,6 +11,7 @@ import { Box, Button, Chip, Popover, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { activeFilterCount, EMPTY_FILTERS, type WorkspaceFilters } from '../../tickets/views.js';
 import { WrittenToField } from './arrival-filters.tsx';
 import { FieldFilterEditor } from './field-filter-editor.tsx';
@@ -113,6 +114,7 @@ export function FilterPopover({
   onClose(): void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
 
   return (
@@ -161,7 +163,7 @@ export function FilterPopover({
           {ticketPrioritySchema.options.map((priority) => (
             <FilterChip
               key={priority}
-              label={t(`tickets:priority.${priority}`)}
+              label={priorityLabel(priority)}
               on={filters.priority.includes(priority)}
               onToggle={() => {
                 onChange({ ...filters, priority: toggle(filters.priority, priority) });

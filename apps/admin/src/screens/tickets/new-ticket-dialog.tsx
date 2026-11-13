@@ -16,6 +16,7 @@ import {
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { Field, fieldDescribedBy } from '../../ui/field.tsx';
 
 /**
@@ -66,6 +67,7 @@ export function NewTicketDialog({
   onClose(): void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const subjectId = useId();
   const departmentFieldId = useId();
@@ -361,7 +363,7 @@ export function NewTicketDialog({
             >
               {ticketPrioritySchema.options.map((option) => (
                 <MenuItem key={option} value={option}>
-                  {t(`tickets:priority.${option}`)}
+                  {priorityLabel(option)}
                 </MenuItem>
               ))}
             </TextField>

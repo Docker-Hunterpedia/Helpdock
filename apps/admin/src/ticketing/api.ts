@@ -33,6 +33,7 @@ import type {
   MacroList,
   MacroListQuery,
   MacroUpdateRequest,
+  PriorityLabelsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
@@ -148,6 +149,13 @@ export interface TicketingApi {
 
   /** The Feedback tab's three toggles: CSAT, time tracking, the composer timer. */
   updateFeedback(brandId: string, request: FeedbackSettingsUpdateRequest): Promise<BrandSettings>;
+  // ---------------------------------------------------------------- M1-02
+
+  /** The Priorities page: the whole four-row map replaces the stored names. */
+  updatePriorityLabels(
+    brandId: string,
+    request: PriorityLabelsUpdateRequest,
+  ): Promise<BrandSettings>;
   // ---------------------------------------------------------------- M1-06
 
   tags(brandId: string): Promise<TagList>;

@@ -5,10 +5,12 @@ import type {
   TagSummary,
   TicketFieldFilter,
   TicketMailbox,
+  TicketPriority,
   TicketStatus,
 } from '@helpdock/schemas';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { fieldLabel } from '../../tickets/custom-values.js';
 import { useCustomFieldPeople } from '../../tickets/use-people.js';
 import { EMPTY_FILTERS, LIVE_STATES, type WorkspaceFilters } from '../../tickets/views.js';
@@ -61,6 +63,7 @@ const snoozedKey = (snoozed: 'only' | 'include') =>
 
 export function useFilterSummary(directory: FilterDirectory): FilterSummary {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
   // A person filter holds ids; the names come from the people read, asked for only when a person field exists.
   const { people } = useCustomFieldPeople(
@@ -144,7 +147,7 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
       field: 'priority' as const,
       name: t('tickets:filters.priority'),
       values: filters.priority,
-      label: (value: string) => t(`tickets:priority.${value as 'low'}`),
+      label: (value: string) => priorityLabel(value as TicketPriority),
     },
     {
       field: 'assigneeId' as const,

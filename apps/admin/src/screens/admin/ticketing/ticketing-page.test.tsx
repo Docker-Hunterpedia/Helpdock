@@ -32,6 +32,7 @@ describe('the Inbox settings', () => {
     for (const label of [
       'Departments',
       'Statuses',
+      'Priorities',
       'Tags',
       'Custom fields',
       'Templates',
@@ -66,11 +67,19 @@ describe('the Inbox settings', () => {
     expect(await screen.findByRole('table')).toBeInTheDocument();
   });
 
-  it('opens Departments for the old Priorities address, which has no page', async () => {
+  it('opens the Priorities page at its address, which M1-02 filled', async () => {
     await renderTicketing('/settings/inbox/priorities');
 
     expect(await screen.findByRole('table')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Departments');
+    expect(settingsLink('Priorities')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Priorities');
+  });
+
+  it('sends the old /admin/ticketing/priorities address to the Priorities page', async () => {
+    await renderTicketing('/admin/ticketing/priorities');
+
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Priorities');
   });
 
   it('draws the Views tab rather than a placeholder, since M1-05 filled it', async () => {

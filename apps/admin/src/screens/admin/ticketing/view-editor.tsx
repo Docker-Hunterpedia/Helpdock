@@ -20,6 +20,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'reac
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { viewLabel } from '../../../tickets/views.js';
 import { Field } from '../../../ui/field.tsx';
 import { WrittenToField } from '../../tickets/arrival-filters.tsx';
@@ -82,6 +83,7 @@ export function ViewEditor({
   onDelete?: (() => void) | undefined;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const nameId = useId();
@@ -318,7 +320,7 @@ export function ViewEditor({
               { value: 'any', label: t('ticketing:views.editor.any') },
               ...ticketPrioritySchema.options.map((priority) => ({
                 value: priority,
-                label: t(`tickets:priority.${priority}`),
+                label: priorityLabel(priority),
               })),
             ]),
             (value) => {

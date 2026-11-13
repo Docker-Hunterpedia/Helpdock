@@ -231,6 +231,7 @@ describe('the brand', () => {
         timerStartsWithComposer: false,
         aiCountsAsFirstResponse: true,
         slaCountReopens: false,
+        priorityLabels: {},
       },
     });
 

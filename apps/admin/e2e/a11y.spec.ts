@@ -162,6 +162,29 @@ test.describe('accessibility', () => {
     expect(await violations(page)).toEqual([]);
   });
 
+  test('the priorities page has no violations, at rest and with a duplicate name', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await openTicketing(page, locale);
+    await clickSettingsTab(page, t, 'ticketing:tabs.priorities');
+    await page.getByRole('form', { name: t('ticketing:priorities.form') }).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    const fieldKey =
+      locale === 'ar' ? 'ticketing:priorities.fieldAr' : 'ticketing:priorities.fieldEn';
+    await page
+      .getByRole('textbox', { name: t(fieldKey, { name: t('tickets:priority.high') }) })
+      .fill(t('tickets:priority.urgent'));
+    await page
+      .getByText(t('ticketing:priorities.duplicate', { name: t('tickets:priority.urgent') }))
+      .waitFor();
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('the statuses tab has no violations, list, editor and reply card alike', async ({
     page,
     appLocale: locale,

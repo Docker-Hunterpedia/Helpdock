@@ -2,6 +2,8 @@ import type { DbTransaction, TicketStatus as TicketStatusRow } from '@helpdock/d
 import type {
   Brand,
   FeedbackSettingsUpdateRequest,
+  PriorityLabelsInput,
+  PriorityLabelsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   TicketingRefusal,
   TicketStatus,
@@ -11,7 +13,13 @@ import type {
   TicketStatusUpdateRequest,
   TicketStatusUsage,
 } from '@helpdock/schemas';
-import { MAX_TICKET_STATUSES_PER_BRAND, parseBrandSettings } from '@helpdock/schemas';
+import {
+  compactPriorityLabels,
+  MAX_TICKET_STATUSES_PER_BRAND,
+  PRIORITY_KEYS,
+  PRIORITY_LABEL_LOCALES,
+  parseBrandSettings,
+} from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { TicketingFailure } from '../../brands/ticketing-failure.js';
 import { enqueueSlaStatusResync } from '../../sla/sla-events.js';
@@ -283,6 +291,34 @@ export class TicketingSettingsService {
     return this.#mergeSettings(context, 'brand.feedback.updated', request);
   }
 
+  /**
+   * The Priorities page (M1-02). The request is the whole map, so it replaces
+   * the stored value; the audit row carries the values of the names that
+   * actually changed (`null` is the default), and nothing when none did.
+   */
+  async updatePriorityLabels(
+    context: TicketingSettingsContext,
+    request: PriorityLabelsUpdateRequest,
+  ): Promise<Brand['settings']> {
+    const current = await this.#lifecycle.brandSettings(context.tx, context.brandId);
+    /* c8 ignore next 3 -- the permission guard resolved this brand from a role in it. */
+    if (current === undefined) {
+      throw new NotFoundException('No such brand');
+    }
+
+    const before = parseBrandSettings(current).priorityLabels;
+    const priorityLabels = compactPriorityLabels(request);
+    const changed = priorityLabelChanges(before, priorityLabels);
+    const settings = parseBrandSettings({ ...current, priorityLabels });
+
+    await this.#lifecycle.updateBrandSettings(context.tx, context.brandId, settings);
+    if (changed !== null) {
+      await this.#audit(context, 'brand.priority_labels.updated', context.brandId, changed);
+    }
+
+    return settings;
+  }
+
   // ---------------------------------------------------------------- internals
 
   async #mergeSettings(
@@ -393,3 +429,33 @@ export class TicketingSettingsService {
     });
   }
 }
+
+/**
+ * The names that changed, as the `{ before, after }` pair the audit viewer
+ * reads (`audit/audit-diff.ts`): only the changed fields, `null` for "the
+ * default", so a row shows `high.en  null → P2` and nothing else.
+ */
+const priorityLabelChanges = (
+  before: PriorityLabelsInput,
+  after: PriorityLabelsInput,
+): { before: Record<string, unknown>; after: Record<string, unknown> } | null => {
+  const changed = {
+    before: {} as Record<string, Record<string, string | null>>,
+    after: {} as Record<string, Record<string, string | null>>,
+  };
+  let any = false;
+
+  for (const priority of PRIORITY_KEYS) {
+    for (const locale of PRIORITY_LABEL_LOCALES) {
+      const from = before[priority]?.[locale] ?? null;
+      const to = after[priority]?.[locale] ?? null;
+      if (from !== to) {
+        any = true;
+        changed.before[priority] = { ...changed.before[priority], [locale]: from };
+        changed.after[priority] = { ...changed.after[priority], [locale]: to };
+      }
+    }
+  }
+
+  return any ? changed : null;
+};

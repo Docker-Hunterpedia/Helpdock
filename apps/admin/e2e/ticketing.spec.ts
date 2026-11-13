@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.js';
-import { goInApp, openTicketing, openTicketingTab, settingsTab, signIn } from './flows.js';
+import { openTicketing, openTicketingTab, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -54,22 +54,6 @@ test.describe('ticketing settings', () => {
         name: t('ticketing:departments.table.select', { name: 'Support' }),
       }),
     ).toBeVisible();
-  });
-
-  test('opens Departments for the old Priorities address', async ({ page, appLocale: locale }) => {
-    const t = strings(locale);
-    await signIn(page, locale);
-    await goInApp(page, '/admin/ticketing/priorities');
-
-    await expect(page).toHaveURL(/\/settings\/inbox\/departments$/);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-      t('ticketing:tabs.departments'),
-    );
-    await expect(
-      page
-        .getByRole('list', { name: t('admin:settings.navLabel') })
-        .getByRole('link', { name: locale === 'ar' ? 'الأولويات' : 'Priorities' }),
-    ).toHaveCount(0);
   });
 
   test('creates a department from the side editor', async ({ page, appLocale: locale }) => {

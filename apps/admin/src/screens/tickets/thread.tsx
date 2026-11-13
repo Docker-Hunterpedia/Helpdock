@@ -3,6 +3,7 @@ import type {
   TicketActivityEntry,
   TicketLink,
   TicketMessage,
+  TicketPriority,
 } from '@helpdock/schemas';
 import { importSourceSchema } from '@helpdock/schemas';
 import { Box, Link as MuiLink } from '@mui/material';
@@ -12,6 +13,7 @@ import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { ticketRoute } from '../../app/route-paths.js';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { linkReferences } from '../../tickets/merge.js';
 import type { PendingMessage } from '../../tickets/pending.js';
 import { closedWithoutKeys, type ThreadItem } from '../../tickets/thread.js';
@@ -126,6 +128,7 @@ export function Thread({
   onDiscard(pending: PendingMessage): void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const translate = translator(t);
   const { locale } = usePreferences();
   const end = useRef<HTMLDivElement | null>(null);
@@ -183,7 +186,7 @@ export function Thread({
             ) : item.kind === 'event' ? (
               <>
                 <SystemEvent>
-                  {describeEvent(item.entry, names, translate, locale, now)}
+                  {describeEvent(item.entry, names, translate, locale, now, priorityLabel)}
                 </SystemEvent>
                 <ImportedCsatEvent entry={item.entry} />
               </>
@@ -503,6 +506,8 @@ export const describeEvent = (
   t: Translate,
   locale: 'en' | 'ar',
   now: number,
+  priorityName: (priority: TicketPriority) => string = (priority) =>
+    t(`tickets:priority.${priority}`),
 ): string => {
   const actor = names.nameFor(entry.actorType, entry.actorId) ?? t('tickets:event.someone');
   const moved = { ...entry.from, ...entry.to };
@@ -633,8 +638,8 @@ export const describeEvent = (
     if ('priority' in moved) {
       return t('tickets:event.priority', {
         actor,
-        from: t(`tickets:priority.${String(entry.from?.priority)}`),
-        to: t(`tickets:priority.${String(entry.to?.priority)}`),
+        from: priorityName(entry.from?.priority as TicketPriority),
+        to: priorityName(entry.to?.priority as TicketPriority),
       });
     }
     if ('assigneeId' in moved) {

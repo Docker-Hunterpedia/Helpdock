@@ -19,6 +19,8 @@ import {
   type NotificationKind,
   type NotificationPreferences,
   type NotificationSounds,
+  type PriorityLabelsInput,
+  parseBrandSettings,
   resolveNotificationPreferences,
   type TicketChannel,
   type TicketPriority,
@@ -150,6 +152,17 @@ export class NotificationsRepository {
       .limit(1);
 
     return row;
+  }
+
+  /** The brand's own names for its priorities (M1-02), as staff read them. */
+  async priorityLabels(tx: DbTransaction, brandId: string): Promise<PriorityLabelsInput> {
+    const [row] = await tx
+      .select({ settings: brands.settings })
+      .from(brands)
+      .where(eq(brands.id, brandId))
+      .limit(1);
+
+    return parseBrandSettings(row?.settings).priorityLabels;
   }
 
   async message(tx: DbTransaction, messageId: string): Promise<MessageFacts | undefined> {

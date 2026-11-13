@@ -4,6 +4,7 @@ import {
   excerptOf,
   type NotificationDetail,
   type NotificationKind,
+  type PriorityLabelsInput,
   type TicketPriority,
 } from '@helpdock/schemas';
 import { escapeHtml } from '../auth/email-templates.js';
@@ -40,6 +41,8 @@ export interface StaffEmailInput {
     readonly assigneeId: string | null;
     readonly assigneeName: string | null;
   };
+  /** The brand's own priority names (M1-02); a priority without one reads as the catalog's. */
+  readonly priorityLabels?: PriorityLabelsInput | undefined;
   readonly actorName: string | null;
   /** The note or reply the notification is about, as plain text. */
   readonly messageText: string | null;
@@ -100,7 +103,7 @@ export const renderStaffNotificationEmail = (input: StaffEmailInput): EmailMessa
         [t('rows.department'), ticket.departmentName, 'plain'],
         [
           t('rows.priority'),
-          t(`priority.${ticket.priority}`),
+          input.priorityLabels?.[ticket.priority]?.[locale] ?? t(`priority.${ticket.priority}`),
           ticket.priority === 'urgent' ? 'priority' : 'plain',
         ],
         [t('rows.assignee'), assignee, 'plain'],

@@ -411,6 +411,28 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       expect(sent[0]?.messageId).toBe(`<notify.batch.${batchId}@support.example.com>`);
     });
 
+    it('says the brand’s own name for the ticket’s priority in an SLA email (M1-02)', async () => {
+      await runtime.db
+        .update(brands)
+        .set({
+          settings: sql`${brands.settings} || '{"priorityLabels":{"medium":{"en":"Normal"}}}'::jsonb`,
+        })
+        .where(eq(brands.id, seeded.brandId));
+
+      try {
+        const batchId = await opened(await notify({ kind: 'sla_breached' }));
+        clock = at(2);
+        await send(batchId);
+
+        expect(sent[0]?.text).toContain('Priority: Normal');
+      } finally {
+        await runtime.db
+          .update(brands)
+          .set({ settings: sql`${brands.settings} || '{"priorityLabels":{}}'::jsonb` })
+          .where(eq(brands.id, seeded.brandId));
+      }
+    });
+
     it('signs every email’s unsubscribe link for its recipient, single or batched (M14-11)', async () => {
       const batchId = await opened(await notify({ kind: 'assigned', actorId: ada.id }));
       clock = at(2);

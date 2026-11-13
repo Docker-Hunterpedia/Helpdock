@@ -23,6 +23,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'reac
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { fileSize } from './attachment-chip.tsx';
 import { messageTime } from './format.js';
 
@@ -66,6 +67,7 @@ export function SplitDialog({
   onClose(): void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const titleId = useId();
@@ -284,7 +286,7 @@ export function SplitDialog({
             >
               {ticketPrioritySchema.options.map((option) => (
                 <MenuItem key={option} value={option}>
-                  {t(`tickets:priority.${option}`)}
+                  {priorityLabel(option)}
                 </MenuItem>
               ))}
             </TextField>

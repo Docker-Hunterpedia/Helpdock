@@ -243,6 +243,7 @@
       "brandDanger": "delete brand, erase, restore",
       "ticketingDepartments": "teams, groups, routing",
       "ticketingStatuses": "open, closed, pending, pause sla, workflow states",
+      "ticketingPriorities": "priority names, rename priorities, labels, urgent, high, medium, low",
       "ticketingTags": "labels, categories",
       "ticketingCustomFields": "extra fields, form fields, attributes",
       "ticketingTemplates": "ticket templates, forms, new ticket defaults",

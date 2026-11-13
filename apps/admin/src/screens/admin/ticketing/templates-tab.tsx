@@ -20,6 +20,7 @@ import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { nameButtonSx } from './name-button.js';
@@ -36,6 +37,7 @@ import { useTicketingAction, useTicketingReport } from './use-ticketing-action.j
  */
 export function TemplatesTab(): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const api = useTicketingApi();
   const session = useSession();
   const tokens = useSemanticTokens();
@@ -175,9 +177,7 @@ export function TemplatesTab(): ReactNode {
                       </Button>
                     </TableCell>
                     <TableCell>{departmentName(template.departmentId)}</TableCell>
-                    <TableCell>
-                      {t(`ticketing:templates.priorities.${template.priority}`)}
-                    </TableCell>
+                    <TableCell>{priorityLabel(template.priority)}</TableCell>
                     <TableCell>{template.usageCount}</TableCell>
                     <TableCell align="right">
                       <IconButton

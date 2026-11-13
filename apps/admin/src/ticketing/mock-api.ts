@@ -34,6 +34,7 @@ import type {
   MacroList,
   MacroListQuery,
   MacroUpdateRequest,
+  PriorityLabelsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
   RetentionUpdateRequest,
@@ -61,8 +62,10 @@ import type {
   TicketTemplateUpdateRequest,
 } from '@helpdock/schemas';
 import {
+  compactPriorityLabels,
   defaultBrandSettings,
   isChoiceField,
+  priorityLabelsUpdateRequestSchema,
   type RenderedTemplate,
   renderTemplate,
 } from '@helpdock/schemas';
@@ -70,6 +73,7 @@ import { AuthError } from '../auth/api.js';
 import { isMockEmpty } from '../auth/mock-empty.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
 import { type TicketingApi, TicketingError } from './api.js';
+import { FieldValidationError } from './field-errors.js';
 import {
   MOCK_ASSIGNEES,
   MOCK_OMAR_ID,
@@ -895,6 +899,29 @@ export class MockTicketingApi implements TicketingApi {
       Object.entries(request).filter(([, value]) => value !== undefined),
     );
     this.#brand = { ...this.#brand, settings: { ...this.#brand.settings, ...changes } };
+
+    return this.#brand.settings;
+  }
+
+  // ---------------------------------------------------------------- M1-02
+
+  async updatePriorityLabels(
+    _brandId: string,
+    request: PriorityLabelsUpdateRequest,
+  ): Promise<BrandSettings> {
+    const parsed = priorityLabelsUpdateRequestSchema.safeParse(request);
+    if (!parsed.success) {
+      throw new FieldValidationError(
+        parsed.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      );
+    }
+    this.#brand = {
+      ...this.#brand,
+      settings: { ...this.#brand.settings, priorityLabels: compactPriorityLabels(parsed.data) },
+    };
 
     return this.#brand.settings;
   }

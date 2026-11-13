@@ -93,6 +93,14 @@ Fastify is pinned to at least 5.12.6 both directly and through
 GHSA-4mh8-r7rc-xpvc before 1.0; 5.12.6 closes the header validation bypass
 through case-sensitive `propertyNames`.
 
+Dependabot alerts below the `high` gate are closed the same way. The overrides
+for `fast-uri`, `qs`, `ip-address`, `fast-xml-parser`, `esbuild` and `glob` each
+carry the path and advisory id on the line above them. `glob` is raised from 10
+to 14 for `archiver-utils` under Testcontainers, which only calls `glob.sync`,
+so run one Testcontainers integration test after touching it; and `esbuild`
+0.18 becomes 0.25 for the loader inside `drizzle-kit`, so run
+`pnpm --filter @helpdock/db exec drizzle-kit check` after touching that one.
+
 ## ZAP baseline
 
 [`zap.yml`](../../.github/workflows/zap.yml) builds the image from the commit,

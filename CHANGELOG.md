@@ -14,6 +14,27 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 1.5.0 — 2026-11-13
+
+Editable priority names, and dependency security updates. No migrations and no
+configuration changes.
+
+- **Priority names.** A brand can rename Low, Medium, High and Urgent, in
+  English and Arabic, under Settings › Inbox › Priorities. Staff see the names
+  on the ticket list and header, in menus, rules, SLA policies, filters,
+  reports and the SLA warning emails. The API, rules and imports keep the fixed
+  values `low`, `medium`, `high` and `urgent`, and customers never see a
+  priority.
+- **Security updates.** Dependencies with open advisories are updated
+  (`fast-uri`, `qs`, `ip-address`, `glob`, `basic-ftp`, `fast-xml-parser`,
+  `nestjs-zod`, `@fastify/static`), and the help center's slug builder no
+  longer uses a regular expression CodeQL reported as slow on crafted input.
+- **Search on PostgreSQL 17.12.** The fuzzy half of ticket search uses its
+  word index again. On 17.12 it had started reading every word of the brand
+  for each search term; results were correct, only slower.
+- **Composer.** The status box says "Leave the status" when no status is
+  chosen, in place of a blank box.
+
 ## 1.4.1 — 2026-11-02
 
 Admin usability fixes from the 2026-11 review. No migrations and no

@@ -1,5 +1,19 @@
 # @helpdock/api
 
+## 1.5.0
+
+### Minor Changes
+
+- [#459](https://github.com/Docker-Hunterpedia/Helpdock/pull/459) [`f616fe3`](https://github.com/Docker-Hunterpedia/Helpdock/commit/f616fe30de4f90c9a8e51b387d1eaa12b20e0ba4) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - A brand can rename its four priorities, in English and Arabic, under Settings > Inbox > Priorities. Staff see the new names on the ticket list, header, menus, rules, SLA policies, filters and reports; customers and the API keep the fixed values.
+
+### Patch Changes
+
+- [#456](https://github.com/Docker-Hunterpedia/Helpdock/pull/456) [`059c9c5`](https://github.com/Docker-Hunterpedia/Helpdock/commit/059c9c545aaa250fe869c616c57bbbd5faf5f421) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - The composer's status box says "Leave the status" when no status is chosen, instead of showing a blank box.
+
+- [#461](https://github.com/Docker-Hunterpedia/Helpdock/pull/461) [`7b8ab94`](https://github.com/Docker-Hunterpedia/Helpdock/commit/7b8ab94460c34e97de4fdada94fe7b208003cd58) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - The fuzzy half of ticket search uses the word index again on PostgreSQL 17.12, which had started reading every word of the brand for each search term.
+
+- [#458](https://github.com/Docker-Hunterpedia/Helpdock/pull/458) [`b2002ae`](https://github.com/Docker-Hunterpedia/Helpdock/commit/b2002ae2e364386d66a1bf4e7b8334f87359ba8b) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Updates dependencies with security advisories (fast-uri, qs, ip-address, glob, nestjs-zod, @fastify/static) and makes the help center's slug builder trim hyphens without a slow regular expression.
+
 ## 1.4.1
 
 ### Patch Changes

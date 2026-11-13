@@ -1772,7 +1772,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
         );
 
         const tokenLookup =
-          mode === 'exact' ? /Index Cond: .*token = ANY/ : /Index Cond: .*token >= "left"/;
+          mode === 'exact' ? /Index Cond: .*token = ANY/ : /Index Cond: .*token >= \(?"left"/;
         expect(plan).toMatch(/ticket_search_tokens_brand_token_idx/);
         expect(plan).toMatch(tokenLookup);
       },

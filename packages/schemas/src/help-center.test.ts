@@ -42,6 +42,11 @@ describe('slugify', () => {
     expect(slug.endsWith('-')).toBe(false);
     expect(hcSlugSchema.safeParse(slug).success).toBe(true);
   });
+
+  it('drops hyphens and punctuation at both ends', () => {
+    expect(slugify('--- Refunds ---', 'x')).toBe('refunds');
+    expect(slugify('!?', 'article-1')).toBe('article-1');
+  });
 });
 
 describe('hcNamesSchema', () => {

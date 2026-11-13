@@ -152,4 +152,37 @@ describe('renderStaffNotificationEmail', () => {
     expect(unassigned.text).toContain('Assigned to: Nobody');
     expect(colleague.text).toContain('Assigned to: Sue');
   });
+
+  describe('the priority row (M1-02)', () => {
+    it('says the brand’s name for the priority in the recipient’s language', () => {
+      const labels = { urgent: { en: 'P1', ar: 'حرجة' } };
+
+      expect(renderStaffNotificationEmail(input({ priorityLabels: labels })).text).toContain(
+        'Priority: P1',
+      );
+      expect(
+        renderStaffNotificationEmail(input({ locale: 'ar', priorityLabels: labels })).text,
+      ).toContain('حرجة');
+    });
+
+    it('falls back to the catalog name per language and without labels', () => {
+      expect(renderStaffNotificationEmail(input()).text).toContain('Priority: Urgent');
+      const englishOnly = { urgent: { en: 'P1' } };
+      const arabic = renderStaffNotificationEmail(
+        input({ locale: 'ar', priorityLabels: englishOnly }),
+      );
+
+      expect(arabic.text).toContain('عاجل');
+      expect(arabic.text).not.toContain('P1');
+    });
+
+    it('escapes the name in the HTML', () => {
+      const email = renderStaffNotificationEmail(
+        input({ priorityLabels: { urgent: { en: '<b>P1</b>' } } }),
+      );
+
+      expect(email.html).toContain('&lt;b&gt;P1&lt;/b&gt;');
+      expect(email.html).not.toContain('<b>P1</b>');
+    });
+  });
 });

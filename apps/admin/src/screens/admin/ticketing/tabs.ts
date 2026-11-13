@@ -1,11 +1,13 @@
 /**
  * The pages of the Inbox settings, in the order the Settings navigation lists
- * them. A segment that is not here (the old `priorities`) opens Departments.
+ * them. A segment that is not here opens Departments.
  */
 
 export const TICKETING_TABS = [
   { key: 'departments', segment: 'departments' },
   { key: 'statuses', segment: 'statuses' },
+  // M1-02.
+  { key: 'priorities', segment: 'priorities' },
   { key: 'tags', segment: 'tags' },
   { key: 'customFields', segment: 'custom-fields' },
   { key: 'templates', segment: 'templates' },

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { contentPolicySchema } from './media.js';
+import { priorityLabelsSchema } from './priority-labels.js';
 
 /** The interface and content languages Helpdock ships with (REQUIREMENTS §3). */
 export const localeSchema = z.enum(['en', 'ar']);
@@ -109,6 +110,12 @@ export const brandSettingsSchema = z.object({
    * unless the brand chooses 'count reopens'".
    */
   slaCountReopens: z.boolean().default(false),
+  /**
+   * Staff-facing names for the four priorities (M1-02), per interface
+   * language. Only overrides are stored; display-only, see
+   * {@link ./priority-labels.js}.
+   */
+  priorityLabels: priorityLabelsSchema.default({}),
 });
 export type BrandSettings = z.infer<typeof brandSettingsSchema>;
 
@@ -164,8 +171,21 @@ export type FeedbackSettingsUpdateRequest = z.infer<typeof feedbackSettingsUpdat
  */
 export const parseBrandSettings = (value: unknown): BrandSettings => {
   const parsed = brandSettingsSchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
+  }
 
-  return parsed.success ? parsed.data : defaultBrandSettings();
+  // Names that stopped being valid (a rule tightened since they were saved)
+  // must not take the reopen policy and every other setting down with them:
+  // retry without them before falling back to the defaults.
+  if (typeof value === 'object' && value !== null) {
+    const withoutLabels = brandSettingsSchema.safeParse({ ...value, priorityLabels: {} });
+    if (withoutLabels.success) {
+      return withoutLabels.data;
+    }
+  }
+
+  return defaultBrandSettings();
 };
 
 /**

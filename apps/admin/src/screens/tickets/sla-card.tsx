@@ -8,6 +8,7 @@ import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { ticketingRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { clockDuration, messageTime } from './format.js';
 
 /**
@@ -49,6 +50,7 @@ export function SlaCard({
   readonly canConfigure: boolean;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const time = (iso: string): string => messageTime(iso, locale, now);
@@ -87,7 +89,7 @@ export function SlaCard({
           <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>
             {t('tickets:slaCard.noneDetail', {
               department: departmentName,
-              priority: t(`tickets:priority.${ticket.priority}`),
+              priority: priorityLabel(ticket.priority),
             })}{' '}
             {canConfigure ? (
               <Link component={RouterLink} to={ticketingRoute('slas')}>

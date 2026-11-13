@@ -28,6 +28,7 @@ import {
 import { isUploadError, wouldAccept } from '../../media/upload.js';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { isTicketingError } from '../../ticketing/api.js';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { refusalCopy } from '../../ticketing/refusal-copy.js';
 import { isTicketLifecycleError } from '../../tickets/api.js';
 import { fieldLabelOf, ticketFieldsFor } from '../../tickets/custom-values.js';
@@ -132,6 +133,7 @@ export function TicketView({
   onOpenTicket(ticketId: string): void;
 }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const api = useTicketsApi();
@@ -816,7 +818,7 @@ export function TicketView({
     personName: (id) =>
       names.staffName(id) ?? agents.find((agent) => agent.userId === id)?.name ?? '—',
     teamName: () => t('macros:staged.aTeam'),
-    priorityName: (priority) => t(`tickets:priority.${priority}`),
+    priorityName: priorityLabel,
   };
 
   const copyLink = async (link: string): Promise<void> => {

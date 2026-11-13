@@ -25,6 +25,7 @@ import { Trans } from 'react-i18next';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { PRIORITY_TONE, slaState, statusName } from './format.js';
 
@@ -123,11 +124,11 @@ export function StatusBadge({ status }: { readonly status: TicketStatus }): Reac
 
 /** DESIGN §6.2: Urgent is solid danger; everything else is an outline. */
 export function PriorityBadge({ priority }: { readonly priority: TicketPriority }): ReactNode {
-  const t = useT();
+  const priorityLabel = usePriorityLabel();
 
   return (
     <Pill tone={PRIORITY_TONE[priority]} solid={priority === 'urgent'}>
-      {t(`tickets:priority.${priority}`)}
+      {priorityLabel(priority)}
     </Pill>
   );
 }
@@ -139,6 +140,7 @@ export function PriorityBadge({ priority }: { readonly priority: TicketPriority 
  */
 export function PriorityDot({ priority }: { readonly priority: TicketPriority }): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const tone = PRIORITY_TONE[priority];
 
@@ -156,7 +158,7 @@ export function PriorityDot({ priority }: { readonly priority: TicketPriority })
         }}
       />
       <Box component="span" sx={visuallyHidden}>
-        {t('tickets:list.priority', { priority: t(`tickets:priority.${priority}`) })}
+        {t('tickets:list.priority', { priority: priorityLabel(priority) })}
       </Box>
     </>
   );

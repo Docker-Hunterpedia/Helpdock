@@ -5,6 +5,7 @@
   "tabs": {
     "departments": "Departments",
     "statuses": "Statuses",
+    "priorities": "Priorities",
     "tags": "Tags",
     "customFields": "Custom fields",
     "templates": "Templates",
@@ -134,6 +135,7 @@
     "agentUpdated": "{{name}} updated",
     "assigneeAboveActor": "Only an Admin can route work to an Admin.",
     "feedbackSaved": "Feedback settings saved",
+    "prioritiesSaved": "Priority names saved",
     "timeTrackingOff": "Time tracking is off for this brand.",
     "viewIsBuiltIn": "A built-in view can be renamed or hidden, not refiltered or deleted.",
     "viewCreated": "{{name}} added",
@@ -247,6 +249,26 @@
       "daysLabel": "Days the ticket stays reopenable",
       "save": "Save reply behaviour"
     }
+  },
+  "priorities": {
+    "intro": "Helpdock has four priorities. Rename them to match how your team talks; their order, colours and what rules and SLAs do with them stay the same.",
+    "form": "Priority names",
+    "columns": {
+      "priority": "Priority",
+      "en": "English name",
+      "ar": "Arabic name",
+      "reset": "Reset"
+    },
+    "fieldEn": "{{name}} in English",
+    "fieldAr": "{{name}} in Arabic",
+    "reset": "Reset {{name}} to its default name",
+    "defaultName": "Default: {{name}}",
+    "hint": "Leave a field empty to keep the default name. Up to 24 characters.",
+    "duplicate": "{{name}} already uses this name",
+    "invalid": "Use 1 to 24 visible characters on one line.",
+    "failed": "Could not save the priority names. Nothing was changed. Try again.",
+    "discard": "Discard",
+    "save": "Save"
   },
   "tags": {
     "add": "Add tag",
@@ -414,12 +436,6 @@
       "select": "Edit {{name}}"
     },
     "anyDepartment": "Chosen when filing",
-    "priorities": {
-      "low": "Low",
-      "medium": "Medium",
-      "high": "High",
-      "urgent": "Urgent"
-    },
     "actions": {
       "edit": "Edit",
       "delete": "Delete"

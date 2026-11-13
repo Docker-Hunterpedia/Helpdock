@@ -100,6 +100,7 @@ describe('the groups', () => {
     expect(groupLinks('Inbox')).toEqual([
       'Departments',
       'Statuses',
+      'Priorities',
       'Tags',
       'Custom fields',
       'Templates',

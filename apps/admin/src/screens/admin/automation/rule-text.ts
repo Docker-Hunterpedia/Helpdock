@@ -7,10 +7,13 @@ import {
   type RuleBuilderOptions,
   type RuleCondition,
   type RuleTrigger,
+  type TicketPriority,
+  ticketPrioritySchema,
   type WorkflowRule,
 } from '@helpdock/schemas';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 
 /**
  * How a rule reads in a sentence: the list's one-line summary, the log's
@@ -46,6 +49,7 @@ const nameIn = (list: readonly Named[], id: string, locale: Locale): string | un
 
 export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
   const deleted = t('rules:text.deleted');
 
@@ -57,7 +61,9 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
       case 'channel':
         return t(`rules:channels.${raw as 'email'}`, { defaultValue: raw });
       case 'priority':
-        return t(`rules:priorities.${raw as 'low'}`, { defaultValue: raw });
+        return ticketPrioritySchema.safeParse(raw).success
+          ? priorityLabel(raw as TicketPriority)
+          : raw;
       case 'status':
         return lookup(options?.statuses, raw);
       case 'department':
@@ -136,7 +142,7 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
         });
       case 'set_priority':
         return t('rules:text.action.set_priority', {
-          priority: t(`rules:priorities.${entry.priority}`),
+          priority: priorityLabel(entry.priority),
         });
       case 'set_field':
         return t('rules:text.action.set_field', {

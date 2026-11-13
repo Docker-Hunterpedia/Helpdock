@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { usePriorityLabel } from '../../../ticketing/priority-labels.tsx';
 import { Choice } from './choice.tsx';
 import { type ConditionDraft, withField, withOperator } from './rule-draft.js';
 import type { RuleText } from './rule-text.js';
@@ -44,6 +45,7 @@ export function useValueOptions(
   options: RuleBuilderOptions | undefined,
 ): (field: RuleConditionField) => ValueOption[] {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const { locale } = usePreferences();
   const named = (list: readonly { id: string; name: string; nameAr?: string | null }[]) =>
     list.map((entry) => ({
@@ -61,7 +63,7 @@ export function useValueOptions(
       case 'priority':
         return ticketPrioritySchema.options.map((value) => ({
           value,
-          label: t(`rules:priorities.${value}`),
+          label: priorityLabel(value),
         }));
       case 'status':
         return named(options?.statuses ?? []);

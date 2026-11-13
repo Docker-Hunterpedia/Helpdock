@@ -126,12 +126,6 @@
     "messenger": "Messenger",
     "instagram": "Instagram"
   },
-  "priorities": {
-    "low": "Low",
-    "medium": "Medium",
-    "high": "High",
-    "urgent": "Urgent"
-  },
   "units": {
     "hours": "hours",
     "days": "days"

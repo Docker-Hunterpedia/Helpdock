@@ -15,6 +15,7 @@ import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { helpCenterRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { formatDayMonth, formatShare } from '../../ui/format.js';
 import { formatCount, formatUsd } from '../admin/system/format.js';
 import { ChartCard } from './chart-card.js';
@@ -75,6 +76,7 @@ const useVolumeSlices = (
   breakdown: VolumeBreakdown,
 ): { cells: StackCell[]; order: string[]; labelOf: (key: string) => string } => {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   if (breakdown === 'channel') {
     return {
       cells: volume.byDayAndChannel.map((c) => ({ day: c.day, key: c.channel, count: c.created })),
@@ -90,7 +92,7 @@ const useVolumeSlices = (
         count: c.created,
       })),
       order: [...ticketPrioritySchema.options].reverse(),
-      labelOf: (key) => t(`tickets:priority.${key as TicketPriority}`),
+      labelOf: (key) => priorityLabel(key as TicketPriority),
     };
   }
   const names = new Map(volume.byStatus.map((row) => [row.statusId, row.name]));
@@ -309,6 +311,7 @@ export function ResponseTimesCard(props: CardProps): ReactNode {
 
 export function SlaCard(props: CardProps): ReactNode {
   const t = useT();
+  const priorityLabel = usePriorityLabel();
   const tokens = useSemanticTokens();
   const { sla } = props.summary;
   const totals = slaTotals(sla);
@@ -319,7 +322,7 @@ export function SlaCard(props: CardProps): ReactNode {
   ] as const;
   const priorities = sla.byPriority.map((row) => ({
     key: row.priority,
-    label: t(`tickets:priority.${row.priority}`),
+    label: priorityLabel(row.priority),
     outcome: row,
   }));
   const shareRow = (entry: {

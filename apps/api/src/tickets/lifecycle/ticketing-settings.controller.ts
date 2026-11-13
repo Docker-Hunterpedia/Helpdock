@@ -15,6 +15,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
 } from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { Requires } from '../../auth/route-declaration.js';
@@ -23,6 +24,7 @@ import { activityActorFor } from '../ticket-activity.js';
 import {
   BrandSettingsDto,
   FeedbackSettingsUpdateRequestDto,
+  PriorityLabelsUpdateRequestDto,
   ReplyBehaviourUpdateRequestDto,
   TicketingBrandParamDto,
   TicketStatusCreateRequestDto,
@@ -170,6 +172,23 @@ export class TicketingSettingsController {
     body: FeedbackSettingsUpdateRequestDto,
   ): Promise<BrandSettings> {
     return this.#settings.updateFeedback(this.#context(), body);
+  }
+
+  /**
+   * The Priorities page (M1-02): the four rows replace the stored names, and a
+   * row or language left empty goes back to the default. Display only; the
+   * api values stay `low | medium | high | urgent`. The names travel with the
+   * brand's `settings`, so every role that reads the brand receives them.
+   */
+  @Put('priority-labels')
+  @Requires('ticketing:manage')
+  @ZodSerializerDto(BrandSettingsDto)
+  priorityLabels(
+    @Param(new ZodValidationPipe(TicketingBrandParamDto)) _params: TicketingBrandParamDto,
+    @Body(new ZodValidationPipe(PriorityLabelsUpdateRequestDto))
+    body: PriorityLabelsUpdateRequestDto,
+  ): Promise<BrandSettings> {
+    return this.#settings.updatePriorityLabels(this.#context(), body);
   }
 
   /**

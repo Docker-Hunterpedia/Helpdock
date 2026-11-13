@@ -24,6 +24,7 @@ const settings = {
   timerStartsWithComposer: false,
   aiCountsAsFirstResponse: true,
   slaCountReopens: false,
+  priorityLabels: {},
 };
 
 const row = {
@@ -70,6 +71,7 @@ describe('brandSettingsSchema', () => {
       timerStartsWithComposer: false,
       aiCountsAsFirstResponse: true,
       slaCountReopens: false,
+      priorityLabels: {},
     });
   });
 
@@ -122,6 +124,7 @@ describe('parseBrandSettings', () => {
       timerStartsWithComposer: false,
       aiCountsAsFirstResponse: true,
       slaCountReopens: false,
+      priorityLabels: {},
     });
   });
 

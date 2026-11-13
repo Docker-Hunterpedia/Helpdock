@@ -80,6 +80,7 @@ Each row links the rendered screen and its source. Deliverable ids refer to the 
 | `Admin/Ticket-Dialogs` | M1-09, M1-15 | [Admin-Ticket-Dialogs.png](screens/m1/Admin-Ticket-Dialogs.png) | [AdminTicketDialogs.dc.html](artboards/AdminTicketDialogs.dc.html) |
 | `Admin/Contact-Dialogs` | M1-13 | [Admin-Contact-Dialogs.png](screens/m1/Admin-Contact-Dialogs.png) | [AdminContactDialogs.dc.html](artboards/AdminContactDialogs.dc.html) |
 | `Admin/Ticketing-Views` | M1-05 | [Admin-Ticketing-Views.png](screens/m1/Admin-Ticketing-Views.png) | [AdminTicketingViews.dc.html](artboards/AdminTicketingViews.dc.html) |
+| `Admin/Ticketing-Priorities` | M1-02 | [Admin-Ticketing-Priorities.png](screens/m14/Admin-Ticketing-Priorities.png) | [AdminTicketingPriorities.dc.html](artboards/AdminTicketingPriorities.dc.html) |
 | `Admin/View-Dialogs` | M1-05 | [Admin-View-Dialogs.png](screens/m1/Admin-View-Dialogs.png) | [AdminViewDialogs.dc.html](artboards/AdminViewDialogs.dc.html) |
 | `Admin/Ticket-Tags` | M1-06, M1-15 | [Admin-Ticket-Tags.png](screens/m1/Admin-Ticket-Tags.png) | [AdminTicketTags.dc.html](artboards/AdminTicketTags.dc.html) |
 
@@ -381,6 +382,10 @@ The same screens, inline. Large boards are shown at their full canvas size; open
 #### `Admin/Ticketing-Views`
 
 ![Admin/Ticketing-Views](screens/m1/Admin-Ticketing-Views.png)
+
+#### `Admin/Ticketing-Priorities`
+
+![Admin/Ticketing-Priorities](screens/m14/Admin-Ticketing-Priorities.png)
 
 #### `Admin/View-Dialogs`
 

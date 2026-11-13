@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isAuthError } from '../auth/api.js';
 import { HttpTransport } from '../auth/http-transport.js';
 import { isTicketingError } from './api.js';
+import { isFieldValidationError } from './field-errors.js';
 import { HttpTicketingApi } from './http-api.js';
 
 /**
@@ -581,6 +583,44 @@ describe('the Feedback tab (M1-12)', () => {
     await expect(api.updateFeedback(BRAND, { csatEnabled: false })).rejects.toMatchObject({
       reason: 'time-tracking-off',
     });
+  });
+});
+
+describe('the Priorities page (M1-02)', () => {
+  it('puts the four rows and parses the stored names back', async () => {
+    fetchMock.mockResolvedValue(json({ priorityLabels: { high: { en: 'P2' } } }));
+
+    const settings = await api.updatePriorityLabels(BRAND, { high: { en: 'P2' }, low: {} });
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/priority-labels`);
+    expect(lastCall().init.method).toBe('PUT');
+    expect(lastCall().init.body).toBe(JSON.stringify({ high: { en: 'P2' }, low: {} }));
+    expect(settings.priorityLabels).toEqual({ high: { en: 'P2' } });
+  });
+
+  it('turns a 400 that names fields into a field error, which is still the one-sentence failure', async () => {
+    fetchMock.mockResolvedValue(
+      json(
+        {
+          error: {
+            code: 'validation_failed',
+            message: 'no',
+            requestId: 'r1',
+            fields: [{ path: 'high.en', message: 'Already used by urgent' }],
+          },
+        },
+        400,
+      ),
+    );
+
+    const error = await api
+      .updatePriorityLabels(BRAND, { high: { en: 'P1' } })
+      .catch((thrown: unknown) => thrown);
+
+    expect(isFieldValidationError(error) && error.fields).toEqual([
+      { path: 'high.en', message: 'Already used by urgent' },
+    ]);
+    expect(isAuthError(error) && error.code).toBe('unavailable');
   });
 });
 

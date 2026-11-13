@@ -9,6 +9,7 @@ import { BusinessHoursTab } from './business-hours-tab.tsx';
 import { CustomFieldsTab } from './custom-fields-tab.tsx';
 import { DepartmentsTab } from './departments-tab.tsx';
 import { FeedbackTab } from './feedback-tab.tsx';
+import { PrioritiesTab } from './priorities-tab.tsx';
 import { SlasTab } from './slas-tab.tsx';
 import { SpamTab } from './spam-tab.tsx';
 import { StatusesTab } from './statuses-tab.tsx';
@@ -22,8 +23,7 @@ import { ViewsTab } from './views-tab.tsx';
  * M14-21 each page is a link of the Settings area's Inbox group
  * (`/settings/inbox/<segment>`), so a setting is a url somebody can send to a
  * colleague, the browser's back button works, and a reload lands where it left
- * off. An address that names no page here, such as the old Priorities one,
- * opens Departments.
+ * off. An address that names no page here opens Departments.
  */
 export function TicketingPage(): ReactNode {
   const t = useT();
@@ -40,7 +40,10 @@ export function TicketingPage(): ReactNode {
     <>
       <PageHeader
         title={t('ticketing:title')}
-        caption={t('ticketing:subtitle', { brand: brand.name })}
+        // Priorities carries its own introduction, as drawn.
+        caption={
+          tab.key === 'priorities' ? undefined : t('ticketing:subtitle', { brand: brand.name })
+        }
       />
 
       <TabBody tab={tab} />
@@ -58,6 +61,8 @@ function TabBody({ tab }: { readonly tab: TicketingTab }): ReactNode {
       return <DepartmentsTab />;
     case 'statuses':
       return <StatusesTab />;
+    case 'priorities':
+      return <PrioritiesTab />;
     case 'tags':
       return <TagsTab />;
     case 'customFields':

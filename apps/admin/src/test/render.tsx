@@ -92,6 +92,7 @@ export interface RenderAppOptions {
 
 export interface RenderedApp extends RenderResult {
   readonly user: ReturnType<typeof userEvent.setup>;
+  readonly queryClient: ReturnType<typeof createAdminQueryClient>;
   readonly authApi: AuthApi;
   readonly ssoApi: SsoApi;
   readonly importsApi: ImportsApi;
@@ -205,6 +206,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   return {
     ...result,
     user: userEvent.setup(),
+    queryClient,
     authApi,
     ssoApi,
     importsApi,

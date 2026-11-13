@@ -244,8 +244,11 @@ describe('ticketFilters', () => {
       // `<%`, not `%`: the query word against one stored word, as before.
       expect(sql?.sql).toContain('wanted.lexeme <% candidate.token');
       // The candidates are an index range, not every visible ticket.
-      expect(sql?.sql).toContain('"near"."token" >= left(wanted.lexeme, 3)');
-      expect(sql?.sql).toContain('"near"."token" < left(wanted.lexeme, 3) || chr(1114111)');
+      // with both ends computed once per word (PostgreSQL 17.12, see fuzzyTicketIds).
+      expect(sql?.sql).toContain('left(lexeme, 3) AS range_start');
+      expect(sql?.sql).toContain('left(lexeme, 3) || chr(1114111) AS range_end');
+      expect(sql?.sql).toContain('"near"."token" >= wanted.range_start');
+      expect(sql?.sql).toContain('"near"."token" < wanted.range_end');
       expect(sql?.sql).toContain('count(DISTINCT matched.word)');
       expect(sql?.params).toContain('renewa');
     });

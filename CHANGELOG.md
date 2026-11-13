@@ -29,6 +29,9 @@ configuration changes.
   (`fast-uri`, `qs`, `ip-address`, `glob`, `basic-ftp`, `fast-xml-parser`,
   `nestjs-zod`, `@fastify/static`), and the help center's slug builder no
   longer uses a regular expression CodeQL reported as slow on crafted input.
+- **Search on PostgreSQL 17.12.** The fuzzy half of ticket search uses its
+  word index again. On 17.12 it had started reading every word of the brand
+  for each search term; results were correct, only slower.
 - **Composer.** The status box says "Leave the status" when no status is
   chosen, in place of a blank box.
 

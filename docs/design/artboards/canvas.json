@@ -1009,6 +1009,13 @@
    "w": 1880,
    "x": 0,
    "y": 94500
+  },
+  "AdminTicketListToggleReplyTo.dc.html": {
+   "h": 4860,
+   "title": "Admin/Ticket-ListToggle-ReplyTo",
+   "w": 1920,
+   "x": 0,
+   "y": 97620
   }
  },
  "createdOnFiles": {
@@ -1367,7 +1374,8 @@
   "AdminEmptyStates.dc.html",
   "AdminAcceptInviteProviders.dc.html",
   "AdminUxFixes.dc.html",
-  "AdminTicketingPriorities.dc.html"
+  "AdminTicketingPriorities.dc.html",
+  "AdminTicketListToggleReplyTo.dc.html"
  ],
  "pages": [],
  "title": "Helpdock Design System"

@@ -49,6 +49,7 @@
     "aiPaused": "AI paused",
     "aiAnswered": "AI answered",
     "open": "Show the ticket list",
+    "close": "Hide the ticket list",
     "assigned": "Assigned",
     "assignedTo": "Assigned to {{name}}"
   },

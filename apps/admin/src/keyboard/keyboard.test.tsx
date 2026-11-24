@@ -412,6 +412,45 @@ describe('the ticket shortcuts', () => {
     expect(list()).not.toBeNull();
   });
 
+  it('hides and shows the list from the header button, which keeps focus and flips its state', async () => {
+    const { user } = await openRefund();
+    const list = (): HTMLElement | null => screen.queryByRole('region', { name: 'Ticket list' });
+
+    const hide = screen.getByRole('button', { name: 'Hide the ticket list' });
+    expect(hide).toHaveAttribute('aria-pressed', 'false');
+    expect(hide).toHaveAttribute('aria-keyshortcuts', '[');
+
+    await user.click(hide);
+    expect(list()).toBeNull();
+    const show = screen.getByRole('button', { name: 'Show the ticket list' });
+    expect(show).toHaveAttribute('aria-pressed', 'true');
+    expect(show).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Hide the ticket list' })).toBeNull();
+
+    await user.click(show);
+    expect(list()).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Hide the ticket list' })).toHaveFocus();
+  });
+
+  it('moves focus to the header button when [ hides the list', async () => {
+    const { user } = await openRefund();
+
+    await user.keyboard('[[');
+
+    expect(screen.getByRole('button', { name: 'Show the ticket list' })).toHaveFocus();
+  });
+
+  it('has no list toggle, and leaves [ alone, while no ticket is open', async () => {
+    const { user } = await renderAt('/tickets?view=all');
+    await screen.findByRole('link', { name: /Refund for order 42/ });
+
+    await user.keyboard('[[');
+
+    expect(screen.getByRole('region', { name: 'Ticket list' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Hide the ticket list' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show the ticket list' })).toBeNull();
+  });
+
   it('leaves [ typed into the composer alone', async () => {
     const { user } = await openRefund();
 

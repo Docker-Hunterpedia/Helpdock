@@ -51,6 +51,7 @@ describe('the ticket workspace below 1024 px', () => {
     expect(await screen.findByRole('link', { name: /HD-1042/ })).toBeVisible();
     expect(screen.queryByText('No ticket open')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Show the ticket list' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hide the ticket list' })).not.toBeInTheDocument();
   });
 
   it('pushes the ticket over the list, with a back button named for the view', async () => {
@@ -113,6 +114,7 @@ describe('the ticket workspace below 1024 px', () => {
 
     expect(screen.getByRole('region', { name: 'Ticket list' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Show the ticket list' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hide the ticket list' })).not.toBeInTheDocument();
   });
 
   it('opens a ticket from the list with j, as it does beside the thread', async () => {

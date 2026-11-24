@@ -220,6 +220,7 @@ Drawn for [M14](../completed/M14-inbox-productivity.md#artboards-to-draw), befor
 | `Admin/Ticketing-FieldFilters` | M14-16, M14-17, M14-26, M14-27 | [Admin-Ticketing-FieldFilters.png](screens/m14/Admin-Ticketing-FieldFilters.png) | [AdminTicketingFieldFilters.dc.html](artboards/AdminTicketingFieldFilters.dc.html) |
 | `Admin/Ticketing-Assignment-Idle` | M14-18 | [Admin-Ticketing-Assignment-Idle.png](screens/m14/Admin-Ticketing-Assignment-Idle.png) | [AdminTicketingAssignmentIdle.dc.html](artboards/AdminTicketingAssignmentIdle.dc.html) |
 | `Admin/M14-Amendments` | M14-26, M14-28, M14-29 | [Admin-M14-Amendments.png](screens/m14/Admin-M14-Amendments.png) | [AdminM14Amendments.dc.html](artboards/AdminM14Amendments.dc.html) |
+| `Admin/Ticket-ListToggle-ReplyTo` | M14-30, M14-31 | [Admin-Ticket-ListToggle-ReplyTo.png](screens/m14/Admin-Ticket-ListToggle-ReplyTo.png) | [AdminTicketListToggleReplyTo.dc.html](artboards/AdminTicketListToggleReplyTo.dc.html) |
 | `Admin/Settings-Shell` | M14-21 (sidebar and secondary column superseded by `Admin/UX-Fixes-2026-11`) | [Admin-Settings-Shell.png](screens/m14/Admin-Settings-Shell.png) | [AdminSettingsShell.dc.html](artboards/AdminSettingsShell.dc.html) |
 | `Admin/Empty-States` | M14-23 | [Admin-Empty-States.png](screens/m14/Admin-Empty-States.png) | [AdminEmptyStates.dc.html](artboards/AdminEmptyStates.dc.html) |
 

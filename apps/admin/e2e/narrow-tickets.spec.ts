@@ -52,6 +52,7 @@ test.describe('the ticket workspace at 768 px', () => {
     await expect(list).toBeVisible();
     await expect(page.getByText(t('tickets:empty.noSelectionHeading'))).toHaveCount(0);
     await expect(page.getByRole('button', { name: t('tickets:list.open') })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: t('tickets:list.close') })).toHaveCount(0);
 
     expect(await violations(page)).toEqual([]);
   });
@@ -145,6 +146,7 @@ test.describe('the ticket workspace at 768 px', () => {
     await page.keyboard.press('[');
     await expect(list).toBeVisible();
     await expect(page.getByRole('button', { name: t('tickets:list.open') })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: t('tickets:list.close') })).toHaveCount(0);
 
     const shown = async (): Promise<string> =>
       (await reference.textContent({ timeout: 1000 }).catch(() => null)) ?? '';

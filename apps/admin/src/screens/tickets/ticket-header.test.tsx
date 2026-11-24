@@ -263,16 +263,14 @@ describe('the list toggle (M14-30)', () => {
 
   it('is named for what it does and pressed while the list is hidden', () => {
     const shown = renderToggle(false);
-    expect(screen.getByRole('button', { name: 'Hide the ticket list' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Hide the ticket list' })).not.toHaveAttribute(
       'aria-pressed',
-      'false',
     );
     shown.unmount();
 
     renderToggle(true);
-    expect(screen.getByRole('button', { name: 'Show the ticket list' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Show the ticket list' })).not.toHaveAttribute(
       'aria-pressed',
-      'true',
     );
   });
 
@@ -294,6 +292,7 @@ describe('the list toggle (M14-30)', () => {
     localStorage.setItem(LOCALE_STORAGE_KEY, 'ar');
     renderToggle(false);
 
-    expect(screen.getByRole('button', { name: 'إخفاء قائمة التذاكر' })).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'إخفاء قائمة التذاكر' });
+    expect(button.querySelector('svg')).toHaveClass('mirror-in-rtl');
   });
 });

@@ -147,13 +147,12 @@ test.describe('the compact composer at 1280 × 720', () => {
     const show = page.getByRole('button', { name: t('tickets:list.open') });
 
     await expect(list).toBeVisible();
-    await expect(hide).toHaveAttribute('aria-pressed', 'false');
+    await expect(hide).not.toHaveAttribute('aria-pressed');
     await expect(hide).toHaveAttribute('aria-keyshortcuts', '[');
 
     // The button is a press of the same switch, and keeps focus where it is.
     await hide.click();
     await expect(list).toBeHidden();
-    await expect(show).toHaveAttribute('aria-pressed', 'true');
     await expect(show).toBeFocused();
     expect(await violations(page)).toEqual([]);
     await show.click();

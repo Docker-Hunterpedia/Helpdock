@@ -10,8 +10,9 @@ import { shortcutById } from '../../keyboard/registry.js';
 /**
  * M14-30: the 32 px button at the inline start of the ticket header that hides
  * and shows the ticket list. It is the visible half of `[`, so a person who
- * does not know the key can still find the control. `aria-pressed` is true
- * while the list is hidden; the icon is the panel the press would move.
+ * does not know the key can still find the control. Its name says what a press
+ * does and changes with the state, so it carries no `aria-pressed`: a screen
+ * reader would otherwise say "Show the ticket list, pressed".
  */
 export function ListToggleButton({
   hidden,
@@ -44,7 +45,6 @@ export function ListToggleButton({
       <IconButton
         ref={buttonRef}
         aria-label={label}
-        aria-pressed={hidden}
         aria-keyshortcuts={keyShortcuts}
         onClick={onToggle}
         sx={{

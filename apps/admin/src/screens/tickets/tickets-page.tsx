@@ -144,6 +144,31 @@ export function TicketsPage(): ReactNode {
   // M14-19: `[` puts the list column away on a wide screen, leaving the thread the room.
   const [listHidden, setListHidden] = useState(false);
   const listToggleButton = useRef<HTMLButtonElement | null>(null);
+  // The toggle lives in the ticket header, which remounts for every ticket, so
+  // focus on it is carried over to the next mount (j and k, or `[` pressed
+  // while the ticket is still loading).
+  const toggleWantsFocus = useRef(false);
+  const listToggleRef = useCallback((node: HTMLButtonElement | null) => {
+    listToggleButton.current = node;
+    if (node === null) {
+      return;
+    }
+    if (toggleWantsFocus.current) {
+      node.focus();
+    }
+    node.addEventListener('focus', () => {
+      toggleWantsFocus.current = true;
+    });
+    node.addEventListener('blur', () => {
+      // Removing the focused node blurs it too; only a node that is still
+      // there was left on purpose.
+      setTimeout(() => {
+        if (node.isConnected) {
+          toggleWantsFocus.current = false;
+        }
+      }, 0);
+    });
+  }, []);
   const focusAfterToggle = useRef<'button' | 'row' | null>(null);
   // M14-22: the list's scroll position, and what to focus when it comes back.
   const listScroll = useRef(0);
@@ -258,6 +283,13 @@ export function TicketsPage(): ReactNode {
       lastOpened.current = null;
     }
   }, [layout, ticketId]);
+
+  // A list hidden for one ticket is not hidden for the next one opened later.
+  useEffect(() => {
+    if (ticketId === null) {
+      setListHidden(false);
+    }
+  }, [ticketId]);
 
   const query = useMemo(() => queryOf(filters), [filters]);
 
@@ -509,6 +541,7 @@ export function TicketsPage(): ReactNode {
         ? () => {
             setListHidden((hidden) => {
               focusAfterToggle.current = hidden ? 'row' : 'button';
+              toggleWantsFocus.current = !hidden;
               return !hidden;
             });
           }
@@ -666,7 +699,7 @@ export function TicketsPage(): ReactNode {
       }}
     >
       {layout === 'split'
-        ? listHidden && ticketId !== null
+        ? listHidden
           ? null
           : listColumn
         : layout === 'list'
@@ -712,7 +745,7 @@ export function TicketsPage(): ReactNode {
                 layout === 'split'
                   ? {
                       hidden: listHidden,
-                      buttonRef: listToggleButton,
+                      buttonRef: listToggleRef,
                       onToggle: () => {
                         setListHidden((hidden) => !hidden);
                       },

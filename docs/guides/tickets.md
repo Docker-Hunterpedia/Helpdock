@@ -1350,9 +1350,11 @@ At 1280 × 720 the thread has about 700 px: the details panel is a drawer below
 1440 px (the **Details** button in the ticket header opens it), and **`[`** puts the
 list away for more room (`[` again brings it back). The button at the start of
 the ticket header, before the reference, does the same with a click: **Hide the
-ticket list** while the list shows, **Show the ticket list** while it is away
-(it reads as pressed then, and keeps focus). It appears only beside the list, at
-1024 px and wider with a ticket open. The reply box is short on purpose. On a ticket answered by email it is
+ticket list** while the list shows, **Show the ticket list** while it is away.
+It keeps focus when pressed. It appears only beside the list, at 1024 px and
+wider with a ticket open: with no ticket open `[` does nothing, and a list you
+hid comes back when the ticket closes.
+The reply box is short on purpose. On a ticket answered by email it is
 one line, "To Mona Khalil · from billing@helpdock.io", with **Cc 2** after it
 when there are copies; press it to see From, To, Cc and your signature, and
 press it again to put them away. The text starts at two lines and grows as you

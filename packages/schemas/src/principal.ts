@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { customerSeesSchema } from './portal.js';
 
 /**
  * The principal of [DOMAIN-RULES
@@ -13,6 +14,7 @@ import { z } from 'zod';
  *   | { type: 'visitor'; id: uuid; brandId: uuid; conversationIds: uuid[]; verifiedContactId?: uuid }
  *   | { type: 'apikey';  id: uuid; brandId: uuid; scopes: string[] }
  *   | { type: 'system';  brandId: uuid; jobId: string }
+ *   | { type: 'customer'; id: contactId; brandId: uuid; accountId?: uuid; sees: 'own' | 'account' }
  * ```
  */
 
@@ -59,11 +61,26 @@ export const systemPrincipalSchema = z.object({
   jobId: z.string().min(1),
 });
 
+/**
+ * A signed-in customer of the portal (M21-01, ADR 0059 and 0060). Set only by
+ * the portal's own guard from a valid session, and accepted only by the
+ * portal's routes. `id` is the contact; `sees` is computed from the account's
+ * setting and the contact's role on every request (`customerSees`).
+ */
+export const customerPrincipalSchema = z.object({
+  type: z.literal('customer'),
+  id: z.uuid(),
+  brandId: z.uuid(),
+  accountId: z.uuid().optional(),
+  sees: customerSeesSchema,
+});
+
 export const principalSchema = z.discriminatedUnion('type', [
   staffPrincipalSchema,
   visitorPrincipalSchema,
   apiKeyPrincipalSchema,
   systemPrincipalSchema,
+  customerPrincipalSchema,
 ]);
 export type Principal = z.infer<typeof principalSchema>;
 

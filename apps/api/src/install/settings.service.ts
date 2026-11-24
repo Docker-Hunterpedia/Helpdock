@@ -8,7 +8,7 @@ import type {
 } from '@helpdock/schemas';
 import { ConflictException } from '@nestjs/common';
 import { oauthRedirectUri } from '../auth/oauth/providers.js';
-import { principalIdOf } from '../auth/principal.js';
+import { auditActorTypeOf, principalIdOf } from '../auth/principal.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 
 type EditableAuthenticationKey =
@@ -158,7 +158,7 @@ export class InstallSettingsService {
         .insert(auditLog)
         .values({
           brandId: INSTALL_SCOPE_BRAND_ID,
-          actorType: principal.type,
+          actorType: auditActorTypeOf(principal),
           actorId,
           action: 'settings.updated',
           targetType: 'settings',

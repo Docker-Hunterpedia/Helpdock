@@ -184,4 +184,17 @@ describe('tenantScopeFor', () => {
       principalId: USER,
     });
   });
+
+  describe('a customer (M21-01)', () => {
+    const customer: Principal = { type: 'customer', id: USER, brandId: BRAND_A, sees: 'own' };
+
+    it.each(['brand', 'principal', 'install'] as const)(
+      'is refused a %s scope, because only the portal builds a customer context',
+      (scopeKind) => {
+        expect(() =>
+          tenantScopeFor({ principal: customer, scopeKind, targetBrandId: BRAND_A }),
+        ).toThrow(TenantScopeError);
+      },
+    );
+  });
 });

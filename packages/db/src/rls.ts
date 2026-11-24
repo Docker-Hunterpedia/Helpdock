@@ -13,6 +13,10 @@ export const SESSION_SETTINGS = {
   allDepartments: 'app.all_departments',
   principalType: 'app.principal_type',
   principalId: 'app.principal_id',
+  /** M21-01. Set for the `customer` principal only; see {@link customerPolicies}. */
+  customerContactId: 'app.customer_contact_id',
+  customerAccountId: 'app.customer_account_id',
+  customerSees: 'app.customer_sees',
 } as const;
 
 export interface TenantTable {
@@ -144,6 +148,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // offered in is a service rule, as it is for `views`. The owner rule below
   // keeps a personal one its owner's.
   { name: 'canned_responses', departmentScoped: false },
+  // M21-01. The portal's sessions and sign-in links are the brand's, and are
+  // reached only by the system path (and, for a session, by staff and by the
+  // customer it belongs to): see {@link CUSTOMER_TABLE_ACCESS}.
+  { name: 'customer_sessions', departmentScoped: false },
+  { name: 'customer_sign_in_tokens', departmentScoped: false },
   // M3-07. A notification names a ticket but holds none of it: the panel reads
   // the subject through `tickets`, whose department policy decides. So it is
   // brand-scoped, and narrowed to its recipient by the owner policy below.
@@ -291,6 +300,125 @@ export const missingOwnerPolicies = (committedSql: string): readonly string[] =>
   ).map(({ name }) => name);
 
 /**
+ * The customer portal's `customer` principal (M21-01, ADR 0060, DOMAIN-RULES
+ * §1.1 and §1.3).
+ *
+ * A customer's transaction carries `app.brand_ids = {their brand}`, so the
+ * permissive brand policies above would let it read every table of its brand.
+ * Row-level security therefore gets a second, **restrictive** policy set, which
+ * is ANDed with the permissive one and so can only narrow it:
+ *
+ * - every tenant table not listed in {@link CUSTOMER_TABLE_ACCESS} gets
+ *   `<table>_no_customer`, which refuses the `customer` principal everything;
+ * - the listed tables get a read policy that lets a customer see exactly its
+ *   own rows, and write policies that refuse a customer (or anyone but the
+ *   system path, where the table says so).
+ *
+ * Every other principal type passes through each of these unchanged, which is
+ * what keeps staff, visitor, API-key and system behaviour as it was. A
+ * principal with no `app.principal_type` set is not a customer, and is stopped
+ * by the permissive policies as before.
+ *
+ * None of the predicates joins: they read the denormalised `portal_*` columns
+ * `0078_customer_portal.sql` keeps by trigger, the pattern `department_id`
+ * already uses.
+ */
+export type CustomerTableAccess = 'ticket' | 'message' | 'attachment' | 'session' | 'system_only';
+
+export const CUSTOMER_TABLE_ACCESS: Readonly<Record<string, CustomerTableAccess>> = {
+  tickets: 'ticket',
+  ticket_messages: 'message',
+  attachments: 'attachment',
+  customer_sessions: 'session',
+  customer_sign_in_tokens: 'system_only',
+};
+
+const principalTypeSetting = `current_setting('${SESSION_SETTINGS.principalType}', true)`;
+// An allow-list, not "anything but customer": a type that is unset, misspelt or
+// differently cased ('Customer') is not a principal this schema knows, and must
+// fail closed rather than read the whole brand through the permissive policies.
+// A scalar subselect, so Postgres evaluates the setting once per statement as an
+// InitPlan instead of once per row on every table of the schema.
+const KNOWN_PRINCIPAL_TYPES = `('staff', 'visitor', 'apikey', 'system')`;
+const NOT_CUSTOMER = `(SELECT ${principalTypeSetting}) IN ${KNOWN_PRINCIPAL_TYPES}`;
+const CUSTOMER_ME = `nullif(current_setting('${SESSION_SETTINGS.customerContactId}', true), '')::uuid`;
+const CUSTOMER_ACCOUNT = `nullif(current_setting('${SESSION_SETTINGS.customerAccountId}', true), '')::uuid`;
+const CUSTOMER_SEES_ACCOUNT = `current_setting('${SESSION_SETTINGS.customerSees}', true) = 'account'`;
+
+/** On this ticket as requester or verified CC, or in the company view of a ticket that is not private. */
+const customerOnTicket = (accountColumn: string, extra = ''): string =>
+  `portal_contact_ids @> ARRAY[${CUSTOMER_ME}]\n      OR (${CUSTOMER_SEES_ACCOUNT}${extra} AND ${accountColumn} = ${CUSTOMER_ACCOUNT})`;
+
+/** What a `customer` principal may read of each listed table; the brand policy still applies. */
+const customerReadPredicate = (
+  access: Exclude<CustomerTableAccess, 'system_only' | 'session'>,
+): string => {
+  switch (access) {
+    case 'ticket':
+      return `portal_eligible AND deleted_at IS NULL AND merged_into_id IS NULL\n    AND (${customerOnTicket('account_id', ' AND NOT portal_private')})`;
+    case 'message':
+      return `kind IN ('public', 'ai')\n    AND (${customerOnTicket('portal_account_id')})`;
+    case 'attachment':
+      return `status = 'ready'\n    AND (${customerOnTicket('portal_account_id')})`;
+  }
+};
+
+/**
+ * The restrictive policies that govern the `customer` principal on one tenant
+ * table, as separate statements. See {@link CUSTOMER_TABLE_ACCESS}.
+ */
+export const customerPolicies = (name: string): readonly string[] => {
+  const table = assertIdentifier(name);
+  const access = CUSTOMER_TABLE_ACCESS[table];
+
+  if (access === undefined) {
+    return [
+      `CREATE POLICY "${table}_no_customer" ON "${table}" AS RESTRICTIVE FOR ALL\n  USING (${NOT_CUSTOMER})\n  WITH CHECK (${NOT_CUSTOMER});`,
+    ];
+  }
+
+  if (access === 'system_only') {
+    const system = `${principalTypeSetting} = 'system'`;
+    return [
+      `CREATE POLICY "${table}_system_only" ON "${table}" AS RESTRICTIVE FOR ALL\n  USING (${system})\n  WITH CHECK (${system});`,
+    ];
+  }
+
+  // Customers read some rows and write none. A session is written by the
+  // system path alone: the lookup that finds it by token happens before any
+  // principal exists, so M21-02 runs it as system, audited.
+  const writer = access === 'session' ? `${principalTypeSetting} = 'system'` : NOT_CUSTOMER;
+  // Sessions are not a table every principal passes through: only the system
+  // path, staff (the contact page lists them) and the owner may read one.
+  const readable =
+    access === 'session'
+      ? `${principalTypeSetting} IN ('system', 'staff')\n    OR (${principalTypeSetting} = 'customer' AND contact_id = ${CUSTOMER_ME})`
+      : `${NOT_CUSTOMER}\n    OR (${principalTypeSetting} = 'customer' AND ${CUSTOMER_ME} IS NOT NULL\n    AND ${customerReadPredicate(access)})`;
+  return [
+    `CREATE POLICY "${table}_customer_read" ON "${table}" AS RESTRICTIVE FOR SELECT\n  USING (${readable});`,
+    `CREATE POLICY "${table}_customer_insert" ON "${table}" AS RESTRICTIVE FOR INSERT\n  WITH CHECK (${writer});`,
+    `CREATE POLICY "${table}_customer_update" ON "${table}" AS RESTRICTIVE FOR UPDATE\n  USING (${writer})\n  WITH CHECK (${writer});`,
+    `CREATE POLICY "${table}_customer_delete" ON "${table}" AS RESTRICTIVE FOR DELETE\n  USING (${writer});`,
+  ];
+};
+
+/** The tenant tables whose customer policies `committedSql` does not contain. */
+export const missingCustomerPolicies = (
+  committedSql: string,
+  tables: readonly TenantTable[] = TENANT_TABLES,
+): readonly TenantTable[] =>
+  tables.filter((table) =>
+    customerPolicies(table.name).some((statement) => !committedSql.includes(statement)),
+  );
+
+/** The restrictive customer policies of `tables`, headed by the note that says where they came from. */
+export const renderCustomerPolicyStatements = (tables: readonly TenantTable[]): string => {
+  const statements = tables.flatMap((table) => customerPolicies(table.name));
+
+  return `${STATEMENT_BREAKPOINT}\n${CUSTOMER_HEADER}\n${statements.join(`\n${STATEMENT_BREAKPOINT}\n`)}\n`;
+};
+
+/**
  * Tables that are deliberately not tenant-scoped, with the reason. A table is
  * on one of these two lists or it is a mistake.
  */
@@ -392,6 +520,11 @@ export const tenantPolicies = (
 
 /** Separator drizzle-kit writes between the statements of a migration file. */
 const STATEMENT_BREAKPOINT = '--> statement-breakpoint';
+
+const CUSTOMER_HEADER = `-- Generated by \`pnpm --filter @helpdock/db gen:rls\` from CUSTOMER_TABLE_ACCESS in src/rls.ts.
+-- Restrictive policies for the \`customer\` principal of the customer portal
+-- (M21-01, DOMAIN-RULES §1.3): ANDed with the tenant policies, so they only
+-- narrow. Every other principal type passes through them unchanged.`;
 
 const MIGRATION_HEADER = `-- Generated by \`pnpm --filter @helpdock/db gen:rls\` from TENANT_TABLES in src/rls.ts.
 -- Edit that list and regenerate; do not edit this file by hand.

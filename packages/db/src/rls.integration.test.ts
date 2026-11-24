@@ -31,6 +31,8 @@ import {
   contactNotes,
   contacts,
   csatResponses,
+  customerSessions,
+  customerSignInTokens,
   customFieldDefs,
   departments,
   emailDeliveries,
@@ -107,7 +109,7 @@ import {
   workflowRules,
   workflowRuns,
 } from './schema/index.js';
-import { withSystem, withTenant } from './tenant.js';
+import { withCustomer, withSystem, withTenant } from './tenant.js';
 import { uuidv7 } from './uuid.js';
 
 /**
@@ -154,6 +156,7 @@ const contactId = (brandId: string): string => idFor(brandId, 'c');
 const otherContactId = (brandId: string): string => idFor(brandId, 'd');
 const perBrand = (): Record<string, string> => ({ [brandA]: uuidv7(), [brandB]: uuidv7() });
 const importFileId = perBrand();
+const identityId = perBrand();
 const departmentId = perBrand();
 const teamId = perBrand();
 const statusId = perBrand();
@@ -350,6 +353,7 @@ const fixtures = [
     name: 'contact_identities',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(contactIdentities).values({
+        id: identityId[brandId] ?? '',
         brandId,
         contactId: contactId(brandId),
         kind: 'email',
@@ -358,6 +362,31 @@ const fixtures = [
         value: 'mona@example.com',
         verified: true,
         source: 'test',
+      }),
+  },
+  // M21-01. Both are the portal's and reached by the system path alone; this
+  // suite writes them as the system principal, which is the one allowed to.
+  {
+    name: 'customer_sessions',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(customerSessions).values({
+        brandId,
+        contactId: contactId(brandId),
+        contactIdentityId: identityId[brandId] ?? '',
+        tokenHash: `session-${brandId}`,
+        expiresAt: new Date(Date.now() + 86_400_000),
+        host: 'help.example.com',
+      }),
+  },
+  {
+    name: 'customer_sign_in_tokens',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(customerSignInTokens).values({
+        brandId,
+        email: 'mona@example.com',
+        contactId: contactId(brandId),
+        tokenHash: `link-${brandId}`,
+        expiresAt: new Date(Date.now() + 900_000),
       }),
   },
   {
@@ -1424,6 +1453,73 @@ describe.skipIf(!hasDocker)('row-level security', () => {
       const visible = await db.transaction((tx) => brandIdsIn(tx, name));
 
       expect(visible).toEqual([]);
+    });
+
+    // M21-01. A portal customer's transaction names its brand, so the brand
+    // policies above would let it read every table of that brand. The
+    // restrictive customer policies are what stops that, on every table.
+    describe('for a portal customer', () => {
+      const customerOf = (brandId: string) => ({
+        brandId,
+        contactId: contactId(brandId),
+        accountId: accountId(brandId),
+        sees: 'account' as const,
+        departmentIds: 'all' as const,
+      });
+      // Their own sessions are the one thing a customer reads of the fixtures.
+      const readable = name === 'customer_sessions' ? 1 : 0;
+
+      it('reads none of it, bar what its own policy names', async () => {
+        const rows = await withCustomer(db, customerOf(brandA), (tx) => brandIdsIn(tx, name));
+        const asSystem = await withSystem(db, brandA, (tx) => brandIdsIn(tx, name));
+
+        expect(asSystem.length).toBeGreaterThan(0);
+        expect(rows).toHaveLength(readable);
+      });
+
+      it('reads nothing of brand B, even naming brand B', async () => {
+        const rows = await withCustomer(
+          db,
+          customerOf(brandA),
+          async (tx) =>
+            [
+              ...(await tx.execute<{ brand_id: string }>(
+                sql`SELECT brand_id::text AS brand_id FROM ${sql.identifier(name)}
+                  WHERE brand_id = ${brandB}::uuid`,
+              )),
+            ].length,
+        );
+
+        expect(rows).toBe(0);
+      });
+
+      it('writes none of it', async () => {
+        const [rejection, updated, deleted] = await withCustomer(
+          db,
+          customerOf(brandA),
+          async (tx) => {
+            const refused = await tx
+              .transaction((inner) => insert(inner, brandA))
+              .then(
+                () => undefined,
+                (error: unknown) => error as { cause?: { message?: string } },
+              );
+            const update = await tx.execute(
+              sql`UPDATE ${sql.identifier(name)} SET brand_id = brand_id WHERE brand_id = ${brandA}::uuid`,
+            );
+            const remove = await tx.execute(
+              sql`DELETE FROM ${sql.identifier(name)} WHERE brand_id = ${brandA}::uuid`,
+            );
+            return [refused, update.count, remove.count] as const;
+          },
+        );
+
+        expect(rejection?.cause?.message).toMatch(refusal);
+        expect([updated, deleted]).toEqual([0, 0]);
+        // Nothing the customer attempted took effect.
+        const after = await withSystem(db, brandA, (tx) => brandIdsIn(tx, name));
+        expect(after.length).toBeGreaterThan(0);
+      });
     });
 
     it('has row security enabled and forced, so an owner is bound by it too', async () => {

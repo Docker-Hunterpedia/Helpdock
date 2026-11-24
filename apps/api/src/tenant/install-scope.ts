@@ -7,7 +7,7 @@ import {
 } from '@helpdock/db';
 import { sql } from 'drizzle-orm';
 import type { Principal } from '../auth/principal.js';
-import { principalIdOf } from '../auth/principal.js';
+import { auditActorTypeOf, principalIdOf } from '../auth/principal.js';
 import type { RequestContext } from '../context/request-context.js';
 
 /** The audit action every install-scope entry is recorded under. */
@@ -26,7 +26,7 @@ export const auditInstallScopeAccess = async (
 ): Promise<void> => {
   await tx.insert(auditLog).values({
     brandId: INSTALL_SCOPE_BRAND_ID,
-    actorType: principal.type,
+    actorType: auditActorTypeOf(principal),
     actorId: principalIdOf(principal),
     action: INSTALL_SCOPE_ACTION,
     targetType: 'route',

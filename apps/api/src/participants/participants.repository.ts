@@ -145,8 +145,16 @@ export class ParticipantsRepository {
         source: values.source,
         addedBy: values.addedBy,
       })
-      .onConflictDoNothing({
+      .onConflictDoUpdate({
         target: [ticketParticipants.ticketId, ticketParticipants.contactId],
+        // A source is only ever raised, never lowered. A staff add of a contact
+        // already copied in from mail or an import makes it a staff CC (the one
+        // source the customer portal trusts, DOMAIN-RULES §2.5), and an email or
+        // import writer leaves whatever is there. `setWhere` is false for every
+        // other writer, so they keep the old no-op.
+        set: { source: 'agent', addedBy: values.addedBy },
+        setWhere:
+          values.source === 'agent' ? sql`${ticketParticipants.source} <> 'agent'` : sql`false`,
       })
       .returning();
 

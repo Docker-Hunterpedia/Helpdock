@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
+import { portalVisibilityEnum } from './enums.js';
 
 /**
  * The customer company a contact belongs to (REQUIREMENTS §4.1). Brand-scoped,
@@ -36,6 +37,11 @@ export const accounts = pgTable(
     name: text('name').notNull(),
     /** Lower-cased email domain, for example `acme.example`. */
     domain: text('domain'),
+    /**
+     * M21-01, ADR 0060: which of this company's tickets its members see in the
+     * customer portal. `own` until staff say otherwise.
+     */
+    portalVisibility: portalVisibilityEnum('portal_visibility').notNull().default('own'),
     /** Values of the account custom fields M1-06 defines. */
     custom: jsonb('custom').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

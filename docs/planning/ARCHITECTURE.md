@@ -131,14 +131,18 @@ All tenant tables have `brand_id uuid not null` + RLS policy `brand_id = ANY(cur
 users, user_brand_roles(user_id, brand_id, role, department_ids[])
 brands, brand_domains(domain, kind: helpcenter|widget_origin, verified_at, txt_token)
 departments, teams, team_members
-contacts(brand_id, primary_email, phone, telegram_chat_id, external_id, visitor_ids[], account_id)
-accounts
+contacts(brand_id, primary_email, phone, telegram_chat_id, external_id, visitor_ids[], account_id, account_role: member|manager)   -- account_role: M21-01, ADR 0060
+accounts(brand_id, name, domain, portal_visibility: own|managers|all)   -- portal_visibility: M21-01, default own, ADR 0060
+customer_sessions(brand_id, contact_id, contact_identity_id, token_hash /*SHA-256, unique*/, created_at, last_seen_at, expires_at, user_agent_family, host)   -- M21-01, ADR 0059; system-written
+customer_sign_in_tokens(brand_id, email, contact_id null, token_hash /*unique*/, expires_at, spent_at, created_at)   -- M21-01, ADR 0059; system-only
 tickets(brand_id, number, prefix, subject, status_id, priority, channel, department_id, team_id, assignee_id, merged_into_id, split_from_id,
         contact_id, sla_policy_id, first_response_due_at, resolution_due_at, sla_breached, closed_at, custom jsonb,
-        search tsvector, parent_id, imported_at, import_source, import_sla_started_at)
-ticket_messages(ticket_id, department_id /*denormalised for RLS*/, seq, client_id, kind: public|note|system|ai, author_type, author_id, body_html, body_text, channel,
+        search tsvector, parent_id, imported_at, import_source, import_sla_started_at,
+        account_id /*requester's account now, trigger-kept*/, portal_private, portal_eligible /*not deleted, merged away or Spam, trigger-kept*/,
+        portal_contact_ids uuid[] /*requester + CCs with a verified email identity, trigger-kept; M21-01*/)
+ticket_messages(ticket_id, department_id /*denormalised for RLS*/, portal_contact_ids, portal_account_id /*denormalised for the customer policy, M21-01*/, seq, client_id, kind: public|note|system|ai, author_type, author_id, body_html, body_text, channel,
                 external_message_id, ai_meta jsonb)
-attachments(message_id, s3_key, mime, size, kind: image|video|audio|file, variants jsonb, scan_status)
+attachments(message_id, s3_key, mime, size, kind: image|video|audio|file, variants jsonb, scan_status, portal_contact_ids, portal_account_id /*as on the message, empty for a note's file*/)
 tags, ticket_tags, ticket_statuses, custom_field_defs
 views, macros, canned_responses(locale), ticket_templates
 sla_policies(conditions jsonb, time_mode, targets jsonb, escalation jsonb, position), business_hours(department_id null = brand, weekly jsonb), holidays,
@@ -178,6 +182,7 @@ Search: `tickets.search` and the help center index `hc_search_documents.search` 
 3. `TenantInterceptor` opens a transaction and runs `SET LOCAL` for `app.brand_ids`, `app.department_ids`, `app.all_departments`, `app.principal_type`, `app.principal_id`. Every Drizzle query in the request runs inside it → RLS applies. Install-admin "all brands" paths set the full list explicitly and are audited. Route handlers declare `@Requires('<permission>')`; a CI check fails on any route without one.
 4. Controllers validate with Zod pipes; services write domain rows **and an `outbox` row in the same transaction** for every side effect (rules, notifications, sends, indexing, webhooks). The worker's `outbox.relay` publishes rows to BullMQ with `jobId = outbox.id`; consumers are idempotent (DOMAIN-RULES §6). `@nestjs/event-emitter` is used only for in-process, non-critical effects.
 5. Response DTOs are Zod-parsed on the way out (no accidental field leaks).
+6. **Portal customers (M21).** The portal's own guard turns a valid session into the `customer` principal and the portal builds its context with `withCustomerContext` (`apps/api/src/portal/customer-context.ts`), never `TenantInterceptor`: it reads, on every request and as the system principal, the contact's account, the account's `portal_visibility`, the contact's `account_role` and the brand's `portal` settings, then opens a transaction with `app.principal_type = 'customer'`, `app.customer_contact_id`, `app.customer_account_id`, `app.customer_sees`, the one brand in `app.brand_ids`, and the departments the brand shows as `app.department_ids` (or `app.all_departments`). Restrictive policies (DOMAIN-RULES §1.3) do the rest; a customer session on any other route throws `TenantScopeError`.
 
 ---
 

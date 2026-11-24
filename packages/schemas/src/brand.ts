@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { contentPolicySchema } from './media.js';
+import { portalSettingsSchema } from './portal.js';
 import { priorityLabelsSchema } from './priority-labels.js';
 
 /** The interface and content languages Helpdock ships with (REQUIREMENTS §3). */
@@ -116,6 +117,8 @@ export const brandSettingsSchema = z.object({
    * {@link ./priority-labels.js}.
    */
   priorityLabels: priorityLabelsSchema.default({}),
+  /** The customer portal (M21-01); see {@link portalSettingsSchema}. Off by default. */
+  portal: portalSettingsSchema.default(portalSettingsSchema.parse({})),
 });
 export type BrandSettings = z.infer<typeof brandSettingsSchema>;
 
@@ -163,6 +166,10 @@ export const feedbackSettingsUpdateRequestSchema = z
   );
 export type FeedbackSettingsUpdateRequest = z.infer<typeof feedbackSettingsUpdateRequestSchema>;
 
+/** A block of the stored settings if its schema accepts it, else `{}` (the block's defaults). */
+const validOrEmpty = (schema: z.ZodType, block: unknown): unknown =>
+  schema.safeParse(block).success ? block : {};
+
 /**
  * The stored value, made safe to serve. A column that predates a key, or one an
  * operator edited by hand into something the schema refuses, becomes the
@@ -178,10 +185,18 @@ export const parseBrandSettings = (value: unknown): BrandSettings => {
   // Names that stopped being valid (a rule tightened since they were saved)
   // must not take the reopen policy and every other setting down with them:
   // retry without them before falling back to the defaults.
+  // The portal block is tolerated the same way: a bad value there turns the
+  // portal off (its defaults) and nothing else is lost. Each block is dropped on
+  // its own, so one bad block never costs another its saved value.
   if (typeof value === 'object' && value !== null) {
-    const withoutLabels = brandSettingsSchema.safeParse({ ...value, priorityLabels: {} });
-    if (withoutLabels.success) {
-      return withoutLabels.data;
+    const stored = value as Record<string, unknown>;
+    const withoutBadBlocks = brandSettingsSchema.safeParse({
+      ...stored,
+      priorityLabels: validOrEmpty(priorityLabelsSchema, stored.priorityLabels),
+      portal: validOrEmpty(portalSettingsSchema, stored.portal),
+    });
+    if (withoutBadBlocks.success) {
+      return withoutBadBlocks.data;
     }
   }
 

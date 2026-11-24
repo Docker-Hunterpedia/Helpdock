@@ -53,6 +53,16 @@ export const NOT_ENVELOPE_COLUMNS: readonly (EnvelopeColumn & { readonly reason:
     reason: 'argon2id with a pepper derived from the master key; replaced at the next sign-in',
   },
   { table: 'csat_responses', column: 'token_hash', reason: 'SHA-256 of the survey link' },
+  {
+    table: 'customer_sessions',
+    column: 'token_hash',
+    reason: 'SHA-256 of a random 256-bit session token; not an encrypted credential',
+  },
+  {
+    table: 'customer_sign_in_tokens',
+    column: 'token_hash',
+    reason: 'SHA-256 of a random sign-in link token; not an encrypted credential',
+  },
   { table: 'widget_visitors', column: 'secret_hash', reason: 'SHA-256 of the visitor secret' },
   {
     table: 'brand_domains',

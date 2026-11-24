@@ -647,3 +647,12 @@ export const importMappingKindEnum = pgEnum('import_mapping_kind', [
 ]);
 export const importLogLevelEnum = pgEnum('import_log_level', ['info', 'warning', 'error']);
 export const attachmentOriginEnum = pgEnum('attachment_origin', ['upload', 'channel', 'import']);
+
+/**
+ * M21-01, ADR 0060. Which of an account's tickets its members see in the
+ * customer portal: only their own, those of members marked manager, or
+ * everyone's. `own` is the default, so nothing changes until staff choose.
+ */
+export const portalVisibilityEnum = pgEnum('portal_visibility', ['own', 'managers', 'all']);
+/** M21-01. A contact's part in its account; it matters only under `managers`. */
+export const contactAccountRoleEnum = pgEnum('contact_account_role', ['member', 'manager']);

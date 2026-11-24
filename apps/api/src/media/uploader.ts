@@ -24,6 +24,7 @@ export const uploaderFor = (principal: Principal): Uploader => {
     case 'staff':
       return { type: 'staff', id: principal.id };
     case 'visitor':
+    case 'customer':
       return { type: 'contact', id: principal.id };
     case 'apikey':
       return { type: 'system', id: principal.id };

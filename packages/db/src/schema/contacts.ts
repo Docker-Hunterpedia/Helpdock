@@ -12,7 +12,7 @@ import {
 import { uuidv7 } from '../uuid.js';
 import { accounts } from './accounts.js';
 import { brands } from './brands.js';
-import { localeEnum } from './enums.js';
+import { contactAccountRoleEnum, localeEnum } from './enums.js';
 
 /**
  * A person, as one brand knows them (REQUIREMENTS §4.1). One row carries every
@@ -45,6 +45,8 @@ export const contacts = pgTable(
       .references(() => brands.id, { onDelete: 'cascade' }),
     /** Null until somebody files them under a company. */
     accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'set null' }),
+    /** M21-01, ADR 0060: `manager` sees the account's tickets under `managers`. */
+    accountRole: contactAccountRoleEnum('account_role').notNull().default('member'),
     importedDetails: jsonb('imported_details').$type<{
       phones: string[];
       locale: string | null;

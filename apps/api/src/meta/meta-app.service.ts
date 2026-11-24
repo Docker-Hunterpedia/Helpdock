@@ -10,7 +10,7 @@ import {
   metaWebhookPath,
 } from '@helpdock/schemas';
 import { ConflictException } from '@nestjs/common';
-import { principalIdOf } from '../auth/principal.js';
+import { auditActorTypeOf, principalIdOf } from '../auth/principal.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 
 /**
@@ -157,7 +157,7 @@ export class MetaAppService {
       .insert(auditLog)
       .values({
         brandId: INSTALL_SCOPE_BRAND_ID,
-        actorType: principal.type,
+        actorType: auditActorTypeOf(principal),
         actorId,
         action: 'settings.updated',
         targetType: 'settings',

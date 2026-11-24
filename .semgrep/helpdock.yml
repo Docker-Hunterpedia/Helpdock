@@ -170,3 +170,21 @@ rules:
           metavariable: $KEY
           regex: >-
             (?i)^["']?(password|passwd|passphrase|secret|clientsecret|client_secret|token|accesstoken|access_token|refreshtoken|refresh_token|apikey|api_key|privatekey|private_key|masterkey|totpsecret|authorization|cookie|signingsecret|setupkey)["']?$
+
+  - id: helpdock-portal-raw-sql
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Raw or string-built SQL in the customer portal (M21). A portal query runs
+      as a customer principal under row-level security and is written with the
+      query builder or a bound `sql` template; `sql.raw` and `execute` with a
+      built string are how a predicate gets spliced from a request.
+    paths:
+      include:
+        - /apps/api/src/portal/
+      exclude:
+        - '*.test.ts'
+    pattern-either:
+      - pattern: sql.raw(...)
+      - pattern: $TX.execute(`...${...}...`)
+

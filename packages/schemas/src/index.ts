@@ -50,6 +50,7 @@ export * from './notifications.js';
 export * from './participants.js';
 export * from './passkeys.js';
 export * from './placeholders.js';
+export * from './portal.js';
 export * from './principal.js';
 export * from './priority-labels.js';
 export * from './quick-search.js';

@@ -181,7 +181,10 @@ export const principalHasPermission = (
       // (M8-01); a key never reaches a brand other than the one it belongs to.
       return principal.brandId === brandId && principal.scopes.includes(permission);
     case 'visitor':
+    case 'customer':
     case 'system':
+      // A customer holds no staff permission: the portal's own routes check its
+      // session (ADR 0059 §6), and every `@Requires` route refuses it here.
       // Visitors get their own endpoints in M4 with their own checks, and a
       // worker never arrives over HTTP (DOMAIN-RULES §1.4).
       return false;

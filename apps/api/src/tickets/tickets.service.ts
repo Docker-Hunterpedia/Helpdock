@@ -1590,6 +1590,7 @@ const authorTypeFor = (principal: Principal): 'staff' | 'contact' | 'system' | '
     case 'staff':
       return 'staff';
     case 'visitor':
+    case 'customer':
       return 'contact';
     case 'apikey':
     case 'system':

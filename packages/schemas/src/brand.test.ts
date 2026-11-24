@@ -25,6 +25,7 @@ const settings = {
   aiCountsAsFirstResponse: true,
   slaCountReopens: false,
   priorityLabels: {},
+  portal: { enabled: false, newCustomers: false, departmentIds: 'all' },
 };
 
 const row = {
@@ -72,6 +73,7 @@ describe('brandSettingsSchema', () => {
       aiCountsAsFirstResponse: true,
       slaCountReopens: false,
       priorityLabels: {},
+      portal: { enabled: false, newCustomers: false, departmentIds: 'all' },
     });
   });
 
@@ -110,6 +112,56 @@ describe('brandSettingsSchema', () => {
   });
 });
 
+describe('parseBrandSettings and the portal block (M21-01)', () => {
+  it('starts every brand with the portal off', () => {
+    expect(defaultBrandSettings().portal).toEqual({
+      enabled: false,
+      newCustomers: false,
+      departmentIds: 'all',
+    });
+    expect(parseBrandSettings({}).portal.enabled).toBe(false);
+  });
+
+  it('keeps a portal the brand switched on', () => {
+    const dept = '01937f5e-7e53-7000-8000-00000000000d';
+
+    expect(
+      parseBrandSettings({ portal: { enabled: true, newCustomers: true, departmentIds: [dept] } })
+        .portal,
+    ).toEqual({ enabled: true, newCustomers: true, departmentIds: [dept] });
+  });
+
+  it('turns a bad portal block off without resetting the other settings', () => {
+    const parsed = parseBrandSettings({
+      autoAwaitOnAgentReply: false,
+      reopenPolicy: { kind: 'never' },
+      portal: { enabled: true, departmentIds: ['not a uuid'] },
+    });
+
+    expect(parsed.portal).toEqual({ enabled: false, newCustomers: false, departmentIds: 'all' });
+    expect(parsed.autoAwaitOnAgentReply).toBe(false);
+    expect(parsed.reopenPolicy).toEqual({ kind: 'never' });
+  });
+
+  it('keeps a good portal block when the priority names are the bad part', () => {
+    const parsed = parseBrandSettings({
+      reopenPolicy: { kind: 'never' },
+      priorityLabels: { high: { en: '' } },
+      portal: { enabled: true },
+    });
+
+    expect(parsed.portal.enabled).toBe(true);
+    expect(parsed.priorityLabels).toEqual({});
+    expect(parsed.reopenPolicy).toEqual({ kind: 'never' });
+  });
+
+  it('falls back to the defaults when something outside both blocks is bad', () => {
+    expect(
+      parseBrandSettings({ reopenPolicy: { kind: 'sometimes' }, portal: { enabled: true } }),
+    ).toEqual(defaultBrandSettings());
+  });
+});
+
 describe('parseBrandSettings', () => {
   it('keeps what a brand actually chose', () => {
     expect(
@@ -125,6 +177,7 @@ describe('parseBrandSettings', () => {
       aiCountsAsFirstResponse: true,
       slaCountReopens: false,
       priorityLabels: {},
+      portal: { enabled: false, newCustomers: false, departmentIds: 'all' },
     });
   });
 

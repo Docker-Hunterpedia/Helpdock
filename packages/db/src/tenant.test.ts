@@ -4,6 +4,7 @@ import { SESSION_SETTINGS } from './rls.js';
 import {
   cleanIp,
   currentDepartmentScope,
+  customerContext,
   INSTALL_SCOPE_BRAND_ID,
   REQUEST_SETTINGS,
   systemContext,
@@ -61,8 +62,111 @@ describe('tenantSessionSettings', () => {
     });
   });
 
-  it('sets the five settings the policies read', () => {
-    expect(Object.keys(settingsOf(context()))).toEqual(Object.values(SESSION_SETTINGS));
+  it('sets the five settings every policy reads, and none of the customer ones, for any other principal', () => {
+    expect(Object.keys(settingsOf(context()))).toEqual([
+      SESSION_SETTINGS.brandIds,
+      SESSION_SETTINGS.departmentIds,
+      SESSION_SETTINGS.allDepartments,
+      SESSION_SETTINGS.principalType,
+      SESSION_SETTINGS.principalId,
+    ]);
+  });
+
+  describe('for a customer (M21-01)', () => {
+    const contactId = uuidv7();
+    const accountId = uuidv7();
+    const customer = (
+      overrides: Partial<TenantContext> & { facts?: TenantContext['customer'] } = {},
+    ): TenantContext =>
+      context({
+        principalType: 'customer',
+        principalId: contactId,
+        customer: { contactId, accountId, sees: 'account' },
+        departmentIds: [departmentA],
+        ...overrides,
+      });
+
+    it('adds the contact, the account and what they see to the five', () => {
+      const settings = settingsOf(customer());
+
+      expect(settings[SESSION_SETTINGS.principalType]).toBe('customer');
+      expect(settings[SESSION_SETTINGS.customerContactId]).toBe(contactId);
+      expect(settings[SESSION_SETTINGS.customerAccountId]).toBe(accountId);
+      expect(settings[SESSION_SETTINGS.customerSees]).toBe('account');
+      expect(settings[SESSION_SETTINGS.departmentIds]).toBe(`{${departmentA}}`);
+    });
+
+    it('writes no account as an empty string, which the policy reads as null', () => {
+      const settings = settingsOf(
+        customer({ customer: { contactId, accountId: null, sees: 'own' } }),
+      );
+
+      expect(settings[SESSION_SETTINGS.customerAccountId]).toBe('');
+      expect(settings[SESSION_SETTINGS.customerSees]).toBe('own');
+    });
+
+    it('refuses a customer with no facts', () => {
+      expect(() => tenantSessionSettings(customer({ customer: undefined }))).toThrow(
+        TenantContextError,
+      );
+    });
+
+    it("refuses facts on any other principal, so nobody borrows a customer's reach", () => {
+      for (const principalType of ['staff', 'visitor', 'apikey', 'system'] as const) {
+        expect(() =>
+          tenantSessionSettings(
+            context({ principalType, customer: { contactId, accountId: null, sees: 'own' } }),
+          ),
+        ).toThrow(TenantContextError);
+      }
+    });
+
+    it('refuses a contact that is not the principal', () => {
+      expect(() =>
+        tenantSessionSettings(
+          customer({ customer: { contactId: uuidv7(), accountId, sees: 'account' } }),
+        ),
+      ).toThrow(TenantContextError);
+    });
+
+    it.each([
+      ['a contact id that is not a uuid', { contactId: 'me', accountId: null, sees: 'own' }],
+      ['an account id that is not a uuid', { contactId, accountId: 'acme', sees: 'own' }],
+      ['a reach outside own and account', { contactId, accountId, sees: 'brand' }],
+    ])('refuses %s', (_name, facts) => {
+      expect(() =>
+        tenantSessionSettings(
+          customer({
+            principalId: facts.contactId,
+            customer: facts as NonNullable<TenantContext['customer']>,
+          }),
+        ),
+      ).toThrow(TenantContextError);
+    });
+
+    it('refuses a customer that names more than one brand', () => {
+      expect(() => tenantSessionSettings(customer({ brandIds: [brandA, brandB] }))).toThrow(
+        TenantContextError,
+      );
+    });
+
+    it('builds the context from customerContext', () => {
+      const built = customerContext({
+        brandId: brandA,
+        contactId,
+        accountId,
+        sees: 'own',
+        departmentIds: 'all',
+      });
+
+      expect(built).toMatchObject({
+        brandIds: [brandA],
+        principalType: 'customer',
+        principalId: contactId,
+        departmentIds: 'all',
+        customer: { contactId, accountId, sees: 'own' },
+      });
+    });
   });
 
   it('writes brand ids as a Postgres array literal', () => {

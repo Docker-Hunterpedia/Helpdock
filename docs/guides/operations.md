@@ -584,6 +584,14 @@ image tag and a restart.
    then `docker compose restart caddy` from `docker/`. Providers should use the
    [API-host URL and shared secret](email.md#inbound-parse-webhooks).
 
+   **Note: the customer portal migration (M21-01) is a large one.** It adds
+   columns to `tickets`, `ticket_messages` and `attachments` and then rewrites
+   every ticket, every public message and every attachment of a message once,
+   under the migration's exclusive locks, before it builds the two new ticket
+   indexes. Expect the api to stay down for a time proportional to those tables:
+   plan a window, take the dump first, and watch the `api` log until it says
+   `Applied N migration(s)`. A restore of that dump is the only way back.
+
 4. One api replica takes the migration lock and migrates while the others
    wait. The log says `Applied N migration(s)`, then the api reports healthy.
 

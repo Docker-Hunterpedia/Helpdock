@@ -15,6 +15,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
+import { accounts } from './accounts.js';
 import { brands } from './brands.js';
 import { contacts } from './contacts.js';
 import { departments } from './departments.js';
@@ -243,6 +244,29 @@ export const tickets = pgTable(
       (): SQL => sql`to_tsvector('english', coalesce(${tickets.subject}, ''))`,
     ),
     /**
+     * M21-01, ADR 0060: the requester's account **now**, kept by the
+     * `tickets_portal_scope` and `contacts_portal_account` triggers so the
+     * customer policy needs no join. Never written by a caller. `set null` when
+     * the account is deleted.
+     */
+    accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'set null' }),
+    /** M21-01: staff hid this ticket from the company view; only its requester and CCs see it. */
+    portalPrivate: boolean('portal_private').notNull().default(false),
+    /**
+     * M21-01. Whether the portal may show this ticket at all: not deleted, not
+     * merged away and not Spam. Trigger-kept (`tickets_portal_scope`); false
+     * until the trigger has run, so a row the trigger missed is hidden.
+     */
+    portalEligible: boolean('portal_eligible').notNull().default(false),
+    /**
+     * M21-01. The contacts that are on this ticket as far as the portal is
+     * concerned: the requester, and every CC whose address is a verified email
+     * identity of that CC's contact. Empty while the ticket is not eligible.
+     * Trigger-kept from `tickets`, `ticket_participants` and `contact_identities`,
+     * so the customer policy tests membership with no join (DOMAIN-RULES §1.3).
+     */
+    portalContactIds: uuid('portal_contact_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    /**
      * M7-06, DOMAIN-RULES §9: the assistant is paused on this conversation.
      * Set when the model hands off, the customer asks for a person, or a
      * staff member replies or takes the ticket; every auto-reply job reads it
@@ -362,6 +386,12 @@ export const tickets = pgTable(
       'tickets_snooze_detail_requires_until',
       sql`${table.snoozedUntil} is not null or (${table.snoozedBy} is null and ${table.snoozeResumeStatusId} is null)`,
     ),
+    // M21-01: the company view's read, and what the contact-move trigger scans.
+    index('tickets_brand_account_idx')
+      .on(table.brandId, table.accountId)
+      .where(sql`${table.accountId} is not null`),
+    // M21-01: "the tickets this contact is on", the portal's own-tickets read.
+    index('tickets_portal_contacts_idx').using('gin', table.portalContactIds),
     // M3-04: a time-based rule's read, "in this status since before then".
     index('tickets_brand_status_changed_idx').on(
       table.brandId,

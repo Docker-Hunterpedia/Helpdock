@@ -202,7 +202,7 @@ match. Actual status transitions keep the database trigger's arrival baseline.
 
 ### 2.5 Participants
 
-A ticket's participants are: the contact, CC addresses added by agents or present on inbound email that passed SPF and DKIM (§4.3), and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
+A ticket's participants are: the contact, CC addresses added by agents or present on inbound email that the receiving server did not report as not matching its From address (§4.3), and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
 
 Imported CCs can reference a same-brand contact without a source email; their
 address remains null and their provenance is `import`. Never invent an address.
@@ -401,7 +401,9 @@ An inbound email is attached to an existing ticket only if **both** hold:
 
 If the hint matches but the sender is not a participant, a new ticket is created in the same department with a system note "Referenced HD-1042 but sender is not a participant", and the agent may merge manually. A subject token with no other hint is treated the same way. This prevents anyone who learns a ticket number from injecting into or reading that thread.
 
-A message whose SPF or DKIM check failed (`authFailed`, M2-07) still threads by the same two conditions, so forwarded mail that fails SPF honestly is not lost, but it is only a record of what arrived: it appears in the thread with its "authentication failed" warning and does what any customer reply does, and nothing more. It adds no `Cc` address as a participant (§2.5), because anyone can forge a participant's `From` and name their own address in `Cc` to start receiving the ticket's replies. Its `From` is recorded as an unverified identity (source `email.unauthenticated`, §4.4): it never verifies an address and never merges into a verified contact, and an identity that is already verified stays verified. The same holds on every inbound path (IMAP, provider webhooks, raw MIME, generic JSON), since all go through the one router.
+**Sender check.** Helpdock acts on what the receiving mail server reported in `Authentication-Results` (and `Received-SPF` for failures), and reads it as one of three results (`senderCheck`, `classify.ts`): `misaligned` when the report goes against the `From` address (an SPF or DKIM failure with no aligned DKIM pass, `dmarc=fail`, or SPF and DKIM passes that all belong to another domain), `aligned` when it supports it (`dmarc=pass`, or a DKIM or SPF pass for the From domain or a subdomain or parent of it), and `unknown` when there is no usable report. Domains align when they are equal or one is a subdomain of the other; there is no public-suffix list. With several headers all are read and evidence against the message wins unless an aligned DKIM pass exists. The report is whatever the receiving server wrote, so this is a best-effort check, and mail with no report is treated as before.
+
+A `misaligned` message still threads by the same two conditions, so forwarded mail is not lost, and it does what any customer reply does, and nothing more. It adds no `To` or `Cc` address as a participant (§2.5). Its sender is found by address, as a copied-in address is: the contact that holds it, verified or not, or one unverified contact for it (source `email.unauthenticated`); nothing is verified, moved or merged, and an identity that is already verified stays verified (§4.4). Its "authentication failed" warning, and filing a new ticket under Spam, keep following `authFailed` alone (an SPF or DKIM failure, M2-07). Every inbound method goes through the one router, so this holds for IMAP, provider webhooks, raw MIME and generic JSON alike.
 
 Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`, `mailer-daemon@`) never create tickets unless the brand allow-lists them; they are logged.
 
@@ -417,7 +419,7 @@ Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`,
 
 | Identifier | Verified when | Auto-merge |
 |---|---|---|
-| Email | An inbound email that passed SPF and DKIM arrived from it, or a magic link sent to it was clicked | Yes |
+| Email | An inbound email arrived from it that the receiving server did not report as not matching its From address (§4.3), or a magic link sent to it was clicked | Yes |
 | Telegram `chat_id` | Always (comes from the Bot API) | Yes |
 | WhatsApp business-scoped user id | Always (comes in a webhook Meta signed) | Yes |
 | Messenger page-scoped id | Always (signed webhook) | Yes |

@@ -65,10 +65,25 @@ Answers: `200 {"outcome":"accepted"}` for a new message, `duplicate` for one alr
    email take precedence over imported history.
 5. **The body** is sanitised (no scripts, forms or styles), the quoted history is folded behind "Show quoted text", inline images become the message's attachments, and other attachments go through the media pipeline like any upload.
 6. **Remote images** are never in the stored body. With **Block until an agent loads them** the email card shows how many and from where; **Load images** fetches them through Helpdock's proxy. With **Load through the Helpdock image proxy** they load at once. Either way the server fetches them, re-encodes them, and the sender never sees an agent's address or browser.
-7. **SPF or DKIM failures** reported by your receiving server open the ticket in Spam when the mailbox's switch is on. Whatever the switch says, such a message never adds its `Cc` addresses to a ticket and never marks its sender's address as verified. If it is a reply from a participant it still joins the thread, flagged "authentication failed", so genuine forwarded mail is not lost.
+7. **SPF or DKIM failures** reported by your receiving server open the ticket in Spam when the mailbox's switch is on. See Sender checks below.
 8. **Auto-replies.** A message that opened a ticket may get the brand's acknowledgment or out-of-hours reply ([Outbound email](outbound-email.md#auto-replies-m2-06)). Mail from a machine (even an allow-listed one) and mail filed as spam never does.
 
-Everyone on the `Cc` line of a message that passed authentication, except the brand's own mailboxes, becomes a CC participant of the ticket.
+Everyone on the `To` and `Cc` lines, except the brand's own mailboxes and the sender, becomes a CC participant of the ticket, unless the message is reported as not matching its From address (see below).
+
+### Sender checks
+
+Helpdock acts on what the receiving mail server reported. Mail reported as failing SPF or DKIM, as failing DMARC, or as passing only for some other domain than its From address adds no `To` or `Cc` participants and does not verify its sender's address. It still joins the ticket it replies to, with the "authentication failed" warning when SPF or DKIM failed, so forwarded mail is not lost, and its sender is found by address: an existing contact keeps their ticket, and a new address gets one unverified contact that the first sound message verifies.
+
+Mail with no report is treated as before. The report is the `Authentication-Results` header (a DKIM or SPF pass counts only for the From domain or a subdomain or parent of it). Which inbound methods carry it:
+
+| Method | Carries it |
+|---|---|
+| IMAP | Only if your mail server adds one. Gmail, Microsoft 365 and most hosted mailboxes do; a self-hosted server without an SPF/DKIM/DMARC filter does not. |
+| Raw MIME from a provider (Postmark raw, SendGrid raw, Mailgun `body-mime`, generic `{ "raw": ... }`) | The headers of the message as your server received it, so the same as IMAP. |
+| Provider webhooks without the raw message | Only the headers the provider copies in. Helpdock does not read the providers' own result fields. |
+| Generic JSON with `headers` | Whatever the caller sends. |
+
+Where there is no report, this change gives no protection. A relay you do not control can also write its own `Authentication-Results`, so treat the check as best effort.
 
 ## A reply aimed at one email
 

@@ -102,6 +102,120 @@ export const authenticationFailed = (email: InboundEmail): boolean => {
 };
 
 // --------------------------------------------------------------------------
+// Does the From address match what the receiving server checked?
+// --------------------------------------------------------------------------
+
+/**
+ * What the receiving server's report says about the `From` address:
+ *
+ * - `misaligned`: there is evidence against it (a failure, `dmarc=fail`, or
+ *   passes that belong to some other domain). Such mail adds no Cc
+ *   participants and verifies no sender (DOMAIN-RULES §4.3, §4.4).
+ * - `aligned`: a pass that belongs to the From domain.
+ * - `unknown`: no usable report, so nothing is held against the message.
+ *
+ * Helpdock only reads what the receiving server wrote. A relay the operator
+ * does not control can write its own `Authentication-Results`, so this is a
+ * best-effort check, not proof of who sent the message.
+ */
+export type SenderCheck = 'aligned' | 'misaligned' | 'unknown';
+
+interface AuthResult {
+  readonly method: 'spf' | 'dkim' | 'dmarc';
+  readonly result: string;
+  /** `smtp.mailfrom` (SPF) or `header.d` (DKIM), lower-cased, without a local part. */
+  readonly domain: string | null;
+}
+
+const domainOfAddress = (value: string): string => {
+  const at = value.lastIndexOf('@');
+  return (at === -1 ? value : value.slice(at + 1)).toLowerCase();
+};
+
+/**
+ * Same organisational domain, approximated as "equal, or one is a subdomain
+ * of the other". There is no public-suffix list behind it, so it is a little
+ * generous for a From on a shared suffix; it adds no dependency.
+ */
+export const domainsAlign = (a: string, b: string): boolean => {
+  const left = a.toLowerCase();
+  const right = b.toLowerCase();
+  return (
+    left !== '' &&
+    right !== '' &&
+    (left === right || left.endsWith(`.${right}`) || right.endsWith(`.${left}`))
+  );
+};
+
+/** The results of every `Authentication-Results` header. A malformed clause is skipped. */
+const authResultsOf = (email: InboundEmail): AuthResult[] => {
+  const found: AuthResult[] = [];
+  for (const header of email.headers.get('authentication-results') ?? []) {
+    for (const clause of header.split(';')) {
+      const head = /^\s*(spf|dkim|dmarc)\s*=\s*([a-z]+)/i.exec(clause);
+      if (head === null) {
+        continue;
+      }
+      const property = (name: string): string | null => {
+        const match = new RegExp(`\\b${name}\\s*=\\s*"?([^\\s;"]+)`, 'i').exec(clause);
+        return match?.[1] === undefined ? null : domainOfAddress(match[1]);
+      };
+      const method = (head[1] ?? '').toLowerCase() as AuthResult['method'];
+      found.push({
+        method,
+        result: (head[2] ?? '').toLowerCase(),
+        domain: method === 'spf' ? property('smtp\\.mailfrom') : property('header\\.d'),
+      });
+    }
+  }
+  return found;
+};
+
+/**
+ * The truth table, first row that applies wins:
+ *
+ * | Report | Result |
+ * |---|---|
+ * | a `dkim=pass` whose `header.d` aligns with the From domain | aligned (this also rescues forwarded mail whose SPF soft-fails) |
+ * | `dmarc=fail` | misaligned |
+ * | `dmarc=pass` | aligned |
+ * | an SPF or DKIM failure ({@link authenticationFailed}) | misaligned |
+ * | an `spf=pass` whose `smtp.mailfrom` aligns with the From domain | aligned |
+ * | `spf=pass` or `dkim=pass` naming a domain, none of them aligned | misaligned |
+ * | anything else: no header, none, neutral, temperror, malformed | unknown |
+ *
+ * With several `Authentication-Results` headers all are read, and any
+ * evidence against the message wins unless an aligned DKIM pass exists.
+ */
+export const senderCheck = (email: InboundEmail): SenderCheck => {
+  const fromDomain = domainOfAddress(email.from?.address ?? '');
+  const results = authResultsOf(email);
+  const passes = results.filter((entry) => entry.result === 'pass');
+  const aligns = (entry: AuthResult): boolean =>
+    entry.domain !== null && domainsAlign(entry.domain, fromDomain);
+
+  if (passes.some((entry) => entry.method === 'dkim' && aligns(entry))) {
+    return 'aligned';
+  }
+  if (results.some((entry) => entry.method === 'dmarc' && entry.result === 'fail')) {
+    return 'misaligned';
+  }
+  if (passes.some((entry) => entry.method === 'dmarc')) {
+    return 'aligned';
+  }
+  if (authenticationFailed(email)) {
+    return 'misaligned';
+  }
+  if (passes.some((entry) => entry.method === 'spf' && aligns(entry))) {
+    return 'aligned';
+  }
+  // A pass that names no domain neither matches nor contradicts the From.
+  return passes.some((entry) => entry.method !== 'dmarc' && entry.domain !== null)
+    ? 'misaligned'
+    : 'unknown';
+};
+
+// --------------------------------------------------------------------------
 // Thread hints (DOMAIN-RULES §4.3, part 1)
 // --------------------------------------------------------------------------
 

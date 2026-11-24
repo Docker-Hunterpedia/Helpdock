@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   authenticationFailed,
   automatedReason,
+  domainsAlign,
+  type SenderCheck,
+  senderCheck,
   threadHintsOf,
   ticketTokensIn,
 } from './classify.js';
@@ -79,6 +82,114 @@ describe('authenticationFailed (M2-07)', () => {
       authenticationFailed(email({ 'authentication-results': ['mx; spf=pass; dkim=pass'] })),
     ).toBe(false);
     expect(authenticationFailed(email({ 'received-spf': ['neutral'] }))).toBe(false);
+  });
+});
+
+describe('senderCheck (DOMAIN-RULES §4.3, §4.4)', () => {
+  const ar = (...values: string[]): Record<string, string[]> => ({
+    'authentication-results': values,
+  });
+  type Row = readonly [
+    string,
+    readonly [Record<string, string[]>, Partial<InboundEmail>?, string?],
+    SenderCheck,
+  ];
+
+  it.each([
+    ['dmarc=pass', [ar('mx.example; dmarc=pass header.from=example.com')], 'aligned'],
+    ['an aligned DKIM pass', [ar('mx.example; dkim=pass header.d=example.com')], 'aligned'],
+    [
+      'an aligned DKIM pass on a subdomain of the From domain',
+      [ar('mx.example; dkim=pass header.d=mail.example.com')],
+      'aligned',
+    ],
+    [
+      'an aligned DKIM pass on the parent of a subdomain From',
+      [ar('mx.example; dkim=pass header.d=example.com'), {}, 'mona@news.example.com'],
+      'aligned',
+    ],
+    [
+      'an aligned SPF pass, with the mailfrom as an address',
+      [ar('mx.example; spf=pass smtp.mailfrom=bounce@example.com')],
+      'aligned',
+    ],
+    [
+      'SPF softfail with an aligned DKIM pass (forwarded mail)',
+      [ar('mx.example; spf=softfail smtp.mailfrom=example.com; dkim=pass header.d=example.com')],
+      'aligned',
+    ],
+    [
+      'dmarc=fail even with SPF and DKIM passing for another domain',
+      [
+        ar(
+          'mx.example; spf=pass smtp.mailfrom=evil.test; dkim=pass header.d=evil.test; dmarc=fail',
+        ),
+      ],
+      'misaligned',
+    ],
+    [
+      'passes that all belong to another domain, with no DMARC verdict',
+      [ar('mx.example; spf=pass smtp.mailfrom=evil.test; dkim=pass header.d=evil.test')],
+      'misaligned',
+    ],
+    ['an SPF fail', [ar('mx.example; spf=fail smtp.mailfrom=example.com')], 'misaligned'],
+    ['an SPF softfail alone', [ar('mx.example; spf=softfail')], 'misaligned'],
+    ['a DKIM fail', [ar('mx.example; dkim=fail header.d=example.com')], 'misaligned'],
+    [
+      'a Received-SPF fail',
+      [{ 'received-spf': ['Fail (domain does not designate)'] }],
+      'misaligned',
+    ],
+    ['no header at all', [{}], 'unknown'],
+    [
+      'none, neutral and temperror',
+      [ar('mx.example; spf=none; dkim=neutral; dmarc=temperror')],
+      'unknown',
+    ],
+    ['a pass that names no domain', [ar('mx.example; spf=pass')], 'unknown'],
+    ['a malformed header', [ar('this is not; a report = at all;;')], 'unknown'],
+    [
+      'two headers, one aligned DKIM pass beating a failure in the other',
+      [ar('relay.example; spf=fail', 'mx.example; dkim=pass header.d=example.com')],
+      'aligned',
+    ],
+    [
+      'two headers, a failure in one and nothing aligned in the other',
+      [ar('relay.example; spf=pass smtp.mailfrom=example.com', 'mx.example; dkim=fail')],
+      'misaligned',
+    ],
+    [
+      'two headers, dmarc=fail in one beating dmarc=pass in the other',
+      [ar('a.example; dmarc=pass', 'b.example; dmarc=fail')],
+      'misaligned',
+    ],
+  ] satisfies Row[])('reads %s as %s', (_label, [headers, overrides, from], expected) => {
+    const message = email(
+      { ...headers },
+      {
+        ...(overrides ?? {}),
+        ...(from === undefined ? {} : { from: { address: from, name: null } }),
+      },
+    );
+    expect(senderCheck(message)).toBe(expected);
+  });
+
+  it('has no opinion on a message with no sender', () => {
+    expect(senderCheck(email({}, { from: null }))).toBe('unknown');
+  });
+});
+
+describe('domainsAlign', () => {
+  it.each([
+    ['example.com', 'example.com', true],
+    ['mail.example.com', 'example.com', true],
+    ['example.com', 'mail.example.com', true],
+    ['Example.COM', 'example.com', true],
+    ['badexample.com', 'example.com', false],
+    ['example.com.evil.test', 'example.com', false],
+    ['', 'example.com', false],
+  ])('%s and %s: %s', (a, b, expected) => {
+    expect(domainsAlign(a, b)).toBe(expected);
   });
 });
 

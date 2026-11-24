@@ -11,6 +11,7 @@ import {
   type Db,
   type DbHandle,
   departments,
+  emailDeliveries,
   mailboxes,
   outbox,
   ticketMessages,
@@ -1092,20 +1093,28 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       expect(status?.isSpam).toBe(true);
     });
 
-    describe('mail that failed SPF or DKIM', () => {
+    describe('mail the receiving server reported as not matching its From', () => {
       const FAILED = {
         'Authentication-Results': 'mx.helpdock.test; spf=fail smtp.mailfrom=evil.example',
       };
-      const PASSED = { 'Authentication-Results': 'mx.helpdock.test; spf=pass' };
+      const FORGED = {
+        'Authentication-Results':
+          'mx.helpdock.test; spf=pass smtp.mailfrom=evil.example; dkim=pass header.d=evil.example; dmarc=fail',
+      };
+      const PASSED = { 'Authentication-Results': 'mx.helpdock.test; dmarc=pass' };
+      const FORWARDED = {
+        'Authentication-Results':
+          'mx.helpdock.test; spf=softfail smtp.mailfrom=relay.example; dkim=pass header.d=example.com',
+      };
+      const HOST = [{ address: 'hello@helpdock.test' }];
 
-      const identityOf = (address: string) =>
-        withSystem(runtime.db, seeded.brandId, async (tx) => {
-          const [row] = await tx
+      const identitiesOf = (address: string) =>
+        withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
             .select()
             .from(contactIdentities)
-            .where(and(eq(contactIdentities.kind, 'email'), eq(contactIdentities.value, address)));
-          return row;
-        });
+            .where(and(eq(contactIdentities.kind, 'email'), eq(contactIdentities.value, address))),
+        );
 
       const participantsOf = (ticketId: string) =>
         withSystem(runtime.db, seeded.brandId, async (tx) =>
@@ -1119,38 +1128,73 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
             .sort(),
         );
 
-      it('threads a participant’s reply flagged, adds no Cc and leaves a verified identity alone', async () => {
+      const contactOfTicket = async (messageId: string) => {
+        const row = await messageOf(messageId);
+        return (await ticketOf(row?.ticketId ?? ''))?.contactId;
+      };
+
+      /** A staff reply on the ticket, and the delivery it queued. */
+      const staffReply = async (ticketId: string) => {
+        // Replies are only queued once the install can send mail; nothing is delivered here.
+        expect(
+          (
+            await call('PUT', `${brandPath()}/email/outgoing/smtp`, ada, {
+              host: 'smtp.example.com',
+              port: 587,
+              tls: 'starttls',
+              user: '',
+              password: 'relay-secret',
+            })
+          ).status,
+        ).toBe(200);
+        expect(
+          (
+            await call('PUT', `${brandPath()}/email/outgoing/senders`, ada, {
+              defaultFrom: { name: 'Helpdock Support', address: 'hello@helpdock.test' },
+              departments: [],
+            })
+          ).status,
+        ).toBe(200);
+        const sent = await call('POST', `${brandPath()}/tickets/${ticketId}/messages`, ada, {
+          kind: 'public',
+          bodyHtml: '<p>We are on it.</p>',
+        });
+        expect(sent.status).toBe(201);
+        return withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select({ to: emailDeliveries.toAddress, cc: emailDeliveries.ccAddresses })
+            .from(emailDeliveries)
+            .where(eq(emailDeliveries.ticketId, ticketId)),
+        );
+      };
+
+      it('threads a forged reply flagged, adds no recipient, and no reply goes to the forged address', async () => {
         const victim = unique('victim');
-        const goodCc = unique('goodcc');
         const forgedCc = unique('forgedcc');
         await parse({
           from: { address: victim },
-          to: [{ address: 'hello@helpdock.test' }],
-          cc: [{ address: goodCc }],
-          subject: 'Cc on a passing message',
+          to: HOST,
+          subject: 'Forged Cc',
           text: 'Hello',
           messageId: '<cc-pass@acme.de>',
           headers: PASSED,
         });
-        const first = await messageOf('cc-pass@acme.de');
-        const ticketId = first?.ticketId ?? '';
-        expect(await participantsOf(ticketId)).toEqual([goodCc]);
-        const verifiedBefore = await identityOf(victim);
+        const ticketId = (await messageOf('cc-pass@acme.de'))?.ticketId ?? '';
+        const verifiedBefore = (await identitiesOf(victim))[0];
         expect(verifiedBefore?.verified).toBe(true);
 
         await parse({
           from: { address: victim },
-          to: [{ address: 'hello@helpdock.test' }],
+          to: HOST,
           cc: [{ address: forgedCc }],
-          subject: 'Re: Cc on a passing message',
+          subject: 'Re: Forged Cc',
           text: 'Please copy me in',
-          messageId: '<cc-fail@evil.example>',
+          messageId: '<cc-forged@evil.example>',
           inReplyTo: '<cc-pass@acme.de>',
-          headers: FAILED,
+          headers: FORGED,
         });
 
-        const failed = await messageOf('cc-fail@evil.example');
-        expect(failed?.ticketId).toBe(ticketId);
+        expect((await messageOf('cc-forged@evil.example'))?.ticketId).toBe(ticketId);
         const page = await call<TicketMessagePage>(
           'GET',
           `${brandPath()}/tickets/${ticketId}/messages`,
@@ -1159,50 +1203,113 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         expect(
           page.body.messages.find((message) => message.bodyText === 'Please copy me in')?.email
             ?.authFailed,
-        ).toBe(true);
-        expect(await participantsOf(ticketId)).toEqual([goodCc]);
-        expect(await identityOf(forgedCc)).toBeUndefined();
-        expect(await identityOf(victim)).toMatchObject({
-          id: verifiedBefore?.id,
-          contactId: verifiedBefore?.contactId,
-          verified: true,
-        });
+        ).toBe(false);
+        expect(await participantsOf(ticketId)).toEqual([]);
+        expect(await identitiesOf(forgedCc)).toEqual([]);
+        expect(await identitiesOf(victim)).toEqual([verifiedBefore]);
 
-        // The same message with passing authentication copies its Cc in, as before.
-        await parse({
-          from: { address: victim },
-          to: [{ address: 'hello@helpdock.test' }],
-          cc: [{ address: forgedCc }],
-          subject: 'Re: Cc on a passing message',
-          text: 'Please copy my colleague in',
-          messageId: '<cc-pass-2@acme.de>',
-          inReplyTo: '<cc-pass@acme.de>',
-          headers: PASSED,
-        });
-        expect(await participantsOf(ticketId)).toEqual([forgedCc, goodCc].sort());
+        const deliveries = await staffReply(ticketId);
+        expect(deliveries.length).toBeGreaterThan(0);
+        for (const delivery of deliveries) {
+          expect(delivery.to).toBe(victim);
+          expect(delivery.cc).not.toContain(forgedCc);
+        }
       });
 
-      it('does not verify a sender whose first message failed, and verifies it once one passes', async () => {
-        const sender = unique('newcomer');
+      it('copies the Cc in of mail that carries no report, and of forwarded mail with an aligned DKIM pass', async () => {
+        const sender = unique('plain');
+        const plainCc = unique('plaincc');
         await parse({
           from: { address: sender },
-          to: [{ address: 'hello@helpdock.test' }],
-          subject: 'Unauthenticated hello',
+          to: HOST,
+          cc: [{ address: plainCc }],
+          subject: 'No report',
           text: 'Hello',
-          messageId: '<unauth-1@evil.example>',
-          headers: FAILED,
+          messageId: '<plain-1@acme.de>',
         });
-        expect(await identityOf(sender)).toMatchObject({ verified: false, verifiedAt: null });
+        const plain = (await messageOf('plain-1@acme.de'))?.ticketId ?? '';
+        expect(await participantsOf(plain)).toEqual([plainCc]);
+        expect((await identitiesOf(sender))[0]?.verified).toBe(true);
 
+        const customer = `forwarder-${String(Date.now())}@example.com`;
+        const forwardedCc = unique('forwardedcc');
         await parse({
-          from: { address: sender },
-          to: [{ address: 'hello@helpdock.test' }],
-          subject: 'Authenticated hello',
-          text: 'Hello again',
-          messageId: '<unauth-2@acme.de>',
+          from: { address: customer },
+          to: HOST,
+          subject: 'Known customer',
+          text: 'Hello',
+          messageId: '<known-1@example.com>',
           headers: PASSED,
         });
-        expect((await identityOf(sender))?.verified).toBe(true);
+        const known = await contactOfTicket('known-1@example.com');
+        await parse({
+          from: { address: customer },
+          to: HOST,
+          cc: [{ address: forwardedCc }],
+          subject: 'Forwarded',
+          text: 'Forwarded by a relay',
+          messageId: '<known-2@example.com>',
+          headers: FORWARDED,
+        });
+        const forwarded = await messageOf('known-2@example.com');
+        expect(await contactOfTicket('known-2@example.com')).toBe(known);
+        expect(await participantsOf(forwarded?.ticketId ?? '')).toEqual([forwardedCc]);
+      });
+
+      it('opens a failed message from a known customer on their own contact, and a reply goes to them', async () => {
+        const customer = unique('known');
+        await parse({
+          from: { address: customer },
+          to: HOST,
+          subject: 'First',
+          text: 'Hello',
+          messageId: '<own-1@example.com>',
+          headers: PASSED,
+        });
+        const contactId = await contactOfTicket('own-1@example.com');
+        const before = (await identitiesOf(customer))[0];
+
+        await parse({
+          from: { address: customer },
+          to: HOST,
+          subject: 'Second, soft-failing',
+          text: 'Hello again',
+          messageId: '<own-2@example.com>',
+          headers: FAILED,
+        });
+        const second = await messageOf('own-2@example.com');
+        expect(await contactOfTicket('own-2@example.com')).toBe(contactId);
+        expect(await identitiesOf(customer)).toEqual([before]);
+
+        const deliveries = await staffReply(second?.ticketId ?? '');
+        expect(deliveries.map((delivery) => delivery.to)).toEqual([customer]);
+      });
+
+      it('keeps one unverified contact for a newcomer whose mail fails, and verifies it in place when sound mail comes', async () => {
+        const sender = unique('newcomer');
+        const send = (id: string, headers?: Record<string, string>) =>
+          parse({
+            from: { address: sender },
+            to: HOST,
+            subject: id,
+            text: id,
+            messageId: `<${id}@acme.de>`,
+            ...(headers === undefined ? {} : { headers }),
+          });
+
+        await send('unauth-1', FAILED);
+        await send('unauth-2', FAILED);
+        const [identity] = await identitiesOf(sender);
+        expect(identity).toMatchObject({ verified: false, verifiedAt: null });
+        expect(await contactOfTicket('unauth-1@acme.de')).toBe(identity?.contactId);
+        expect(await contactOfTicket('unauth-2@acme.de')).toBe(identity?.contactId);
+        expect(await identitiesOf(sender)).toHaveLength(1);
+
+        await send('unauth-3', PASSED);
+        const after = await identitiesOf(sender);
+        expect(after).toHaveLength(1);
+        expect(after[0]).toMatchObject({ verified: true, contactId: identity?.contactId });
+        expect(await contactOfTicket('unauth-3@acme.de')).toBe(identity?.contactId);
       });
     });
 

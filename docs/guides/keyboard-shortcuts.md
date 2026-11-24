@@ -105,8 +105,11 @@ does not have (a row is a link, so `Enter` on it already opens the ticket).
   thread has the whole width, and brings it back; on a screen narrower than
   1024 px, where the list and the ticket take the screen in turn, it does
   nothing. `j` and `k` there open the next and the previous ticket, as they do
-  beside the thread, and the browser's back returns to the list. While the list
-  is away, **Show the ticket list** above the thread brings it back too.
+  beside the thread, and the browser's back returns to the list. The button at
+  the start of the ticket header does the same by click (**Hide the ticket list**
+  and **Show the ticket list**, with `[` in its tooltip); with no ticket open
+  there is no button and `[` does nothing, and a list you hid comes back when the
+  ticket closes.
 - **Ticket** answers while a ticket is open. `a`, `s`, `p` and `t` open the
   assignee picker, the status and priority menus and the tag picker in the
   details panel, opening the panel first on a window narrower than 1440 px.

@@ -271,6 +271,7 @@ L 6 d.
 | M14-27 | More custom field types: long text, link, email, person | 2.5 d | M14-16 (their filters) |
 | M14-28 | More webhook events for tickets, messages, contacts and accounts | 3 d | M14-03 (bulk changes emit them per ticket) |
 | M14-29 | Reports: volume by tag, and the current backlog by status with its unassigned share | 2 d | — |
+| M14-30 | A button to hide and show the ticket list: a 32 px button at the start of the ticket header on the split layout (`Admin/Ticket-ListToggle-ReplyTo`), in place of the full-width "Show the ticket list" row of M14-19. Added after the milestone shipped, on an owner request of 2026-11; not part of the 103.5-day total | — | M14-19 |
 
 Total: about **103.5 working days** for one person (about 21 weeks): 75 days
 for M14-01 to M14-18 and M14-24, 16 for the UX additions M14-19 to M14-23, and

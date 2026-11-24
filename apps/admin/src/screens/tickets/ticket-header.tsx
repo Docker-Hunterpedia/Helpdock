@@ -2,11 +2,12 @@ import type { CustomFieldDef, Ticket, TicketViewingActivity } from '@helpdock/sc
 import { importSourceLink } from '@helpdock/schemas';
 import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material';
 import { ExternalLink, Eye, PanelRightOpen, PenLine } from 'lucide-react';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, type Ref, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { ChannelLabel, PriorityBadge, SlaTimer, StatusBadge } from './badges.tsx';
 import { ticketReference } from './format.js';
+import { ListToggleButton } from './list-toggle-button.tsx';
 import { PinnedFieldChip, pinnedValueOf } from './pinned-field-chip.tsx';
 import { type TicketAction, TicketActionsMenu } from './ticket-actions-menu.tsx';
 
@@ -31,6 +32,13 @@ export interface HeaderViewer {
   readonly activity: TicketViewingActivity;
 }
 
+/** M14-30: the list toggle, present on the split layout only. */
+export interface ListToggle {
+  readonly hidden: boolean;
+  readonly buttonRef: Ref<HTMLButtonElement>;
+  onToggle(): void;
+}
+
 export function TicketHeader({
   ticket,
   departmentName,
@@ -43,6 +51,7 @@ export function TicketHeader({
   onShowDetails,
   snooze,
   pinnedField,
+  listToggle,
 }: {
   readonly ticket: Ticket;
   readonly departmentName: string | undefined;
@@ -61,6 +70,8 @@ export function TicketHeader({
   readonly snooze?: ReactNode;
   /** M14-16: the brand's pinned field, shown beside the priority when the ticket has a value. */
   readonly pinnedField?: CustomFieldDef | undefined;
+  /** M14-30: absent below 1024 px, where the list is a screen of its own. */
+  readonly listToggle?: ListToggle | undefined;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -86,6 +97,13 @@ export function TicketHeader({
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+        {listToggle === undefined ? null : (
+          <ListToggleButton
+            hidden={listToggle.hidden}
+            buttonRef={listToggle.buttonRef}
+            onToggle={listToggle.onToggle}
+          />
+        )}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="mono" component="p" sx={{ color: 'text.secondary', fontSize: 12 }}>
             <bdi>{ticketReference(ticket)}</bdi>

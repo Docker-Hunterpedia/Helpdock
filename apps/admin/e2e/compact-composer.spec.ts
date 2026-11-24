@@ -137,15 +137,31 @@ test.describe('the compact composer at 1280 × 720', () => {
     await expect(details).toBeVisible();
   });
 
-  test('hides the list column with [ and brings it back', async ({ page, appLocale: locale }) => {
+  test('hides the list column with [ or the header button and brings it back', async ({
+    page,
+    appLocale: locale,
+  }) => {
     const { t } = await open(page, locale);
     const list = page.getByRole('region', { name: t('tickets:list.label') });
+    const hide = page.getByRole('button', { name: t('tickets:list.close') });
+    const show = page.getByRole('button', { name: t('tickets:list.open') });
 
     await expect(list).toBeVisible();
+    await expect(hide).not.toHaveAttribute('aria-pressed');
+    await expect(hide).toHaveAttribute('aria-keyshortcuts', '[');
+
+    // The button is a press of the same switch, and keeps focus where it is.
+    await hide.click();
+    await expect(list).toBeHidden();
+    await expect(show).toBeFocused();
+    expect(await violations(page)).toEqual([]);
+    await show.click();
+    await expect(list).toBeVisible();
+    await expect(hide).toBeFocused();
+
     await page.keyboard.press('[');
     await expect(list).toBeHidden();
     // Focus follows the list away, to the button that brings it back...
-    const show = page.getByRole('button', { name: t('tickets:list.open') });
     await expect(show).toBeFocused();
     await page.keyboard.press('[');
     await expect(list).toBeVisible();

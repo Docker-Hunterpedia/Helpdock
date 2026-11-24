@@ -69,7 +69,7 @@ import { ChannelIdentityCard } from './telegram/channel-identity-card.tsx';
 import { useTicketTelegram } from './telegram/use-ticket-telegram.tsx';
 import { Thread, type ThreadNames } from './thread.tsx';
 import type { TicketAction } from './ticket-actions-menu.tsx';
-import { TicketHeader } from './ticket-header.tsx';
+import { type ListToggle, TicketHeader } from './ticket-header.tsx';
 import { closeStatusOf, type DetailsRequest, useTicketShortcuts } from './ticket-shortcuts.js';
 import { TicketViewSkeleton } from './ticket-skeletons.tsx';
 import { TimeCard } from './time-card.tsx';
@@ -113,6 +113,7 @@ export function TicketView({
   now,
   detailsInDrawer,
   detailsButtonInHeader = true,
+  listToggle,
   detailsOpen,
   onDetailsOpenChange,
   onGoToList,
@@ -126,6 +127,8 @@ export function TicketView({
   readonly detailsInDrawer: boolean;
   /** M14-22: false when the page draws the Details button itself (the narrow bar). */
   readonly detailsButtonInHeader?: boolean;
+  /** M14-30: the header's hide/show-list button; absent unless the list sits beside the ticket. */
+  readonly listToggle?: ListToggle | undefined;
   readonly detailsOpen: boolean;
   onDetailsOpenChange(open: boolean): void;
   onGoToList(): void;
@@ -1054,6 +1057,7 @@ export function TicketView({
           viewers={headerViewers}
           now={now}
           showDetailsButton={detailsInDrawer && detailsButtonInHeader}
+          listToggle={listToggle}
           // One menu (the artboard's panel 2): Merge, Split, Log time, then
           // Mark as spam behind its divider.
           actions={[...mergeActions, ...logTimeActions, ...spam.items]}

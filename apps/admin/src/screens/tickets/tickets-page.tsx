@@ -1,4 +1,4 @@
-import { Box, Button, useMediaQuery } from '@mui/material';
+import { Box, useMediaQuery } from '@mui/material';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TicketIcon } from 'lucide-react';
 import {
@@ -143,7 +143,32 @@ export function TicketsPage(): ReactNode {
   const [typed, setTyped] = useState(search);
   // M14-19: `[` puts the list column away on a wide screen, leaving the thread the room.
   const [listHidden, setListHidden] = useState(false);
-  const showListButton = useRef<HTMLButtonElement | null>(null);
+  const listToggleButton = useRef<HTMLButtonElement | null>(null);
+  // The toggle lives in the ticket header, which remounts for every ticket, so
+  // focus on it is carried over to the next mount (j and k, or `[` pressed
+  // while the ticket is still loading).
+  const toggleWantsFocus = useRef(false);
+  const listToggleRef = useCallback((node: HTMLButtonElement | null) => {
+    listToggleButton.current = node;
+    if (node === null) {
+      return;
+    }
+    if (toggleWantsFocus.current) {
+      node.focus();
+    }
+    node.addEventListener('focus', () => {
+      toggleWantsFocus.current = true;
+    });
+    node.addEventListener('blur', () => {
+      // Removing the focused node blurs it too; only a node that is still
+      // there was left on purpose.
+      setTimeout(() => {
+        if (node.isConnected) {
+          toggleWantsFocus.current = false;
+        }
+      }, 0);
+    });
+  }, []);
   const focusAfterToggle = useRef<'button' | 'row' | null>(null);
   // M14-22: the list's scroll position, and what to focus when it comes back.
   const listScroll = useRef(0);
@@ -259,16 +284,24 @@ export function TicketsPage(): ReactNode {
     }
   }, [layout, ticketId]);
 
+  // A list hidden for one ticket is not hidden for the next one opened later.
+  useEffect(() => {
+    if (ticketId === null) {
+      setListHidden(false);
+    }
+  }, [ticketId]);
+
   const query = useMemo(() => queryOf(filters), [filters]);
 
-  // `[` moves the list away from under the caret: focus goes to the button that
-  // brings it back, and returns to the open ticket's row when it does.
+  // `[` moves the list away from under the caret: focus goes to the header's
+  // toggle, and returns to the open ticket's row when the list comes back.
+  // A press of the button itself keeps focus where it is.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `listHidden` is the trigger; `ticketId` is read at that moment.
   useEffect(() => {
     const target = focusAfterToggle.current;
     focusAfterToggle.current = null;
     if (target === 'button') {
-      showListButton.current?.focus();
+      listToggleButton.current?.focus();
     } else if (target === 'row') {
       requestAnimationFrame(() => {
         const row =
@@ -503,14 +536,16 @@ export function TicketsPage(): ReactNode {
             }
           }
         : null,
-    'list.toggleColumn': wideList
-      ? () => {
-          setListHidden((hidden) => {
-            focusAfterToggle.current = hidden ? 'row' : 'button';
-            return !hidden;
-          });
-        }
-      : null,
+    'list.toggleColumn':
+      layout === 'split' && ticketId !== null
+        ? () => {
+            setListHidden((hidden) => {
+              focusAfterToggle.current = hidden ? 'row' : 'button';
+              toggleWantsFocus.current = !hidden;
+              return !hidden;
+            });
+          }
+        : null,
     // Attached only while something is ticked, so Esc is the page's otherwise.
     'list.clearSelection':
       canWrite && layout !== 'ticket' && selection.ids.length > 0
@@ -684,20 +719,6 @@ export function TicketsPage(): ReactNode {
                 setDetailsOpen(true);
               }}
             />
-          ) : listHidden ? (
-            <Box sx={{ padding: 3, borderBlockEnd: `1px solid ${tokens['border.default']}` }}>
-              <Button
-                ref={showListButton}
-                variant="outlined"
-                size="small"
-                onClick={() => {
-                  focusAfterToggle.current = 'row';
-                  setListHidden(false);
-                }}
-              >
-                {t('tickets:list.open')}
-              </Button>
-            </Box>
           ) : null}
 
           {ticketId === null ? (
@@ -720,6 +741,17 @@ export function TicketsPage(): ReactNode {
               now={now}
               detailsInDrawer={!wideDetails}
               detailsButtonInHeader={layout !== 'ticket'}
+              listToggle={
+                layout === 'split'
+                  ? {
+                      hidden: listHidden,
+                      buttonRef: listToggleRef,
+                      onToggle: () => {
+                        setListHidden((hidden) => !hidden);
+                      },
+                    }
+                  : undefined
+              }
               detailsOpen={detailsOpen}
               onDetailsOpenChange={setDetailsOpen}
               onGoToList={() => {

@@ -243,3 +243,56 @@ describe('the pinned field (M14-16)', () => {
     expect(screen.queryByText('Severity:')).not.toBeInTheDocument();
   });
 });
+
+describe('the list toggle (M14-30)', () => {
+  const renderToggle = (hidden: boolean, onToggle = vi.fn()) => {
+    const rendered = renderApp(
+      <TicketHeader
+        ticket={testTicket()}
+        departmentName="Billing"
+        viewers={[]}
+        actions={[]}
+        now={NOW}
+        showDetailsButton={false}
+        onShowDetails={() => {}}
+        listToggle={{ hidden, buttonRef: { current: null }, onToggle }}
+      />,
+    );
+    return { ...rendered, onToggle };
+  };
+
+  it('is named for what it does and pressed while the list is hidden', () => {
+    const shown = renderToggle(false);
+    expect(screen.getByRole('button', { name: 'Hide the ticket list' })).not.toHaveAttribute(
+      'aria-pressed',
+    );
+    shown.unmount();
+
+    renderToggle(true);
+    expect(screen.getByRole('button', { name: 'Show the ticket list' })).not.toHaveAttribute(
+      'aria-pressed',
+    );
+  });
+
+  it('asks the page to toggle when pressed', async () => {
+    const { user, onToggle } = renderToggle(false);
+
+    await user.click(screen.getByRole('button', { name: 'Hide the ticket list' }));
+
+    expect(onToggle).toHaveBeenCalledOnce();
+  });
+
+  it('is absent without a toggle, as below 1024 px', () => {
+    renderHeader([]);
+
+    expect(screen.queryByRole('button', { name: /the ticket list/ })).not.toBeInTheDocument();
+  });
+
+  it('is named in Arabic', () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'ar');
+    renderToggle(false);
+
+    const button = screen.getByRole('button', { name: 'إخفاء قائمة التذاكر' });
+    expect(button.querySelector('svg')).toHaveClass('mirror-in-rtl');
+  });
+});

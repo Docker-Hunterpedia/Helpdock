@@ -21,6 +21,7 @@ describe('isVerifiedIdentity (DOMAIN-RULES §4.4)', () => {
     ['phone', 'widget.form', false],
     ['email', 'web.form', false],
     ['email', 'email.cc', false],
+    ['email', 'email.unauthenticated', false],
     ['email', 'agent', false],
     ['phone', 'import', false],
   ] as const)('a %s from %s is verified: %s', (kind, source, verified) => {

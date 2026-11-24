@@ -25,6 +25,8 @@ import type { ContactIdentityKind } from './contact.js';
 export const identitySourceSchema = z.enum([
   /** The `From:` of an inbound email (M2). */
   'email.inbound',
+  /** The `From:` of an inbound email whose SPF or DKIM check failed: a claim, not proof. */
+  'email.unauthenticated',
   /** A magic link sent to the address was clicked (M4). */
   'email.magic_link',
   /** An address on the `Cc:` line of an inbound email, or added as a CC by an agent. */
@@ -71,6 +73,8 @@ const ALL_KINDS: readonly ContactIdentityKind[] = [
 
 export const IDENTITY_SOURCE_RULES: Readonly<Record<IdentitySource, SourceRule>> = Object.freeze({
   'email.inbound': { kinds: ['email'], verified: true },
+  // A forged From fails SPF or DKIM; it proves nothing about who sent it.
+  'email.unauthenticated': { kinds: ['email'], verified: false },
   'email.magic_link': { kinds: ['email'], verified: true },
   // Somebody else's mail client wrote that address; nothing proves its owner
   // took part.

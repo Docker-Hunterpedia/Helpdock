@@ -41,7 +41,7 @@ import { referencedTickets } from './referenced-tickets.js';
  * ticket or a new ticket, and the rule that decides which is one function.
  *
  * ```
- * find the contact by identity          (§4.4: an inbound From is verified)
+ * find the contact by identity          (§4.4: an inbound From is verified, unless it failed SPF or DKIM)
  * find a ticket by thread hint           In-Reply-To / References, or [PREFIX-N]
  *   └ follow a merge to its primary      (§2.4: messages are not moved)
  * sender is a participant of it?         (§2.5: contact, CCs, staff)
@@ -164,7 +164,12 @@ export class ConversationRouter {
     const { contact } = await findOrCreateContactByIdentity(
       tx,
       brandId,
-      { kind: 'email', value: message.from.value, source: 'email.inbound' },
+      {
+        kind: 'email',
+        value: message.from.value,
+        // A From that failed SPF or DKIM proves nothing, so it is never verified (§4.4).
+        source: message.email.authFailed ? 'email.unauthenticated' : 'email.inbound',
+      },
       message.from.name === null ? {} : { name: message.from.name },
     );
 
@@ -196,7 +201,11 @@ export class ConversationRouter {
       target = created.ticket;
     }
 
-    await this.#copyIn(context, target, message, contact.id);
+    // Anyone can forge a participant's From and name their own address in Cc, so
+    // only mail that passed authentication may grow the thread's recipients (§2.5).
+    if (!message.email.authFailed) {
+      await this.#copyIn(context, target, message, contact.id);
+    }
 
     return outcome;
   }

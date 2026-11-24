@@ -202,7 +202,7 @@ match. Actual status transitions keep the database trigger's arrival baseline.
 
 ### 2.5 Participants
 
-A ticket's participants are: the contact, CC addresses added by agents or present on inbound email, and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
+A ticket's participants are: the contact, CC addresses added by agents or present on inbound email that passed SPF and DKIM (§4.3), and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
 
 Imported CCs can reference a same-brand contact without a source email; their
 address remains null and their provenance is `import`. Never invent an address.
@@ -401,6 +401,8 @@ An inbound email is attached to an existing ticket only if **both** hold:
 
 If the hint matches but the sender is not a participant, a new ticket is created in the same department with a system note "Referenced HD-1042 but sender is not a participant", and the agent may merge manually. A subject token with no other hint is treated the same way. This prevents anyone who learns a ticket number from injecting into or reading that thread.
 
+A message whose SPF or DKIM check failed (`authFailed`, M2-07) still threads by the same two conditions, so forwarded mail that fails SPF honestly is not lost, but it is only a record of what arrived: it appears in the thread with its "authentication failed" warning and does what any customer reply does, and nothing more. It adds no `Cc` address as a participant (§2.5), because anyone can forge a participant's `From` and name their own address in `Cc` to start receiving the ticket's replies. Its `From` is recorded as an unverified identity (source `email.unauthenticated`, §4.4): it never verifies an address and never merges into a verified contact, and an identity that is already verified stays verified. The same holds on every inbound path (IMAP, provider webhooks, raw MIME, generic JSON), since all go through the one router.
+
 Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`, `mailer-daemon@`) never create tickets unless the brand allow-lists them; they are logged.
 
 **A reply aimed at one email (M14-31).** A staff public reply may name the customer email it answers (`replyToMessageId`). The target must be a public, inbound, email-channel message of the same ticket that the caller can read: another kind or ticket is a 400 on `body.replyToMessageId` (`reply-to.not-a-customer-email`; any target on a note is `reply-to.not-allowed`), and a message that is gone, that the policies hide, or whose sender's contact was erased (§11) is a 409 (`reply-to.gone`) with nothing sent. A retry of a reply already stored (same `clientId`) returns it, even when its target is gone by then. The link is stored on the reply (`ON DELETE SET NULL`), so a purged target costs the reply only its "In reply to" line. At delivery, not at write time:
@@ -415,7 +417,7 @@ Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`,
 
 | Identifier | Verified when | Auto-merge |
 |---|---|---|
-| Email | An inbound email arrived from it, or a magic link sent to it was clicked | Yes |
+| Email | An inbound email that passed SPF and DKIM arrived from it, or a magic link sent to it was clicked | Yes |
 | Telegram `chat_id` | Always (comes from the Bot API) | Yes |
 | WhatsApp business-scoped user id | Always (comes in a webhook Meta signed) | Yes |
 | Messenger page-scoped id | Always (signed webhook) | Yes |

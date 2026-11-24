@@ -1092,6 +1092,120 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       expect(status?.isSpam).toBe(true);
     });
 
+    describe('mail that failed SPF or DKIM', () => {
+      const FAILED = {
+        'Authentication-Results': 'mx.helpdock.test; spf=fail smtp.mailfrom=evil.example',
+      };
+      const PASSED = { 'Authentication-Results': 'mx.helpdock.test; spf=pass' };
+
+      const identityOf = (address: string) =>
+        withSystem(runtime.db, seeded.brandId, async (tx) => {
+          const [row] = await tx
+            .select()
+            .from(contactIdentities)
+            .where(and(eq(contactIdentities.kind, 'email'), eq(contactIdentities.value, address)));
+          return row;
+        });
+
+      const participantsOf = (ticketId: string) =>
+        withSystem(runtime.db, seeded.brandId, async (tx) =>
+          (
+            await tx
+              .select({ address: ticketParticipants.address })
+              .from(ticketParticipants)
+              .where(eq(ticketParticipants.ticketId, ticketId))
+          )
+            .map((row) => row.address)
+            .sort(),
+        );
+
+      it('threads a participant’s reply flagged, adds no Cc and leaves a verified identity alone', async () => {
+        const victim = unique('victim');
+        const goodCc = unique('goodcc');
+        const forgedCc = unique('forgedcc');
+        await parse({
+          from: { address: victim },
+          to: [{ address: 'hello@helpdock.test' }],
+          cc: [{ address: goodCc }],
+          subject: 'Cc on a passing message',
+          text: 'Hello',
+          messageId: '<cc-pass@acme.de>',
+          headers: PASSED,
+        });
+        const first = await messageOf('cc-pass@acme.de');
+        const ticketId = first?.ticketId ?? '';
+        expect(await participantsOf(ticketId)).toEqual([goodCc]);
+        const verifiedBefore = await identityOf(victim);
+        expect(verifiedBefore?.verified).toBe(true);
+
+        await parse({
+          from: { address: victim },
+          to: [{ address: 'hello@helpdock.test' }],
+          cc: [{ address: forgedCc }],
+          subject: 'Re: Cc on a passing message',
+          text: 'Please copy me in',
+          messageId: '<cc-fail@evil.example>',
+          inReplyTo: '<cc-pass@acme.de>',
+          headers: FAILED,
+        });
+
+        const failed = await messageOf('cc-fail@evil.example');
+        expect(failed?.ticketId).toBe(ticketId);
+        const page = await call<TicketMessagePage>(
+          'GET',
+          `${brandPath()}/tickets/${ticketId}/messages`,
+          ada,
+        );
+        expect(
+          page.body.messages.find((message) => message.bodyText === 'Please copy me in')?.email
+            ?.authFailed,
+        ).toBe(true);
+        expect(await participantsOf(ticketId)).toEqual([goodCc]);
+        expect(await identityOf(forgedCc)).toBeUndefined();
+        expect(await identityOf(victim)).toMatchObject({
+          id: verifiedBefore?.id,
+          contactId: verifiedBefore?.contactId,
+          verified: true,
+        });
+
+        // The same message with passing authentication copies its Cc in, as before.
+        await parse({
+          from: { address: victim },
+          to: [{ address: 'hello@helpdock.test' }],
+          cc: [{ address: forgedCc }],
+          subject: 'Re: Cc on a passing message',
+          text: 'Please copy my colleague in',
+          messageId: '<cc-pass-2@acme.de>',
+          inReplyTo: '<cc-pass@acme.de>',
+          headers: PASSED,
+        });
+        expect(await participantsOf(ticketId)).toEqual([forgedCc, goodCc].sort());
+      });
+
+      it('does not verify a sender whose first message failed, and verifies it once one passes', async () => {
+        const sender = unique('newcomer');
+        await parse({
+          from: { address: sender },
+          to: [{ address: 'hello@helpdock.test' }],
+          subject: 'Unauthenticated hello',
+          text: 'Hello',
+          messageId: '<unauth-1@evil.example>',
+          headers: FAILED,
+        });
+        expect(await identityOf(sender)).toMatchObject({ verified: false, verifiedAt: null });
+
+        await parse({
+          from: { address: sender },
+          to: [{ address: 'hello@helpdock.test' }],
+          subject: 'Authenticated hello',
+          text: 'Hello again',
+          messageId: '<unauth-2@acme.de>',
+          headers: PASSED,
+        });
+        expect((await identityOf(sender))?.verified).toBe(true);
+      });
+    });
+
     it('parses SendGrid’s multipart form and Postmark’s JSON through the same pipeline', async () => {
       const raw = [
         `From: ${unique('grid')}`,

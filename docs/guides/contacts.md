@@ -88,7 +88,7 @@ from**, and `isVerifiedIdentity(kind, source)` answers from the table above
 | `widget.signed` | external | yes |
 | `widget.visitor` | visitor | yes |
 | `widget.form` | email, phone | no |
-| `email.cc` | email | no |
+| `email.cc`, `email.unauthenticated` (an inbound `From` that failed SPF or DKIM) | email | no |
 | `agent`, `import` | any | no |
 
 Nothing an agent types is verified, and one source alone verifies a phone number:

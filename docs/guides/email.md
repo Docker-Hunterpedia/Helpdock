@@ -65,10 +65,10 @@ Answers: `200 {"outcome":"accepted"}` for a new message, `duplicate` for one alr
    email take precedence over imported history.
 5. **The body** is sanitised (no scripts, forms or styles), the quoted history is folded behind "Show quoted text", inline images become the message's attachments, and other attachments go through the media pipeline like any upload.
 6. **Remote images** are never in the stored body. With **Block until an agent loads them** the email card shows how many and from where; **Load images** fetches them through Helpdock's proxy. With **Load through the Helpdock image proxy** they load at once. Either way the server fetches them, re-encodes them, and the sender never sees an agent's address or browser.
-7. **SPF or DKIM failures** reported by your receiving server open the ticket in Spam when the mailbox's switch is on.
+7. **SPF or DKIM failures** reported by your receiving server open the ticket in Spam when the mailbox's switch is on. Whatever the switch says, such a message never adds its `Cc` addresses to a ticket and never marks its sender's address as verified. If it is a reply from a participant it still joins the thread, flagged "authentication failed", so genuine forwarded mail is not lost.
 8. **Auto-replies.** A message that opened a ticket may get the brand's acknowledgment or out-of-hours reply ([Outbound email](outbound-email.md#auto-replies-m2-06)). Mail from a machine (even an allow-listed one) and mail filed as spam never does.
 
-Everyone on the `To` and `Cc` lines, except the brand's own mailboxes, becomes a CC participant of the ticket.
+Everyone on the `Cc` line of a message that passed authentication, except the brand's own mailboxes, becomes a CC participant of the ticket.
 
 ## A reply aimed at one email
 

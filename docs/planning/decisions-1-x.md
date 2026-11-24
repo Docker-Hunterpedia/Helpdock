@@ -144,10 +144,10 @@ Plan: [M21-customer-portal.md](../in-development/M21-customer-portal.md).
 | Id | Question | Recommendation | Source | Answer |
 |---|---|---|---|---|
 | D-62 | Who in a customer company sees the company's tickets in the portal? | A setting per account: own tickets (default), managers, or all members (ADR 0060). | #466 | A setting per account, as recommended. (2026-11-24) |
-| D-63 | May someone with no ticket yet sign in (and so open their first ticket in the portal), or only existing contacts? | Existing contacts only by default, with a brand setting to allow new customers; the web form stays the way in for strangers. | #466 | |
-| D-64 | May a member who sees a coworker's ticket also reply to it? | Yes; replying adds them as a participant, and staff see who wrote. | #466 | |
-| D-65 | Can a brand keep some departments' tickets out of the portal entirely (for example HR)? | Yes, a list of departments shown, all by default. | #466 | |
-| D-66 | Is the restricted knowledge base (articles for signed-in customers only) part of M21? | No; it needs a third visibility and retrieval audience. Keep it on the backlog. | REQUIREMENTS backlog | |
+| D-63 | May someone with no ticket yet sign in (and so open their first ticket in the portal), or only existing contacts? | Existing contacts only by default, with a brand setting to allow new customers; the web form stays the way in for strangers. | #466 | Accepted as recommended. (2026-11-24) |
+| D-64 | May a member who sees a coworker's ticket also reply to it? | Yes; replying adds them as a participant, and staff see who wrote. | #466 | Yes, read and reply. (2026-11-24) |
+| D-65 | Can a brand keep some departments' tickets out of the portal entirely (for example HR)? | Yes, a list of departments shown, all by default. | #466 | Yes, the brand chooses the departments. (2026-11-24) |
+| D-66 | Is the restricted knowledge base (articles for signed-in customers only) part of M21? | No; it needs a third visibility and retrieval audience. Keep it on the backlog. | REQUIREMENTS backlog | Not now; it stays on the backlog. (2026-11-24) |
 | D-67 | How long does a customer stay signed in? | 30 days, sliding, with "Sign out everywhere". | ADR 0059 | |
 
 ## Prior-art gap check

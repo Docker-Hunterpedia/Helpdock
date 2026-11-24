@@ -101,9 +101,11 @@ Total: 41 days.
    address. The page always answers "If that address has tickets with us, we
    sent a link", whether or not it does (no way to test which addresses are
    customers).
-2. If a contact of that brand has that address as an email identity (and the
-   brand allows new customers, D-63, or the contact already exists), the outbox
-   sends one email with a link valid for 15 minutes, single-use.
+2. If a contact of that brand has that address as an email identity, the
+   outbox sends one email with a link valid for 15 minutes, single-use. An
+   address with no contact gets a link only when the brand has switched on
+   "new customers may sign in" (D-63); the first sign-in then creates the
+   contact.
 3. The link opens a page that names the brand and has one button, **Continue**.
    Pressing it spends the token by `POST` and sets the session cookie. Mail
    scanners that follow the link spend nothing (§4.6).
@@ -162,8 +164,8 @@ default:
 - "The account's tickets" are tickets whose requester belongs to that account
   **now** (a ticket follows its requester when staff move the contact to
   another account).
-- A member who sees a coworker's ticket may read it and, if D-64 says so,
-  reply; replying adds them as a participant.
+- A member who sees a coworker's ticket may read it and reply (D-64);
+  replying adds them as a participant, and staff see who wrote.
 - Staff can mark one ticket **private to the requester**. It then shows only
   to its requester and participants whatever the account's setting (an HR or
   payroll question).
@@ -309,7 +311,9 @@ backlog line; `.env.example` if a key is added (none planned).
 
 ## Open questions
 
-D-62 to D-67 in [decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal).
+D-62 to D-66 were answered on 2026-11-24. D-67 (how long a customer stays
+signed in; 30 days proposed) is open in
+[decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal).
 
 ## Build order
 

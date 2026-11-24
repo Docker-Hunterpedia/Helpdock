@@ -202,7 +202,7 @@ match. Actual status transitions keep the database trigger's arrival baseline.
 
 ### 2.5 Participants
 
-A ticket's participants are: the contact, CC addresses added by agents or present on inbound email that the receiving server did not report as not matching its From address (§4.3), and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
+A ticket's participants are: the contact, CC addresses added by agents or present on inbound email that the receiving server did not report as not matching its From address (§4.3), and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. A CC taken from inbound mail is a participant for email only and never gives portal access (see below), and a message the receiving server reported as not matching its From address adds no CC at all (§4.3). Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
 
 Imported CCs can reference a same-brand contact without a source email; their
 address remains null and their provenance is `import`. Never invent an address.

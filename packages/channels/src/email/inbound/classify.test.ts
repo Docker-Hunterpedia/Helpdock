@@ -169,6 +169,7 @@ describe('senderCheck (DOMAIN-RULES §4.3, §4.4)', () => {
       'unknown',
     ],
     ['a pass that names no domain', [ar('mx.example; spf=pass')], 'unknown'],
+    ['an absent header is only unknown', [{ subject: ['x'] }], 'unknown'],
     ['a malformed header', [ar('this is not; a report = at all;;')], 'unknown'],
     [
       // Changed from "aligned": only the top header (the first) can support the message.
@@ -238,9 +239,60 @@ describe('senderCheck (DOMAIN-RULES §4.3, §4.4)', () => {
       'misaligned',
     ],
     [
-      'the last of two smtp.mailfrom properties',
+      // Two different values leave the clause naming no domain, so it is neither for nor against.
+      'two different smtp.mailfrom properties in one clause',
       [ar('mx.example; spf=pass smtp.mailfrom=example.com smtp.mailfrom=evil.test')],
+      'unknown',
+    ],
+    [
+      'two different header.d properties in one clause, with header.i for the victim',
+      [ar('mx.example; dkim=pass header.d=evil.test header.d=example.com header.i=@example.com')],
+      'unknown',
+    ],
+    [
+      'a victim domain hidden in the value of another property (the selector decoy)',
+      [ar('mx.example; dkim=pass header.d=evil.test header.s=header.d=example.com header.b=abc')],
       'misaligned',
+    ],
+    [
+      'an unclosed comment in the top header',
+      [ar('mx.example; dmarc=pass (never closed')],
+      'misaligned',
+    ],
+    [
+      'an unclosed quote in the top header',
+      [ar('mx.example; spf=pass smtp.mailfrom="example.com')],
+      'misaligned',
+    ],
+    [
+      'a stray closing parenthesis in the top header',
+      [ar('mx.example; dmarc=pass )')],
+      'misaligned',
+    ],
+    [
+      'an unbalanced header below a sound top one is not the top',
+      [ar('mx.example; dkim=pass header.d=example.com', 'x; spf=pass (open')],
+      'aligned',
+    ],
+    [
+      'a non-ASCII From domain against a punycode header.d',
+      [ar('mx.example; dkim=pass header.d=xn--bcher-kva.de'), from('mona@bücher.de')],
+      'aligned',
+    ],
+    [
+      'a punycode From domain against a non-ASCII header.d',
+      [ar('mx.example; dkim=pass header.d=bücher.de'), from('mona@xn--bcher-kva.de')],
+      'aligned',
+    ],
+    [
+      'a trailing dot and upper case in header.d',
+      [ar('mx.example; dkim=pass header.d=EXAMPLE.com.')],
+      'aligned',
+    ],
+    [
+      'a comment between the result and its property',
+      [ar('mx.example; spf=pass(ok)smtp.mailfrom=example.com')],
+      'aligned',
     ],
     [
       'a comment after the real property',
@@ -283,6 +335,8 @@ describe('domainsAlign', () => {
     ['example.com.evil.test', 'example.com', false],
     ['com', 'example.com', false],
     ['com', 'com', false],
+    ['bücher.de', 'xn--bcher-kva.de', true],
+    ['example.com.', 'EXAMPLE.com', true],
     ['', 'example.com', false],
   ])('a pass for %s speaks for a From on %s: %s', (authenticated, from, expected) => {
     expect(domainsAlign(authenticated, from)).toBe(expected);

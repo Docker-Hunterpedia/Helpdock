@@ -1,3 +1,4 @@
+import { domainToASCII } from 'node:url';
 import type { ThreadHints } from '../../adapter.js';
 import { headerValue, type InboundEmail } from './inbound-email.js';
 
@@ -137,9 +138,13 @@ interface AuthResult {
   readonly domain: string | null;
 }
 
+/** Lower-cased, without one trailing dot, in ASCII (punycode) form; `''` when it is not a domain. */
+const normaliseDomain = (value: string): string =>
+  domainToASCII(value.toLowerCase().replace(/\.$/, ''));
+
 const domainOfAddress = (value: string): string => {
   const at = value.lastIndexOf('@');
-  return (at === -1 ? value : value.slice(at + 1)).toLowerCase();
+  return normaliseDomain(at === -1 ? value : value.slice(at + 1));
 };
 
 const labelCount = (domain: string): number => domain.split('.').filter(Boolean).length;
@@ -157,8 +162,8 @@ const labelCount = (domain: string): number => domain.split('.').filter(Boolean)
  * recognised; that gap is documented in the email guide.
  */
 export const domainsAlign = (authenticated: string, from: string): boolean => {
-  const parent = authenticated.toLowerCase();
-  const child = from.toLowerCase();
+  const parent = normaliseDomain(authenticated);
+  const child = normaliseDomain(from);
   return labelCount(parent) >= 2 && (parent === child || child.endsWith(`.${parent}`));
 };
 
@@ -178,6 +183,8 @@ const stripComments = (value: string): string => {
       quoted = !quoted;
       out += char;
     } else if (!quoted && char === '(') {
+      // A comment separates tokens, so `pass(x)smtp.mailfrom=` is not one word.
+      out += depth === 0 ? ' ' : '';
       depth += 1;
     } else if (!quoted && char === ')' && depth > 0) {
       depth -= 1;
@@ -193,17 +200,51 @@ const blankQuotes = (value: string): string => value.replace(/"(?:[^"\\]|\\.)*"/
 
 const PROPERTY_VALUE = '((?:"_"|[^\\s";])+)';
 
-/** The last `name=value` of a clause (a later one is the one the server wrote after any decoy). */
-const lastProperty = (clause: string, names: readonly string[]): string | null => {
-  const matches = [
-    ...clause.matchAll(new RegExp(`\\b(?:${names.join('|')})\\s*=\\s*${PROPERTY_VALUE}`, 'gi')),
-  ];
-  const value = matches.at(-1)?.[1];
-  if (value === undefined) {
-    return null;
+/**
+ * The domain a clause names with a property, `undefined` when it has none, and
+ * `null` when it is unusable: two different values for it, or not a domain.
+ * A property starts a whitespace-separated token, so `header.s=header.d=x` is
+ * one `header.s` and no `header.d`.
+ */
+const propertyDomain = (clause: string, name: string): string | null | undefined => {
+  const values = [
+    ...clause.matchAll(new RegExp(`(?:^|\\s)${name}\\s*=\\s*${PROPERTY_VALUE}`, 'gi')),
+  ].map((match) => domainOfAddress((match[1] ?? '').replace(/"_"/g, '')));
+  if (values.length === 0) {
+    return undefined;
   }
-  const domain = domainOfAddress(value.replace(/"_"/g, ''));
-  return /^[a-z0-9.-]+$/.test(domain) ? domain : null;
+  const [first] = values;
+  return first !== undefined && /^[a-z0-9.-]+$/.test(first) && values.every((v) => v === first)
+    ? first
+    : null;
+};
+
+/** `header.d`, or `header.i` when there is none; a `header.d` that is unusable is not replaced by it. */
+const dkimDomain = (clause: string): string | null => {
+  const signed = propertyDomain(clause, 'header\\.d');
+  return (signed === undefined ? propertyDomain(clause, 'header\\.i') : signed) ?? null;
+};
+
+/** Whether every quote and parenthesis of a header is closed, by the rules of {@link stripComments}. */
+const isBalanced = (value: string): boolean => {
+  let depth = 0;
+  let quoted = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value.charAt(index);
+    if (char === '\\') {
+      index += 1;
+    } else if (char === '"' && depth === 0) {
+      quoted = !quoted;
+    } else if (!quoted && char === '(') {
+      depth += 1;
+    } else if (!quoted && char === ')') {
+      if (depth === 0) {
+        return false;
+      }
+      depth -= 1;
+    }
+  }
+  return depth === 0 && !quoted;
 };
 
 /** The results one `Authentication-Results` header reports. A malformed clause is skipped. */
@@ -220,9 +261,9 @@ const resultsOfHeader = (header: string): AuthResult[] => {
       result: (head[2] ?? '').toLowerCase(),
       domain:
         method === 'spf'
-          ? lastProperty(clause, ['smtp\\.mailfrom'])
+          ? (propertyDomain(clause, 'smtp\\.mailfrom') ?? null)
           : method === 'dkim'
-            ? (lastProperty(clause, ['header\\.d']) ?? lastProperty(clause, ['header\\.i']))
+            ? dkimDomain(clause)
             : null,
     });
   }
@@ -251,11 +292,17 @@ export const senderCheck = (email: InboundEmail): SenderCheck => {
   const fromDomain = domainOfAddress(email.from?.address ?? '');
   const headers = email.headers.get('authentication-results') ?? [];
   const everything = headers.flatMap(resultsOfHeader);
-  const top = headers.length === 0 ? [] : resultsOfHeader(headers[0] ?? '');
+  const topHeader = headers[0];
+  const top = topHeader === undefined ? [] : resultsOfHeader(topHeader);
   const passes = top.filter((entry) => entry.result === 'pass');
   const speaks = (entry: AuthResult): boolean =>
     entry.domain !== null && domainsAlign(entry.domain, fromDomain);
 
+  // A header whose quotes or parentheses do not close cannot be read reliably, so it
+  // supports nothing and counts against the message; an absent header is only unknown.
+  if (topHeader !== undefined && !isBalanced(topHeader)) {
+    return 'misaligned';
+  }
   if (everything.some((entry) => entry.method === 'dmarc' && entry.result === 'fail')) {
     return 'misaligned';
   }

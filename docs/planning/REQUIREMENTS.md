@@ -286,7 +286,7 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 
 - Slack, Discord, Viber, LINE
 - Meta channels beyond M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, Business Suite echo import, webhook backfill, auto-reply and surveys on these channels
-- Customer portal (magic-link login, ticket history, restricted KB)
+- Customer portal: planned as [M21](../in-development/M21-customer-portal.md) (emailed-link sign-in, ticket history, a company-wide view per account). The restricted knowledge base stays here.
 - Custom roles / permission sets; SCIM provisioning and single logout (SAML/OIDC SSO moved into 1.0 as M11)
 - Per-department language routing
 - Importers for further tools beyond PRD M16

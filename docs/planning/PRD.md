@@ -38,7 +38,7 @@ Visual process builder · community forums · phone/VoIP · billing/SaaS meterin
 
 Planned on 2026-10-20 ([Phase 5](#phase-5--1x)): three of the v1 non-goals move into 1.x milestones. Backup tooling is [M15](#m15-self-host-operations) (`helpdock-ctl backup`, `restore`, `verify`); the one-click deploy becomes M15's verified installer, cloud-init recipe and Coolify template, with Docker Compose still the only supported runtime; native mobile SDKs for customers' own apps are [M20](#m20-native-clients-and-sdks). The rest stay non-goals for 1.x, joined by three the plans rule out:
 
-Visual process builder · community forums · phone/VoIP · billing/SaaS metering · SLA credits · Slack/Discord · customer login portal (backlog) · custom permission sets (backlog) · native iOS and Android **agent** apps (they need a push relay the project would have to host; the installable admin of M17 covers phones) · a hosted Helpdock · deploying on Vercel or Cloudflare (no long-running workers, Socket.IO rooms or on-demand TLS).
+Visual process builder · community forums · phone/VoIP · billing/SaaS metering · SLA credits · Slack/Discord · customer passwords and a restricted knowledge base (the customer portal itself is [M21](#m21-customer-portal), planned on 2026-11-24) · custom permission sets (backlog) · native iOS and Android **agent** apps (they need a push relay the project would have to host; the installable admin of M17 covers phones) · a hosted Helpdock · deploying on Vercel or Cloudflare (no long-running workers, Socket.IO rooms or on-demand TLS).
 
 ---
 
@@ -113,6 +113,7 @@ Update this table in the same PR that changes a milestone's status.
 | 5 1.x | M18 Sign-in options | M0, M4, M9, M11 | 5–7 | in development ([#275](https://github.com/Docker-Hunterpedia/Helpdock/issues/275)–[#287](https://github.com/Docker-Hunterpedia/Helpdock/issues/287)) | 2026-10-20 | |
 | 5 1.x | M19 Customer surfaces polish | M2, M4, M5 (M19-08: M15-11) | 9–10 | planned | | |
 | 5 1.x | M20 Native clients and SDKs | M4, M15-01, M17 | 9–11 | planned | | |
+| 5 1.x | M21 Customer portal | M1, M2, M5, M18-10 | 8 | planned, plan approved 2026-11-24 ([#466](https://github.com/Docker-Hunterpedia/Helpdock/issues/466)) | | |
 | | **Total, phase 5 (M12–M19)** | | **102–110** (about 533 person-days; M20 adds 45–57) | | | |
 
 Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. Phase 5 figures are the plans' person-day estimates divided by five; milestones from M0 to M11 were built far faster than estimated, but review, the owner's verification and real-provider runs do not shrink the same way, so they stay the planning number. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.
@@ -514,6 +515,7 @@ Every milestone is useful on its own, so the phase can stop after any of them. E
 | 1.2 | The rest of M13, M15 Self-host operations, M16 More importers and undo, M19 Customer surfaces polish | about 249 |
 | 1.3 | M17 Apps and languages | about 59 |
 | Later 1.x | M20 Native clients and SDKs, once M17's installable admin has shown demand | 45–57 |
+| A minor of its own | M21 Customer portal, asked for by a team evaluating Helpdock (2026-11) | about 41 |
 
 #### M12 AI workspace
 
@@ -826,6 +828,31 @@ Exit criteria:
 - [ ] `@helpdock/widget-client` and `@helpdock/react-native` pass the conformance kit, are published with npm provenance, and the example app holds a conversation with an agent in both locales.
 - [ ] The desktop app installs signed on macOS, Windows and Linux (or is labelled unsigned per D-59), cannot navigate off the instance, signs in through the system browser, shows a badge and notifications, and updates itself only to a newer signed version.
 
+#### M21 Customer portal
+
+Depends on: M1 (tickets, contacts, accounts), M2 (email, web form), M5 (help center), M18-10 (built-in CAPTCHA). About 41 working days. Plan approved by the owner on 2026-11-24. Design: ADRs [0059](../decisions/0059-customer-sessions-by-emailed-link.md), [0060](../decisions/0060-account-wide-ticket-visibility.md). Plan: [M21-customer-portal.md](../in-development/M21-customer-portal.md). Planned on 2026-11-24 after a team comparing Helpdock with Freshdesk asked that an employee of a client company see their coworkers' tickets.
+
+A customer signs in to a brand's help center with a link sent to their email, reads their tickets on every channel, answers them and opens new ones; staff choose per customer company whether its members see only their own tickets, all of the company's, or whether named managers do.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M21-01 | Data model and policies: sessions, sign-in tokens, account visibility, account role, `account_id` and the private mark on tickets, the `customer` principal and its row-level-security policies with negative tests | ADR 0059, 0060; D §1, §4 |
+| M21-02 | Sign-in by emailed link: request, email, confirm by `POST`, session cookie, sign out, limits and CAPTCHA | ADR 0059 |
+| M21-03 | "My tickets": the list and the ticket page with public messages and attachments | D §2.10, §4.5 |
+| M21-04 | Reply, new ticket, mark solved, reopen, rating | D §2.3 |
+| M21-05 | Company view: Mine and Company, replying on a coworker's ticket, private tickets | ADR 0060 |
+| M21-06 | Admin: portal settings per brand, visibility and managers on an account, portal access on a contact, the private mark on a ticket, audit | DESIGN §6 |
+| M21-07 | "View this ticket" in customer emails; "My tickets" and "Sign in" in the help center header | M2, M5 |
+| M21-08 | Lifecycle: merge, erasure, retention, changed email identity, moved contact, disabled brand | D §4.4, §11 |
+| M21-09 | Reports, webhooks and the public API: the `portal` channel value | M8 |
+| M21-10 | Docs, DOMAIN-RULES, pentest scope, security review and accessibility run | AGENTS.md DoD |
+
+Exit criteria:
+
+- [ ] A customer signs in with an emailed link, reads, replies with an attachment, opens a ticket and marks one solved, in `en` and `ar`.
+- [ ] Under each account setting a member sees exactly the tickets the plan says, and a private ticket only its requester's.
+- [ ] Every negative test passes against real row-level security; no portal response contains an internal note; known and unknown addresses get the same answer.
+
 ---
 
 ## 5. Post-1.0 backlog (v1.1+)
@@ -834,7 +861,7 @@ Not scheduled. Each item needs its own PRD section before work starts.
 
 - Slack, Discord, Viber, LINE
 - Meta channels beyond M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, importing replies typed in Meta Business Suite, backfill of missed webhooks, auto-reply and the satisfaction survey on these channels
-- Customer portal with magic-link login, ticket history, restricted KB; customer sign-in is planned with it, brand-scoped (see M18's plan)
+- A restricted knowledge base for signed-in customers, and customer passwords or passkeys. The customer portal itself is [M21](#m21-customer-portal)
 - Custom roles and permission sets; SCIM provisioning and single logout (SSO itself is M11)
 - Per-department language routing
 - Importers beyond M16: Kayako, HubSpot Service, Salesforce Service Cloud, osTicket and other tools

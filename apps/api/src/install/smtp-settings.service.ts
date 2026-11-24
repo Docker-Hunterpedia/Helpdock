@@ -9,7 +9,7 @@ import type {
 } from '@helpdock/schemas';
 import { ConflictException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { principalIdOf } from '../auth/principal.js';
+import { auditActorTypeOf, principalIdOf } from '../auth/principal.js';
 import type { RateLimiter } from '../auth/rate-limit.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 import type { Logger } from '../logging/logger.js';
@@ -183,7 +183,7 @@ export class SmtpSettingsService {
         .insert(auditLog)
         .values({
           brandId: INSTALL_SCOPE_BRAND_ID,
-          actorType: principal.type,
+          actorType: auditActorTypeOf(principal),
           actorId,
           action: 'settings.updated',
           targetType: 'settings',

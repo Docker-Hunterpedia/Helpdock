@@ -12,7 +12,7 @@ import { isUuid } from './uuid.js';
  */
 
 /** The principal kinds of DOMAIN-RULES §1.1. */
-export const PRINCIPAL_TYPES = ['staff', 'visitor', 'apikey', 'system'] as const;
+export const PRINCIPAL_TYPES = ['staff', 'visitor', 'apikey', 'system', 'customer'] as const;
 export type PrincipalType = (typeof PRINCIPAL_TYPES)[number];
 
 /**
@@ -28,6 +28,19 @@ export const INSTALL_SCOPE_BRAND_ID = '00000000-0000-0000-0000-000000000000';
 /** Principal id recorded for a worker that has no job id of its own. */
 export const SYSTEM_PRINCIPAL_ID = 'system';
 
+/**
+ * What the `customer` principal's policies read (M21-01, ADR 0060). `sees` is
+ * computed by the caller from the account's setting and the contact's role on
+ * every request; the policies trust it exactly as they trust `brandIds`.
+ */
+export interface CustomerFacts {
+  /** The signed-in contact. Must equal `principalId`. */
+  readonly contactId: string;
+  /** The contact's account now; null when it has none. */
+  readonly accountId: string | null;
+  readonly sees: 'own' | 'account';
+}
+
 export interface TenantContext {
   /** Every brand the principal may reach. Install-admin paths list them all. */
   readonly brandIds: readonly string[];
@@ -36,6 +49,8 @@ export interface TenantContext {
   readonly principalType: PrincipalType;
   /** User id, visitor id, api key id, or a job id for a system principal. */
   readonly principalId: string;
+  /** Required for, and only allowed on, a `customer` principal. */
+  readonly customer?: CustomerFacts | undefined;
   /**
    * The request this transaction serves, when it serves one (M3-08). Not read
    * by any policy: `audit_log`'s column defaults read it, so every audit row a
@@ -125,6 +140,50 @@ const assertPrincipal = ({ principalType, principalId }: TenantContext): void =>
   }
 };
 
+const CUSTOMER_SEES = ['own', 'account'] as const;
+
+/**
+ * The extra settings of a `customer` principal, and the checks that keep the
+ * two halves of the context from disagreeing: a customer without facts, facts
+ * on any other principal, or a contact id that is not the principal's own would
+ * each be a way to read as somebody else.
+ */
+const customerSettings = (context: TenantContext): readonly (readonly [string, string])[] => {
+  const { customer } = context;
+
+  if (context.principalType !== 'customer') {
+    if (customer !== undefined) {
+      throw new TenantContextError('customer', 'is only allowed for a customer principal');
+    }
+    return [];
+  }
+
+  if (customer === undefined) {
+    throw new TenantContextError('customer', 'is required for a customer principal');
+  }
+  if (!isUuid(customer.contactId)) {
+    throw new TenantContextError('customer.contactId', 'must be a UUID');
+  }
+  if (customer.contactId !== context.principalId) {
+    throw new TenantContextError('customer.contactId', 'must equal principalId');
+  }
+  if (customer.accountId !== null && !isUuid(customer.accountId)) {
+    throw new TenantContextError('customer.accountId', 'must be a UUID or null');
+  }
+  if (!CUSTOMER_SEES.includes(customer.sees)) {
+    throw new TenantContextError('customer.sees', `must be one of ${CUSTOMER_SEES.join(', ')}`);
+  }
+  if (context.brandIds.length !== 1) {
+    throw new TenantContextError('brandIds', 'must name exactly one brand for a customer');
+  }
+
+  return [
+    [SESSION_SETTINGS.customerContactId, customer.contactId],
+    [SESSION_SETTINGS.customerAccountId, customer.accountId ?? ''],
+    [SESSION_SETTINGS.customerSees, customer.sees],
+  ];
+};
+
 /**
  * The `(name, value)` pairs a tenant transaction sets. Values are validated
  * here and then bound as query parameters, never pasted into SQL, so a hostile
@@ -147,6 +206,7 @@ export const tenantSessionSettings = (
     [SESSION_SETTINGS.allDepartments, String(allDepartments)],
     [SESSION_SETTINGS.principalType, context.principalType],
     [SESSION_SETTINGS.principalId, context.principalId],
+    ...customerSettings(context),
     ...(context.request === undefined ? [] : requestSettings(context.request)),
   ];
 };
@@ -170,6 +230,35 @@ export const withTenant = <T>(
     return fn(tx);
   });
 };
+
+/**
+ * The context of a signed-in portal customer: one brand, the departments the
+ * brand shows in the portal (D-65), and the facts the customer policies read.
+ * `departmentIds` goes through the same department policy staff are bound by,
+ * so a department the brand hides is invisible to the requester too.
+ */
+export const customerContext = (input: {
+  readonly brandId: string;
+  readonly contactId: string;
+  readonly accountId: string | null;
+  readonly sees: 'own' | 'account';
+  readonly departmentIds: readonly string[] | 'all';
+  readonly request?: RequestFacts | undefined;
+}): TenantContext => ({
+  brandIds: [input.brandId],
+  departmentIds: input.departmentIds,
+  principalType: 'customer',
+  principalId: input.contactId,
+  customer: { contactId: input.contactId, accountId: input.accountId, sees: input.sees },
+  request: input.request,
+});
+
+/** Runs `fn` as a portal customer; see {@link customerContext}. */
+export const withCustomer = <T>(
+  db: Db,
+  input: Parameters<typeof customerContext>[0],
+  fn: (tx: DbTransaction) => Promise<T>,
+): Promise<T> => withTenant(db, customerContext(input), fn);
 
 /**
  * The department scope the *current transaction* carries, read back out of the

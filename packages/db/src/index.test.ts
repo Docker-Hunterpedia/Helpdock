@@ -79,6 +79,7 @@ describe('@helpdock/db', () => {
       'contacts.ts',
       'csat-responses.ts',
       'custom-field-defs.ts',
+      'customer-portal.ts',
       'departments.ts',
       'email-deliveries.ts',
       'email-outbound-settings.ts',

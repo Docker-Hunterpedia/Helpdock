@@ -97,6 +97,7 @@ const MIGRATION_TAGS = [
   '0076_ticket_arrival_and_reply_mailbox',
   '0077_canned_shortcuts',
   '0078_reply_to_message',
+  '0079_customer_portal',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

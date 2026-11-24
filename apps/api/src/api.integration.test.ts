@@ -640,6 +640,7 @@ describe.skipIf(!hasDocker)('the api', () => {
           aiCountsAsFirstResponse: true,
           slaCountReopens: false,
           priorityLabels: {},
+          portal: { enabled: false, newCustomers: false, departmentIds: 'all' },
         },
       });
     });

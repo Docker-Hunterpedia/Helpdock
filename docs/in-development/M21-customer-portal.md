@@ -1,6 +1,7 @@
 # M21 Customer portal
 
-Status: planned (not started)
+Status: in progress (started 2026-11-24; M21-01 in review)
+Started: 2026-11-24
 Owner: @Docker-Hunterpedia
 Phase: 5 — 1.x. Proposed release: a minor of its own once the exit criteria are met (plan approved by the owner on 2026-11-24)
 Depends on: M1 (tickets, contacts, accounts), M2 (email, web form), M5 (help center pages and hosts), M18-10 (built-in CAPTCHA)
@@ -335,3 +336,31 @@ plan ([decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal)).
 - [ ] Merge, erasure, retention and a removed email identity end the sessions
       they should.
 - [ ] The guides, DOMAIN-RULES and the pentest scope describe what was built.
+
+## Task status
+
+| Id | Status | Notes |
+|---|---|---|
+| M21-01 | in review ([#481](https://github.com/Docker-Hunterpedia/Helpdock/pull/481), issue #471) | Done: the migration `0078_customer_portal` (the two tenant tables, `portal_visibility`, `account_role`, `tickets.account_id`, `portal_private`, `portal_eligible`, `portal_contact_ids`, and the denormalised `portal_contact_ids` and `portal_account_id` on messages and attachments, with the triggers that keep them and a backfill); the `customer` principal in `@helpdock/schemas` and `TenantContext`; the restrictive customer policies on every tenant table; `customerSees`; `brands.settings.portal`; `withCustomerContext`; negative tests in `portal-isolation.integration.test.ts` and the per-table sweep of `rls.integration.test.ts`. Not done on purpose: any route, page, email, cookie or admin screen. What M21-02 needs: system-context helpers for sessions and sign-in links (the policies already allow only the system path to write them). What M21-04 must add: customer INSERT policies for a reply, its attachments and a new ticket, and an activity actor for a customer. What M21-03 must add: customer read policies for whatever else a page joins (`ticket_statuses` for the four customer-facing words, `departments`, and coworkers' names from `contacts` for M21-05), and a reader for a merged ticket's inline messages (a merged-away ticket is invisible to a customer). |
+
+## As built (M21-01)
+
+- The department limit is the existing department layer (DOMAIN-RULES §1.3, layer 3), fed by `app.department_ids` (or `app.all_departments`) set from `brands.settings.portal.departmentIds`; it is not a test inside the customer policy. ADR 0059 and 0060 are left as accepted.
+- A CC counts toward a ticket's portal audience only when its `ticket_participants.source` is `agent` or `email_authenticated` and its address is a verified email identity of that CC's contact. `email` (mail that failed authentication, and every row from before M21-01), `merge` and `import` never count.
+- The customer policies are an allow-list: the type must be `customer` for the customer branch, and one of the four known types for every other principal. An unset or unknown type reads nothing.
+- `loadCustomerScope` refuses a contact that is merged away, erased or from another brand, a brand that is not active or is soft-deleted, and a brand with the portal off.
+- The migration rewrites every ticket, every public message and every attachment of a message once, under exclusive locks, and builds its two ticket indexes after that. It needs a maintenance window ([operations guide](../guides/operations.md#upgrading)).
+
+## Notes for later deliverables
+
+- **Column deny-list for portal DTOs.** A row policy cannot hide a column, so portal queries project and output schemas omit:
+  - `tickets`: `custom`, `search`, `priority`, `team_id`, `assignee_id` beyond what §2.10 shows, every `sla_*`, `first_response_due_at`, `resolution_due_at`, `merged_*`, `pre_merge_*`, `merge_message_id`, `split_from_id`, `parent_id`, `visitor_id`, `visitor_client_id`, every `ai_*`, every `import_*`, every `snooze*`, `reply_mailbox_id`, `arrival_*`, `deleted_at`, `account_id`, every `portal_*`, `department_id`.
+  - `ticket_messages`: `ai_meta`, `email`, `external_message_id`, `client_id`, `import_details`, `import_source_account_key`, `copied_from_message_id`, `reply_to_message_id`, every `portal_*`, and the raw `author_id`.
+  - `attachments`: `s3_key`, the keys of `variants`, `uploader_id`, `reject_reason`, `scan_status`, every `transcript_*`, `origin`, every `portal_*`.
+  - `customer_sessions`: `token_hash`, for staff as well.
+- **Customer writes run on the system path.** M21-04's reply, attachment and new-ticket inserts are made as the system principal after the portal guard has checked the session and the CSRF token; the customer policies stay write-free.
+- **Portal queries repeat the policy predicate** (`portal_contact_ids @> ARRAY[...]`, `account_id`, `portal_private`) in their own `WHERE`, so the planner can use the GIN and `(brand_id, account_id)` indexes ahead of the policy; the policy is what is trusted.
+- **No `sql.raw` or string-built SQL under `apps/api/src/portal`.** The Semgrep rule `helpdock-portal-raw-sql` enforces it.
+- **Staff reading sessions** (M21-06) needs its own route permission and a DTO; the policy lets any staff principal read the table.
+- **Global tables have no row-level security** (`users`, `brands`, `sso_*`, `webauthn_credentials`, `user_oauth_identities`, `job_receipts`, `notification_prefs`, `push_subscriptions`, `embedding_space`). No portal query touches one except `brands` by id and a helper that projects staff display names only.
+

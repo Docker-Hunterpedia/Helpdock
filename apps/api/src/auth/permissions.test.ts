@@ -200,7 +200,7 @@ describe('principalHasPermission', () => {
     expect(principalHasPermission(key, BRAND_A, 'ticket:read')).toBe(false);
   });
 
-  it('gives a visitor and a worker no staff permission over HTTP', () => {
+  it('gives a visitor, a worker and a customer no staff permission over HTTP', () => {
     const visitor: Principal = {
       type: 'visitor',
       id: USER,
@@ -208,10 +208,14 @@ describe('principalHasPermission', () => {
       conversationIds: [],
     };
     const system: Principal = { type: 'system', brandId: BRAND_A, jobId: 'outbox.relay:1' };
+    // M21-01: a portal customer holds no staff permission either; the portal's
+    // own guard is what lets it in, on the portal's routes only.
+    const customer: Principal = { type: 'customer', id: USER, brandId: BRAND_A, sees: 'account' };
 
     for (const permission of PERMISSIONS) {
       expect(principalHasPermission(visitor, BRAND_A, permission)).toBe(false);
       expect(principalHasPermission(system, BRAND_A, permission)).toBe(false);
+      expect(principalHasPermission(customer, BRAND_A, permission)).toBe(false);
     }
   });
 });

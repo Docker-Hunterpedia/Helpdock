@@ -63,4 +63,24 @@ describe('principalSchema', () => {
   it('rejects an unknown principal type', () => {
     expect(principalSchema.safeParse({ type: 'root', id: USER }).success).toBe(false);
   });
+
+  describe('the customer principal (M21-01)', () => {
+    const customer = { type: 'customer', id: USER, brandId: BRAND_A, sees: 'own' };
+
+    it('accepts a customer with and without an account', () => {
+      expect(principalSchema.parse(customer)).toEqual(customer);
+      expect(principalSchema.parse({ ...customer, accountId: BRAND_B, sees: 'account' })).toEqual({
+        ...customer,
+        accountId: BRAND_B,
+        sees: 'account',
+      });
+    });
+
+    it('refuses what `sees` cannot say, and ids that are not uuids', () => {
+      expect(principalSchema.safeParse({ ...customer, sees: 'everyone' }).success).toBe(false);
+      expect(principalSchema.safeParse({ ...customer, sees: undefined }).success).toBe(false);
+      expect(principalSchema.safeParse({ ...customer, brandId: 'brand' }).success).toBe(false);
+      expect(principalSchema.safeParse({ ...customer, accountId: 'acme' }).success).toBe(false);
+    });
+  });
 });

@@ -97,6 +97,14 @@ const scopeBrandIds = ({
  * scope to, so the request runs without one and any query fails loudly.
  */
 export const tenantScopeFor = (input: TenantScopeInput): TenantContext | null => {
+  if (input.principal.type === 'customer') {
+    // A customer's context needs facts only the portal's guard reads (its
+    // account, what it sees, the departments the brand shows), so the portal
+    // builds it with `customerContext`. Reaching here means a customer session
+    // arrived on a route that is not the portal's.
+    throw new TenantScopeError('a customer principal has no tenant scope outside the portal');
+  }
+
   const brandIds = scopeBrandIds(input);
   if (brandIds.length === 0) {
     return null;

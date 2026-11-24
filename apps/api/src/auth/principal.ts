@@ -25,6 +25,25 @@ export const brandsOf = (principal: Principal): readonly string[] =>
 export const principalIdOf = (principal: Principal): string =>
   principal.type === 'system' ? principal.jobId : principal.id;
 
+/** The kinds `audit_log.actor_type` can record (DOMAIN-RULES §1.1). */
+export type AuditActorType = Exclude<Principal['type'], 'customer'>;
+
+/**
+ * The actor type an audit row records for `principal`. A portal customer is not
+ * an audit actor: what they do is a message on a ticket, and their sign-ins
+ * are security events rather than audit rows (ADR 0059, M21 plan), so the
+ * routes that write audit rows, all of them staff or install-admin routes,
+ * never see one. Throwing here is what keeps that true if a guard is ever
+ * loosened.
+ */
+export const auditActorTypeOf = (principal: Principal): AuditActorType => {
+  if (principal.type === 'customer') {
+    throw new Error('A customer principal is not an audit actor');
+  }
+
+  return principal.type;
+};
+
 /**
  * The staff id behind the current request. Every `@Authenticated()` route that
  * acts on "me" needs it and none of them may take it from a parameter, so it is

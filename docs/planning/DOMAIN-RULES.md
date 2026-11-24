@@ -17,9 +17,22 @@ type Principal =
   | { type: 'visitor'; id: uuid; brandId: uuid; conversationIds: uuid[]; verifiedContactId?: uuid }
   | { type: 'apikey';  id: uuid; brandId: uuid; scopes: string[] }
   | { type: 'system';  brandId: uuid; jobId: string }   // workers only
+  | { type: 'customer'; id: contactId; brandId: uuid; accountId?: uuid; sees: 'own' | 'account' }   // the customer portal only (M21, ADR 0059, 0060)
 ```
 
 A staff member has one role per brand. `departmentIds` is `'all'` for Admin, and for a Team Leader or Viewer with no department restriction. `installAdmin` is the only principal that may run "all brands" paths.
+
+**The `customer` principal** is a signed-in contact of the customer portal. It is set only by the portal's own guard, from a valid session (ADR 0059), and the portal's routes are the only ones that accept it: every `@Requires` route refuses it, as it refuses a visitor, and no portal route accepts any other principal. It holds no permission of any role. `id` is the contact; `accountId` is the contact's account now; `sees` says how far its queries may reach, from the account's `portal_visibility` and the contact's `account_role`, **recomputed from the database on every request** so that a change takes effect on the next one (`customerSees` in `@helpdock/schemas`):
+
+| Account setting | Contact is | `sees` |
+|---|---|---|
+| no account | any | `own` |
+| `own` (default) | any | `own` |
+| `managers` | manager | `account` |
+| `managers` | member | `own` |
+| `all` | any | `account` |
+
+It is not an audit actor: what a customer does is a message on a ticket, and their sign-ins are security events, not audit rows.
 
 ### 1.2 Scope rules
 
@@ -50,6 +63,16 @@ Every request goes through all four. Any one of them failing closed is enough to
    `brand_id = ANY(app.brand_ids) AND (app.all_departments OR department_id = ANY(app.department_ids))`. Child tables carry a denormalised `department_id` kept in sync by trigger, so policies never need joins.
 4. **Output DTOs**: Zod output schemas strip fields the role may not see (for example, internal notes for a visitor principal are impossible by construction because visitor DTOs have no note field).
 
+**The customer principal (M21-01).** A customer's transaction names its one brand in `app.brand_ids`, so the permissive brand policies of layer 2 would let it read every table of that brand. Every tenant table therefore also carries a **restrictive** customer policy, which is ANDed with the permissive ones and so can only narrow them. Every other principal type passes through it unchanged (`app.principal_type IS DISTINCT FROM 'customer'`), which is why staff, visitor, API-key and system behaviour is as it was.
+
+- The guard is an **allow-list** of the four known principal types (`app.principal_type IN ('staff','visitor','apikey','system')`), and the customer branch also requires `app.principal_type = 'customer'` and a contact id: an unset, misspelt or differently cased type reads nothing, and a customer with no contact reads nothing. A table not named below gets one `<table>_no_customer` policy, `FOR ALL`, that refuses the customer every read and write. This is the default: a new tenant table is invisible to customers until someone decides otherwise (`CUSTOMER_TABLE_ACCESS` in `packages/db/src/rls.ts`, and `rls.test.ts` fails if a table has no customer policy).
+- **`tickets`**: a row is readable only when `portal_eligible` (not deleted, not merged away, not Spam) **and** the customer is on it, meaning `portal_contact_ids @> ARRAY[<contact>]`, **or** `sees = 'account'`, the row's `account_id` is the customer's, and it is not `portal_private`. The department layer above still applies to the same row, with `app.department_ids` set to the departments the brand shows in the portal (`brands.settings.portal.departmentIds`, D-65) or `app.all_departments` when it shows them all: a ticket in a hidden department is invisible even to its requester.
+- **`ticket_messages`**: the same test on the message's own `portal_contact_ids` and `portal_account_id`, and the message must be `public` or `ai`. A note and a system line never reach a customer.
+- **`attachments`**: the same test, `status = 'ready'`, and the file must be on a message a customer may read (an attachment on a note, or on no message yet, carries an empty audience).
+- **`customer_sessions`**: readable by the system path, by staff (the contact page, M21-06) and by the customer it belongs to (its own rows); written by the system path alone. **`customer_sign_in_tokens`**: the system path alone, for reading as well as writing. The lookup of a session by its token, and the spending of a link, happen before any principal exists, so M21-02 runs them as the explicit system context.
+- **No policy joins.** The two ticket-scoped tables carry what the policy needs, the way `department_id` does, kept by trigger from the ticket: `portal_contact_ids` (the requester, plus every CC whose address is a **verified email identity of that CC's contact** and whose `source` is `agent` or `email_authenticated`, so neither an unverified address nor a Cc from mail that failed authentication, a ticket merge or an import grants the ticket, ADR 0060 §7 and §2.5) and `portal_account_id` (the ticket's account while the company view may show the row, else null). `tickets` keeps `account_id` (the requester's account **now**), `portal_eligible` and `portal_contact_ids` itself. Triggers: `tickets_portal_scope` (on insert and on a change of contact, deletion, merge or status), `tickets_portal_push` (to messages, then attachments, when any of those change), `ticket_messages_portal_scope` and `attachments_portal_scope` (on the way in), `ticket_participants_portal*` and `contact_identities_portal_*` (a CC added or removed, an identity verified or unverified), `contacts_portal_account` (a contact moved to another account moves its tickets, one set-based statement per table). Whatever a caller writes in these columns is recomputed from the ticket on the next insert or update that names them (the triggers fire on any `UPDATE` of a `portal_*` column or of `account_id`, as well as on the ticket facts they derive from), so `UPDATE tickets SET portal_contact_ids = ...` does not stick; the same holds for messages and attachments. The ticket row is read `FOR SHARE` by the message trigger, and the message row by the attachment trigger, so a message or file inserted while the ticket is made private or Spam in another transaction ends with the new audience whichever commits first. The customer principal gets **no write** on any table in M21-01; M21-04 adds the inserts a reply and a new ticket need.
+- **Output DTOs (layer 4).** A row-level policy cannot hide a column, so the portal's queries project the columns they return and its output schemas have no field for `ai_meta`, `email` headers, notes or anything staff-only.
+
 ### 1.4 Workers and WebSockets
 
 - Every job payload carries `brandId`. The worker opens a transaction and sets `app.brand_ids = {brandId}`, `app.all_departments = true`, `app.principal_type = system` before any query. A job that needs several brands enqueues one child job per brand.
@@ -75,6 +98,20 @@ Each is an integration test against real Postgres, required in CI, and extended 
 - API key with `tickets:read` attempting a write: fails. API key of brand A reading brand B: fails.
 - Worker job for brand A cannot touch brand B rows.
 - Runtime role cannot bypass RLS (`SET row_security = off` is rejected).
+
+**Customer principal (M21-01).** `packages/db/src/portal-isolation.integration.test.ts` and the per-table sweep in `rls.integration.test.ts`:
+
+- Brand A's customer reads no row of brand B, in `tickets`, `ticket_messages` and `customer_sessions`, whatever the query names.
+- A requester sees their own ticket; a non-requester who is not a CC sees nothing under `own`. Under `managers` a manager sees the account's tickets and a member only their own; under `all` every member sees them. Another company's tickets are never visible.
+- A `portal_private` ticket is hidden from coworkers but not from its requester or its CCs.
+- A CC with a verified email identity sees the ticket and its thread; one with an unverified identity does not, and gains it the moment the identity is verified and loses it when it is not.
+- A note, a system line, a pending file, a file of a note and a file on no message are never returned; a message whose kind changes updates its files.
+- A ticket in a department the brand does not show is invisible even to its requester; a deleted, spam or merged-away ticket is invisible, and visible again when it is restored, un-spammed or unmerged, with its thread.
+- A contact moved to another account: the old account's members lose its tickets, messages and files and the new account's gain them; a ticket whose contact changes takes the new contact's account; deleting an account clears `account_id`. At 50,000 tickets, one move with its 50,000 messages and 50,000 files takes about 30 s on a laptop container (bound 120 s).
+- Every tenant table other than the ones above returns zero rows to a customer, and a customer cannot insert, update or delete in any tenant table. A customer cannot create, change or delete a ticket, a message or a file, and cannot reach `ticket_participants`, `ticket_activity`, `contacts`, `contact_identities`, `accounts`, notes, the audit log, `ai_calls`, SLA clocks, time entries, tags, statuses, departments or sign-in links.
+- A session is read by the system path, staff and its owner only, and written by the system path only; a sign-in link is readable and writable by the system path only; a session ends with its contact or identity.
+- Staff, visitor, API-key and system principals read what they read before, and staff still write tickets and messages.
+- Every customer policy is `RESTRICTIVE`, so a mistake in one can only hide rows.
 
 ---
 
@@ -181,6 +218,8 @@ counts as a zero or enters score averages. Staff may read it as
 `imported_unscored`, with no share link. Each changed imported answer writes an
 inert dated history event; repeats change neither row. Importing an answer emits
 no native `csat.received` action, workflow, notification or vendor send.
+
+**How a CC was added (`ticket_participants.source`).** `agent` (a person added it), `email` (a `To` or `Cc` line of inbound mail that failed authentication, or any CC from before M21-01, which cannot be told apart and so is treated as unauthenticated), `email_authenticated` (the same, from mail whose authentication passed), `merge` and `import`. The customer portal shows a ticket to a CC only when the source is `agent` or `email_authenticated` and the address is a verified email identity of that CC's contact. A forged `Cc` therefore cannot hand a ticket to whoever owns the address, and neither does an import or the secondary contact of a merge. The inbound router only records the source; its threading is unchanged.
 
 ### 2.6 Reply windows on the Meta channels
 
@@ -528,6 +567,7 @@ Per brand, set by Admin (defaults in bold):
 | Staff notifications and their email batches | 30 days (fixed) | Hard delete; a batch still pending is kept |
 | Bulk operations and their items | 7 days (fixed) | Hard delete (M14-03); the Undo they serve lasts 60 seconds |
 | Knowledge chunks of a removed source | immediate | Hard delete |
+| Customer portal sessions and sign-in links (`customer_sessions`, `customer_sign_in_tokens`; M21) | Sessions end at expiry, sign-out, loss of the identity they were issued for, contact merge or erasure and when the brand turns the portal off; links 15 minutes | Owned by M21-02 (issue and spend) and M21-08 (lifecycle and the sweep of expired rows); until then the rows are written by nothing |
 
 - `maintenance.retention` runs nightly per brand and logs counts to the audit log.
 - **Brand deletion**: Admin soft-deletes → 30-day grace with the brand disabled (widget, help center and the brand's own channel endpoints answer 410; an endpoint the install shares across brands, the Meta webhook, answers 200 and drops the brand's entries, because a non-200 there is Meta's cue to redeliver or unsubscribe for every brand, ADR 0025 (4)) → hard purge of every row, S3 prefix, Redis key, and Caddy domain. Ticket numbers of a deleted brand are never reused because the prefix is reserved.

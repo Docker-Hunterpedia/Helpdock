@@ -111,6 +111,10 @@ export const activityActorFor = (
       return { actorType: 'visitor', actorId: principal.id, via: 'ui' };
     case 'system':
       return { actorType: 'system', actorId: principal.jobId, via: 'system' };
+    case 'customer':
+      // A customer acts only through the portal's routes, which M21-04 adds
+      // together with the actor type their activity rows need.
+      throw new Error('A customer principal has no activity actor yet (M21-04)');
   }
 };
 

@@ -117,6 +117,7 @@ const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
   aiCountsAsFirstResponse: true,
   slaCountReopens: false,
   priorityLabels: {},
+  portal: { enabled: false, newCustomers: false, departmentIds: 'all' },
 });
 
 const harness = (options: {

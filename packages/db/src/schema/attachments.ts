@@ -117,6 +117,18 @@ export const attachments = pgTable(
       .notNull()
       .default(sql`'{}'::jsonb`),
     scanStatus: attachmentScanStatusEnum('scan_status').notNull().default('skipped'),
+    /**
+     * M21-01. The ticket's `portal_contact_ids` as of now, copied onto the row
+     * so the customer policy needs no join; empty for a row a customer never
+     * sees (a note, an attachment of a note). Trigger-kept; never written by a caller.
+     */
+    portalContactIds: uuid('portal_contact_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    /**
+     * M21-01. The ticket's account while the company view may show this row:
+     * null when the ticket is private, not eligible, or the row is not one a
+     * customer sees. Trigger-kept; never written by a caller.
+     */
+    portalAccountId: uuid('portal_account_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     /** When the worker finished, either way. Null while pending or processing. */
     processedAt: timestamp('processed_at', { withTimezone: true }),

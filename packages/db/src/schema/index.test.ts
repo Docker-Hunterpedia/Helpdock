@@ -47,6 +47,8 @@ describe('the schema', () => {
       'contacts',
       'csat_responses',
       'custom_field_defs',
+      'customer_sessions',
+      'customer_sign_in_tokens',
       'departments',
       'email_deliveries',
       'email_outbound_settings',
@@ -411,6 +413,35 @@ describe('the indexes and constraints', () => {
   it('stores a hash of the survey link, never the link', () => {
     expect(columnsOf('csat_responses')).toContain('token_hash');
     expect(columnsOf('csat_responses')).not.toContain('token');
+  });
+
+  it('stores a hash of a portal session and of a sign-in link, never the token, each unique', () => {
+    for (const table of ['customer_sessions', 'customer_sign_in_tokens']) {
+      expect(columnsOf(table)).toContain('token_hash');
+      expect(columnsOf(table)).not.toContain('token');
+      const index = configOf(table).indexes.find((entry) =>
+        entry.config.columns.some((column) => 'name' in column && column.name === 'token_hash'),
+      );
+      expect(index?.config.unique, table).toBe(true);
+    }
+  });
+
+  it('ends a portal session with its contact and with the identity it was issued for', () => {
+    const cascading = configOf('customer_sessions')
+      .foreignKeys.filter((entry) => entry.onDelete === 'cascade')
+      .map((entry) => entry.reference().columns[0]?.name)
+      .sort();
+
+    expect(cascading).toEqual(['brand_id', 'contact_id', 'contact_identity_id']);
+  });
+
+  it('hides a ticket from the portal until the triggers have shown it, because the columns default closed', () => {
+    const column = (name: string) =>
+      configOf('tickets').columns.find((entry) => entry.name === name);
+
+    expect(column('portal_eligible')).toMatchObject({ notNull: true, default: false });
+    expect(column('portal_private')).toMatchObject({ notNull: true, default: false });
+    expect(column('account_id')?.notNull).toBe(false);
   });
 
   it('keeps time that was logged when the reply it came with is gone', () => {

@@ -2,10 +2,12 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  missingCustomerPolicies,
   missingOwnerPolicies,
   missingPolicyTables,
   OWNER_SCOPED_TABLES,
   ownerPolicy,
+  renderCustomerPolicyStatements,
   renderTenantPolicyStatements,
 } from '../src/rls.ts';
 
@@ -42,7 +44,10 @@ const missing = missingPolicyTables(committed);
 const missingOwners = OWNER_SCOPED_TABLES.filter(({ name }) =>
   missingOwnerPolicies(committed).includes(name),
 );
-if (missing.length === 0 && missingOwners.length === 0) {
+// The customer principal's restrictive policies come last of all, after every
+// permissive and owner policy they narrow (M21-01).
+const missingCustomer = missingCustomerPolicies(committed);
+if (missing.length === 0 && missingOwners.length === 0 && missingCustomer.length === 0) {
   process.stdout.write('Every tenant table already has its policies. Nothing to write.\n');
 } else {
   const target = path.join(directory, latest);
@@ -54,8 +59,10 @@ if (missing.length === 0 && missingOwners.length === 0) {
         `--> statement-breakpoint\n${ownerPolicy(name, column, { systemWrites })}\n`,
     )
     .join('');
-  await writeFile(target, `${existing.trimEnd()}\n${tenant}${owners}`, 'utf8');
+  const customer =
+    missingCustomer.length === 0 ? '' : renderCustomerPolicyStatements(missingCustomer);
+  await writeFile(target, `${existing.trimEnd()}\n${tenant}${owners}${customer}`, 'utf8');
   process.stdout.write(
-    `Appended policies for ${[...missing.map((table) => table.name), ...missingOwners.map((table) => `${table.name} (owner)`)].join(', ')} to ${target}\n`,
+    `Appended policies for ${[...missing.map((table) => table.name), ...missingOwners.map((table) => `${table.name} (owner)`), ...missingCustomer.map((table) => `${table.name} (customer)`)].join(', ')} to ${target}\n`,
   );
 }

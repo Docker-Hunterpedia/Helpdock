@@ -1,6 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  CUSTOMER_TABLE_ACCESS,
+  customerPolicies,
+  missingCustomerPolicies,
   missingOwnerPolicies,
   missingPolicyTables,
   ownerPolicy,
@@ -110,6 +113,92 @@ describe('ownerPolicy', () => {
   });
 });
 
+describe('customerPolicies (M21-01)', () => {
+  const customerSetting = `current_setting('${SESSION_SETTINGS.principalType}', true)`;
+  const policiesOf = (table: string): string => customerPolicies(table).join('\n');
+
+  it('refuses the customer everything on a table that is not listed, with one restrictive policy', () => {
+    const statements = customerPolicies('ticket_activity');
+
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('AS RESTRICTIVE FOR ALL');
+    expect(statements[0]).toContain(
+      `${customerSetting}) IN ('staff', 'visitor', 'apikey', 'system')`,
+    );
+    expect(statements[0]).toContain('WITH CHECK');
+  });
+
+  it('never grants anything: every statement is restrictive', () => {
+    for (const { name } of TENANT_TABLES) {
+      for (const statement of customerPolicies(name)) {
+        expect(statement).toContain('AS RESTRICTIVE');
+      }
+    }
+  });
+
+  it('lets a customer read a ticket only as requester, CC or, in the company view, a non-private account ticket', () => {
+    const read = policiesOf('tickets');
+
+    expect(read).toContain('portal_eligible AND deleted_at IS NULL AND merged_into_id IS NULL');
+    expect(read).toContain(
+      `portal_contact_ids @> ARRAY[nullif(current_setting('${SESSION_SETTINGS.customerContactId}', true), '')::uuid]`,
+    );
+    expect(read).toContain(
+      `current_setting('${SESSION_SETTINGS.customerSees}', true) = 'account' AND NOT portal_private`,
+    );
+    expect(read).toContain(
+      `account_id = nullif(current_setting('${SESSION_SETTINGS.customerAccountId}', true), '')::uuid`,
+    );
+  });
+
+  it('shows only public and AI messages, and only ready attachments', () => {
+    expect(policiesOf('ticket_messages')).toContain("kind IN ('public', 'ai')");
+    expect(policiesOf('attachments')).toContain("status = 'ready'");
+  });
+
+  it.each(['tickets', 'ticket_messages', 'attachments'])(
+    'refuses a customer every write on %s, and passes every other principal through',
+    (table) => {
+      const statements = customerPolicies(table);
+      for (const command of ['INSERT', 'UPDATE', 'DELETE']) {
+        const policy = statements.find((statement) => statement.includes(`FOR ${command}`)) ?? '';
+        expect(policy).toContain(`${customerSetting}) IN ('staff', 'visitor', 'apikey', 'system')`);
+      }
+    },
+  );
+
+  it('lets the system write sessions, lets staff and the owner read them, and nobody else', () => {
+    const sessions = policiesOf('customer_sessions');
+
+    expect(sessions).toContain(`${customerSetting} IN ('system', 'staff')`);
+    expect(sessions).toContain(`${customerSetting} = 'customer' AND contact_id =`);
+    for (const command of ['INSERT', 'UPDATE', 'DELETE']) {
+      const policy =
+        customerPolicies('customer_sessions').find((statement) =>
+          statement.includes(`FOR ${command}`),
+        ) ?? '';
+      expect(policy).toContain(`${customerSetting} = 'system'`);
+    }
+  });
+
+  it('leaves sign-in tokens to the system path, for reading as well as writing', () => {
+    const [policy] = customerPolicies('customer_sign_in_tokens');
+
+    expect(policy).toContain('FOR ALL');
+    expect(policy).toContain(`USING (${customerSetting} = 'system')`);
+  });
+
+  it('lists only tables that are tenant tables', () => {
+    const tenant = new Set(TENANT_TABLES.map((table) => table.name));
+
+    expect(Object.keys(CUSTOMER_TABLE_ACCESS).filter((name) => !tenant.has(name))).toEqual([]);
+  });
+
+  it.each(['tickets; drop table users', 'Tickets', ''])('refuses %s as a table name', (name) => {
+    expect(() => customerPolicies(name)).toThrow(TypeError);
+  });
+});
+
 describe('the committed migrations', () => {
   const directory = new URL('../drizzle/', import.meta.url);
   const committed = readdirSync(directory)
@@ -122,6 +211,10 @@ describe('the committed migrations', () => {
     // Run `pnpm --filter @helpdock/db gen:rls` when this fails: it appends the
     // missing policies to the migration that creates the table.
     expect(missingPolicyTables(committed).map((table) => table.name)).toEqual([]);
+  });
+
+  it('puts every tenant table under a customer policy, so the principal reads nothing by default', () => {
+    expect(missingCustomerPolicies(committed).map((table) => table.name)).toEqual([]);
   });
 
   it('puts every owner-scoped table under its owner policy', () => {

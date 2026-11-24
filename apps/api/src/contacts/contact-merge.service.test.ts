@@ -32,6 +32,7 @@ const contact = (id: string, overrides: Partial<ContactRow> = {}): ContactRow =>
   id,
   brandId: BRAND,
   accountId: null,
+  accountRole: 'member',
   name: id === SURVIVOR ? 'Mona Khalil' : 'Mona K.',
   locale: null,
   timezone: null,

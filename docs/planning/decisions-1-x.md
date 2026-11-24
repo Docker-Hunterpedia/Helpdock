@@ -137,6 +137,19 @@ Plan: [M20-native-clients-and-sdks.md](../in-development/M20-native-clients-and-
 | D-60 | Flutter SDK: build it in-house (16 days) or invite the community with the conformance kit (about 4 days of review)? | Community-led with maintainer review. | Q17-7 | Community-led with maintainer review. (2026-10-20) |
 | D-61 | Licence of the client SDKs and `@helpdock/widget-client`. AGPL in a customer's mobile app is an adoption barrier; MIT or Apache-2.0 for the client SDKs only, with the server staying AGPL, is common practice. | MIT for the SDKs. | Q17-8 | MIT for the client SDKs only; the server stays AGPL. (2026-10-20) |
 
+## M21 Customer portal
+
+Plan: [M21-customer-portal.md](../in-development/M21-customer-portal.md).
+
+| Id | Question | Recommendation | Source | Answer |
+|---|---|---|---|---|
+| D-62 | Who in a customer company sees the company's tickets in the portal? | A setting per account: own tickets (default), managers, or all members (ADR 0060). | #466 | A setting per account, as recommended. (2026-11-24) |
+| D-63 | May someone with no ticket yet sign in (and so open their first ticket in the portal), or only existing contacts? | Existing contacts only by default, with a brand setting to allow new customers; the web form stays the way in for strangers. | #466 | |
+| D-64 | May a member who sees a coworker's ticket also reply to it? | Yes; replying adds them as a participant, and staff see who wrote. | #466 | |
+| D-65 | Can a brand keep some departments' tickets out of the portal entirely (for example HR)? | Yes, a list of departments shown, all by default. | #466 | |
+| D-66 | Is the restricted knowledge base (articles for signed-in customers only) part of M21? | No; it needs a third visibility and retrieval audience. Keep it on the backlog. | REQUIREMENTS backlog | |
+| D-67 | How long does a customer stay signed in? | 30 days, sliding, with "Sign out everywhere". | ADR 0059 | |
+
 ## Prior-art gap check
 
 On 2026-10-20 the plans were checked against a full walk through another open-source helpdesk's admin and agent screens (OpenDesk, Apache-2.0): every settings tab, every "New…" form and the ticket screen. Each item was checked against Helpdock 1.0 (code and guides) and the plans above. Items Helpdock already has or already plans need no answer; the additions were made in the plans named; the declined items are listed with the reason, and the owner may overrule any of them.

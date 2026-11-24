@@ -130,6 +130,8 @@ export interface ReplyAddressing {
 /** `References` stays short enough for any relay; the newest ids are the ones that file a reply. */
 const REFERENCES_MAX = 20;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const reference = (prefix: string, number: number): string => `${prefix}-${String(number)}`;
 
 export class EmailRepository {
@@ -612,11 +614,11 @@ export class EmailRepository {
     }
     // An erased person's email is neither quoted nor threaded to: the reply goes out as
     // an ordinary one.
-    if (row.authorId !== null) {
+    if (row.authorId !== null && UUID.test(row.authorId)) {
       const [person] = await tx
         .select({ anonymisedAt: contacts.anonymisedAt })
         .from(contacts)
-        .where(sql`${contacts.id}::text = ${row.authorId}`)
+        .where(eq(contacts.id, row.authorId))
         .limit(1);
       if (person?.anonymisedAt != null) {
         return null;

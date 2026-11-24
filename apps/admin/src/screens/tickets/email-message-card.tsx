@@ -60,6 +60,8 @@ export function EmailMessageCard({
   const t = useT();
   const tokens = useSemanticTokens();
   const [quoted, setQuoted] = useState(false);
+  // An erased sender has neither a name nor an address: the card says "Contact".
+  const shownAuthor = author === '' ? t('tickets:thread.contact') : author;
   const inline = new Set(email.inlineAttachmentIds);
   const figures = message.attachments.filter((attachment) => inline.has(attachment.id));
   const files = message.attachments.filter((attachment) => !inline.has(attachment.id));
@@ -72,7 +74,7 @@ export function EmailMessageCard({
       id={anchorId}
       // Focusable by script only: "In reply to …" moves focus here.
       tabIndex={anchorId === undefined ? undefined : -1}
-      aria-label={t('tickets:email.label', { name: author })}
+      aria-label={t('tickets:email.label', { name: shownAuthor })}
       sx={{
         outline: 'none',
         display: 'flex',
@@ -99,7 +101,7 @@ export function EmailMessageCard({
           flexShrink: 0,
         }}
       >
-        {initialsOf(author)}
+        {initialsOf(shownAuthor)}
       </Box>
       <Box
         sx={{
@@ -137,9 +139,10 @@ export function EmailMessageCard({
               component="strong"
               sx={{ color: 'text.primary', fontWeight: 500, fontSize: 13 }}
             >
-              {author}
+              {shownAuthor}
             </Typography>
-            <bdi>{`<${email.from.address}>`}</bdi>
+            {/* An erased sender has no address: nothing is drawn rather than "<>". */}
+            {email.from.address === '' ? null : <bdi>{`<${email.from.address}>`}</bdi>}
             <Box component="span" sx={{ marginInlineStart: 'auto', whiteSpace: 'nowrap' }}>
               <bdi>{time}</bdi>
             </Box>

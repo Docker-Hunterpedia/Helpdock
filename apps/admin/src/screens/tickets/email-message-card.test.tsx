@@ -46,6 +46,44 @@ const openVat = async (channelsApi: MockChannelsApi = new MockChannelsApi()) => 
   return { ...rendered, card };
 };
 
+describe('the email card of an erased sender (M14-31)', () => {
+  it('draws no empty <> and falls back to the contact label', async () => {
+    const apis = await signedInMockApis();
+    const tickets = apis.tickets as MockTicketsApi;
+    const real = await tickets.ticket('brand', MOCK_TICKET_VAT);
+    vi.spyOn(tickets, 'ticket').mockResolvedValue({
+      ...real,
+      messages: {
+        ...real.messages,
+        messages: real.messages.messages.map((message) =>
+          message.email === undefined
+            ? message
+            : {
+                ...message,
+                authorId: null,
+                email: { ...message.email, from: { address: '', name: null } },
+              },
+        ),
+      },
+    });
+    renderApp(<AppRoutes />, {
+      authApi: apis.auth,
+      staffApi: apis.staff,
+      contactsApi: apis.contacts,
+      ticketingApi: apis.ticketing,
+      ticketsApi: tickets,
+      uploader: apis.uploader,
+      channelsApi: new MockChannelsApi(),
+      initialEntries: [`/tickets/${MOCK_TICKET_VAT}?view=all`],
+    });
+
+    const card = await screen.findByRole('article', { name: /^Email from / });
+
+    expect(within(card).queryByText('<>')).not.toBeInTheDocument();
+    expect(within(card).getByText('Contact')).toBeVisible();
+  });
+});
+
 describe('the email card', () => {
   it('draws the header strip, the body, the inline image and the file', async () => {
     const { card } = await openVat();

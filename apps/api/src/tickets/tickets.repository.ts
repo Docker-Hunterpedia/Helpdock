@@ -87,6 +87,8 @@ export interface TicketListPage {
   readonly named: number;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const withStatus = (row: { tickets: TicketRow; ticket_statuses: TicketStatusRow }) => ({
   ticket: row.tickets,
   status: row.ticket_statuses,
@@ -580,13 +582,15 @@ export class TicketRepository {
 
   /** M14-31. Whether the contact a message names (`author_id`) has been erased. */
   async contactAnonymised(tx: DbTransaction, contactId: string | null): Promise<boolean> {
-    if (contactId === null) {
+    // `author_id` is text; one that is not a uuid names no contact, and a uuid compares on
+    // the primary key.
+    if (contactId === null || !UUID.test(contactId)) {
       return false;
     }
     const rows = await tx
       .select({ anonymisedAt: contacts.anonymisedAt })
       .from(contacts)
-      .where(sql`${contacts.id}::text = ${contactId}`)
+      .where(eq(contacts.id, contactId))
       .limit(1);
 
     return rows[0]?.anonymisedAt != null;

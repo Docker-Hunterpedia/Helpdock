@@ -1,6 +1,6 @@
 # 0060 Company-wide ticket visibility is a setting per account, enforced by row-level security
 
-Status: proposed (owner decision D-62, 2026-11-24)
+Status: accepted (owner decision D-62, 2026-11-24)
 Date: 2026-11-24
 
 ## Context

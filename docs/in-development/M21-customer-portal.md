@@ -2,12 +2,12 @@
 
 Status: planned (not started)
 Owner: @Docker-Hunterpedia
-Phase: 5 — 1.x. Proposed release: the next minor after the plan is accepted
+Phase: 5 — 1.x. Proposed release: a minor of its own once the exit criteria are met (plan approved by the owner on 2026-11-24)
 Depends on: M1 (tickets, contacts, accounts), M2 (email, web form), M5 (help center pages and hosts), M18-10 (built-in CAPTCHA)
 Effort: about 41 working days for one person, about 8 weeks (see Deliverables)
 PRD: [Phase 5 · M21](../planning/PRD.md#m21-customer-portal)
 Owner decisions: D-62 to D-67 in [decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal)
-ADRs (proposed): [0059](../decisions/0059-customer-sessions-by-emailed-link.md), [0060](../decisions/0060-account-wide-ticket-visibility.md)
+ADRs: [0059](../decisions/0059-customer-sessions-by-emailed-link.md), [0060](../decisions/0060-account-wide-ticket-visibility.md)
 Tracking issue: [#466](https://github.com/Docker-Hunterpedia/Helpdock/issues/466)
 
 A customer signs in to a brand's help center with a link sent to their email,
@@ -311,9 +311,8 @@ backlog line; `.env.example` if a key is added (none planned).
 
 ## Open questions
 
-D-62 to D-66 were answered on 2026-11-24. D-67 (how long a customer stays
-signed in; 30 days proposed) is open in
-[decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal).
+None. D-62 to D-67 were answered on 2026-11-24, when the owner approved this
+plan ([decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal)).
 
 ## Build order
 

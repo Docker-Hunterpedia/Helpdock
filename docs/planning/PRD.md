@@ -113,7 +113,7 @@ Update this table in the same PR that changes a milestone's status.
 | 5 1.x | M18 Sign-in options | M0, M4, M9, M11 | 5–7 | in development ([#275](https://github.com/Docker-Hunterpedia/Helpdock/issues/275)–[#287](https://github.com/Docker-Hunterpedia/Helpdock/issues/287)) | 2026-10-20 | |
 | 5 1.x | M19 Customer surfaces polish | M2, M4, M5 (M19-08: M15-11) | 9–10 | planned | | |
 | 5 1.x | M20 Native clients and SDKs | M4, M15-01, M17 | 9–11 | planned | | |
-| 5 1.x | M21 Customer portal | M1, M2, M5, M18-10 | 8 | planned ([#466](https://github.com/Docker-Hunterpedia/Helpdock/issues/466)) | | |
+| 5 1.x | M21 Customer portal | M1, M2, M5, M18-10 | 8 | planned, plan approved 2026-11-24 ([#466](https://github.com/Docker-Hunterpedia/Helpdock/issues/466)) | | |
 | | **Total, phase 5 (M12–M19)** | | **102–110** (about 533 person-days; M20 adds 45–57) | | | |
 
 Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. Phase 5 figures are the plans' person-day estimates divided by five; milestones from M0 to M11 were built far faster than estimated, but review, the owner's verification and real-provider runs do not shrink the same way, so they stay the planning number. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.
@@ -515,7 +515,7 @@ Every milestone is useful on its own, so the phase can stop after any of them. E
 | 1.2 | The rest of M13, M15 Self-host operations, M16 More importers and undo, M19 Customer surfaces polish | about 249 |
 | 1.3 | M17 Apps and languages | about 59 |
 | Later 1.x | M20 Native clients and SDKs, once M17's installable admin has shown demand | 45–57 |
-| Next minor after its plan is accepted | M21 Customer portal, asked for by a team evaluating Helpdock (2026-11) | about 41 |
+| A minor of its own | M21 Customer portal, asked for by a team evaluating Helpdock (2026-11) | about 41 |
 
 #### M12 AI workspace
 
@@ -830,7 +830,7 @@ Exit criteria:
 
 #### M21 Customer portal
 
-Depends on: M1 (tickets, contacts, accounts), M2 (email, web form), M5 (help center), M18-10 (built-in CAPTCHA). About 41 working days. Proposed for the next minor after the plan is accepted. Design: ADRs [0059](../decisions/0059-customer-sessions-by-emailed-link.md), [0060](../decisions/0060-account-wide-ticket-visibility.md). Plan: [M21-customer-portal.md](../in-development/M21-customer-portal.md). Planned on 2026-11-24 after a team comparing Helpdock with Freshdesk asked that an employee of a client company see their coworkers' tickets.
+Depends on: M1 (tickets, contacts, accounts), M2 (email, web form), M5 (help center), M18-10 (built-in CAPTCHA). About 41 working days. Plan approved by the owner on 2026-11-24. Design: ADRs [0059](../decisions/0059-customer-sessions-by-emailed-link.md), [0060](../decisions/0060-account-wide-ticket-visibility.md). Plan: [M21-customer-portal.md](../in-development/M21-customer-portal.md). Planned on 2026-11-24 after a team comparing Helpdock with Freshdesk asked that an employee of a client company see their coworkers' tickets.
 
 A customer signs in to a brand's help center with a link sent to their email, reads their tickets on every channel, answers them and opens new ones; staff choose per customer company whether its members see only their own tickets, all of the company's, or whether named managers do.
 

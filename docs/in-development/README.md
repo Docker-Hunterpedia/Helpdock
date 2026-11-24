@@ -19,7 +19,7 @@ issues are created (PRD §3). The open questions of all of them are in
 | [M18-sign-in-options.md](M18-sign-in-options.md) | M18 Sign-in options | 1.1 | about 32.5 |
 | [M19-customer-surfaces-polish.md](M19-customer-surfaces-polish.md) | M19 Customer surfaces polish | 1.2 | about 47 |
 | [M20-native-clients-and-sdks.md](M20-native-clients-and-sdks.md) | M20 Native clients and SDKs | later 1.x | 45–57 |
-| [M21-customer-portal.md](M21-customer-portal.md) | M21 Customer portal | the next minor after its plan is accepted | about 41 |
+| [M21-customer-portal.md](M21-customer-portal.md) | M21 Customer portal | a minor of its own | about 41 |
 
 M0 Skeleton shipped on 2026-09-19, M1 Ticketing core on 2026-09-25, M2
 Email channel, M3 Automation and SLAs, M4 Widget and realtime and M5 Help

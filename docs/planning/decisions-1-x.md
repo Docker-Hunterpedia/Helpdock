@@ -148,7 +148,7 @@ Plan: [M21-customer-portal.md](../in-development/M21-customer-portal.md).
 | D-64 | May a member who sees a coworker's ticket also reply to it? | Yes; replying adds them as a participant, and staff see who wrote. | #466 | Yes, read and reply. (2026-11-24) |
 | D-65 | Can a brand keep some departments' tickets out of the portal entirely (for example HR)? | Yes, a list of departments shown, all by default. | #466 | Yes, the brand chooses the departments. (2026-11-24) |
 | D-66 | Is the restricted knowledge base (articles for signed-in customers only) part of M21? | No; it needs a third visibility and retrieval audience. Keep it on the backlog. | REQUIREMENTS backlog | Not now; it stays on the backlog. (2026-11-24) |
-| D-67 | How long does a customer stay signed in? | 30 days, sliding, with "Sign out everywhere". | ADR 0059 | |
+| D-67 | How long does a customer stay signed in? | 30 days, sliding, with "Sign out everywhere". | ADR 0059 | Accepted with the plan. (2026-11-24) |
 
 ## Prior-art gap check
 

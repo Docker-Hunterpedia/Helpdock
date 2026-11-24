@@ -1,6 +1,6 @@
 # 0059 Customers sign in by an emailed link to a host-bound session
 
-Status: proposed
+Status: accepted (owner approved the M21 plan, 2026-11-24)
 Date: 2026-11-24
 
 ## Context

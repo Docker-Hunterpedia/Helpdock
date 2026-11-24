@@ -364,6 +364,13 @@ If the hint matches but the sender is not a participant, a new ticket is created
 
 Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`, `mailer-daemon@`) never create tickets unless the brand allow-lists them; they are logged.
 
+**A reply aimed at one email (M14-31).** A staff public reply may name the customer email it answers (`replyToMessageId`). The target must be a public, inbound, email-channel message of the same ticket that the caller can read: another kind or ticket is a 400 on `body.replyToMessageId` (`reply-to.not-a-customer-email`; any target on a note is `reply-to.not-allowed`), and a message that is gone or that the policies hide is a 409 (`reply-to.gone`) with nothing sent. The link is stored on the reply (`ON DELETE SET NULL`), so a purged target costs the reply only its "In reply to" line. At delivery, not at write time:
+
+- `In-Reply-To` is the target's `Message-ID`, and `References` is the chain that arrived with it (kept on the message's `email` metadata; for older messages, the thread before it) plus its id, newest 20. Every id read from storage must be a single well-formed `msg-id` before it is written into a header; one that is not is dropped, and a target with no usable `Message-ID` leaves the reply threaded as an ordinary one.
+- The mail carries, under the reply, its signature and note, the line "On <date> at <time>, <name> wrote:" in the customer's language (dates in UTC) and the target's plain text, cut at 2,000 characters, as a blockquote in the HTML part and `> ` lines in the text part. Customer text is escaped, never rendered, and the attachments of the quoted email are not re-sent.
+- The stored reply is only what the agent wrote, so the thread, search tokens, AI and webhooks never see the quote. An ordinary reply (no target) is unchanged and threads to the customer's latest email.
+- To, Cc and From are those of any reply; they do not follow the targeted email's sender or the address it was written to.
+
 ### 4.4 Contact merge
 
 | Identifier | Verified when | Auto-merge |

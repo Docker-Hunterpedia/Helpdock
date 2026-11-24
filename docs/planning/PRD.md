@@ -629,6 +629,7 @@ An agent who lives in Helpdock all day works the queue at the speed of their han
 | M14-28 | More webhook events for tickets, messages, contacts and accounts | R §4.12 |
 | M14-29 | Reports: volume by tag, and backlog by status with its unassigned share | R §4.8 |
 | M14-30 | A button to hide and show the ticket list | owner request 2026-11 |
+| M14-31 | Reply to one email of a ticket, quoted and threaded to it | owner request 2026-11 |
 
 Exit criteria:
 

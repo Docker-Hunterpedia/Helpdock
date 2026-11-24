@@ -41,6 +41,8 @@ export interface PendingMessage {
    * the api writes it in the message's own transaction.
    */
   readonly timeSpentSeconds?: number;
+  /** M14-31. The customer email it answers; a retry answers the same one. */
+  readonly replyToMessageId?: string;
   /** When the composer sent it, which is where it sits in the thread. */
   readonly createdAt: string;
   /** Epoch milliseconds of the attempt, for the ten-second rule. */

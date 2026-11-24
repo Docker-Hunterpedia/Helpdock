@@ -10,6 +10,7 @@ import type {
   MentionCandidateList,
   MessageCreateRequest,
   RenderedMacro,
+  ReplyTargetRefusal,
   SnoozePresets,
   Ticket,
   TicketActivityList,
@@ -198,6 +199,23 @@ export interface TicketsApi {
  * `reason` picks a translated sentence — the same arrangement `TicketingError`
  * has for the settings screens.
  */
+/**
+ * M14-31. A public reply whose target email the api refused. `gone` is the one
+ * the composer words ("That message is no longer available"); nothing was sent.
+ */
+export class ReplyTargetError extends Error {
+  readonly reason: ReplyTargetRefusal;
+
+  constructor(reason: ReplyTargetRefusal) {
+    super(`reply-to: ${reason}`);
+    this.name = 'ReplyTargetError';
+    this.reason = reason;
+  }
+}
+
+export const isReplyTargetError = (error: unknown): error is ReplyTargetError =>
+  error instanceof ReplyTargetError;
+
 export class TicketLifecycleError extends Error {
   readonly reason: TicketLifecycleRefusal;
   /**

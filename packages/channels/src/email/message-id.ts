@@ -54,3 +54,22 @@ export const outboundMessageId = ({
   readonly id: string;
   readonly fromAddress: string;
 }): string => `<hd.${KIND_TAG[kind]}.${id}@${messageIdDomain(fromAddress)}>`;
+
+/** One RFC 5322 `msg-id` without its angle brackets: a dot-atom, one `@`, a dot-atom. */
+const SAFE_MESSAGE_ID = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$/;
+const MESSAGE_ID_MAX_LENGTH = 255;
+
+/**
+ * A stored `Message-ID` or `References` entry, as it may go into a header we
+ * write (M14-31): bare, one well-formed id and nothing else. Anything that
+ * could carry a second header, a second id or markup is refused, so a value a
+ * sender chose can never shape ours. Returns the bare id, or undefined.
+ */
+export const safeMessageId = (value: string | null | undefined): string | undefined => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  const bare = value.startsWith('<') && value.endsWith('>') ? value.slice(1, -1) : value;
+
+  return bare.length <= MESSAGE_ID_MAX_LENGTH && SAFE_MESSAGE_ID.test(bare) ? bare : undefined;
+};

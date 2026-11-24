@@ -354,6 +354,12 @@ export const emailMessageMetaSchema = z.object({
    * but is not a participant of.
    */
   mismatch: z.object({ ticketId: z.uuid(), reference: z.string() }).nullable(),
+  /**
+   * M14-31. The message's `References` chain as it arrived, oldest first, so a
+   * reply aimed at this message can file under the same conversation. Absent
+   * on messages stored before that and on imported ones.
+   */
+  references: z.array(z.string().max(998)).max(100).optional(),
 });
 export type EmailMessageMeta = z.infer<typeof emailMessageMetaSchema>;
 

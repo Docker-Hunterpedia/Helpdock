@@ -232,3 +232,25 @@ describe('ticketStatusUpdateRequestSchema (#361)', () => {
     }
   });
 });
+
+describe('messageCreateRequestSchema, replyToMessageId (M14-31)', () => {
+  const base = { kind: 'public', bodyHtml: '<p>Hi</p>' } as const;
+
+  it('accepts a uuid and leaves it out otherwise', () => {
+    const id = '0192c3f0-1a2b-7c3d-8e4f-0000000000d1';
+
+    expect(
+      messageCreateRequestSchema.parse({ ...base, replyToMessageId: id }).replyToMessageId,
+    ).toBe(id);
+    expect(messageCreateRequestSchema.parse(base).replyToMessageId).toBeUndefined();
+  });
+
+  it('refuses anything that is not a uuid', () => {
+    expect(messageCreateRequestSchema.safeParse({ ...base, replyToMessageId: '12' }).success).toBe(
+      false,
+    );
+    expect(messageCreateRequestSchema.safeParse({ ...base, replyToMessageId: null }).success).toBe(
+      false,
+    );
+  });
+});

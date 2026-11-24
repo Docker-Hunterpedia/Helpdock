@@ -467,6 +467,9 @@ export class ConversationRouter {
       inlineAttachmentIds,
       authFailed: message.email.authFailed,
       mismatch: null,
+      ...(message.email.references === undefined || message.email.references.length === 0
+        ? {}
+        : { references: message.email.references.slice(-100) }),
     };
 
     const row = await this.#deps.tickets.insertMessage(tx, {

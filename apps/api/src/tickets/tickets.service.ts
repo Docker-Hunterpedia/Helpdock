@@ -68,6 +68,7 @@ import {
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
 import { readMergeView } from './merge/merge-view.js';
 import { ReplyDeliveryHook } from './reply-delivery.hook.js';
+import { ReplyTargetFailure } from './reply-target-failure.js';
 import { arrivalOf, requestArrival, WIDGET_ENTRY } from './routing/arrival.js';
 import { planSnooze, recordSnooze } from './snooze/snooze-plan.js';
 import {
@@ -797,6 +798,7 @@ export class TicketsService {
     const authorType = authorTypeFor(principal);
     const { ticket, status } = await this.#require(tx, ticketId);
     const context: LifecycleContext = { tx, brandId, actor, now };
+    const replyToMessageId = await this.#replyTarget(tx, ticketId, authorType, input);
 
     // M10-06. A channel that cannot carry this reply refuses it here, before
     // the lock below and before anything is written, so a refusal costs the
@@ -850,6 +852,7 @@ export class TicketsService {
       kind: input.kind,
       authorType,
       authorId: actor.actorId,
+      ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
       bodyHtml: body.html,
       bodyText: body.text,
       channel: target.channel,
@@ -944,6 +947,42 @@ export class TicketsService {
   }
 
   // ---------------------------------------------------------------- internals
+
+  /**
+   * M14-31. The customer email a public staff reply answers, when it names
+   * one: a public, inbound, email message of this ticket. A message the caller
+   * cannot read looks the same as one that is gone (the policies hide it), so
+   * the answer never says which, and a reply is never sent against a quote it
+   * could not have shown.
+   */
+  async #replyTarget(
+    tx: DbTransaction,
+    ticketId: string,
+    authorType: ReturnType<typeof authorTypeFor>,
+    input: MessageCreateRequest,
+  ): Promise<string | undefined> {
+    if (input.replyToMessageId === undefined) {
+      return undefined;
+    }
+    if (input.kind !== 'public' || authorType !== 'staff') {
+      throw new ReplyTargetFailure('not-allowed');
+    }
+
+    const target = await this.#tickets.findMessage(tx, input.replyToMessageId);
+    if (target === undefined) {
+      throw new ReplyTargetFailure('gone');
+    }
+    if (
+      target.ticketId !== ticketId ||
+      target.kind !== 'public' ||
+      target.authorType !== 'contact' ||
+      target.channel !== 'email'
+    ) {
+      throw new ReplyTargetFailure('not-a-customer-email');
+    }
+
+    return target.id;
+  }
 
   /**
    * M1-10's seam. The rules are the media pipeline's — count, ticket, uploader,

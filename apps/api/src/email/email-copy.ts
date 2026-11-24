@@ -72,6 +72,10 @@ export interface CustomerCopy {
   readonly replySubject: (reference: string, subject: string) => string;
   /** "Lina Haddad via Helpdock Billing", the display name of an agent's reply. */
   readonly fromVia: (agent: string, sender: string) => string;
+  /** M14-31. "On Tue 10 Nov 2026 at 12:05, Mona Khalil wrote:". */
+  readonly quoteIntro: (date: string, time: string, name: string) => string;
+  /** Who a quote names when the quoted message has no sender name. */
+  readonly quoteAnonymous: string;
 }
 
 export const customerCopy = (locale: Locale, brandName: string): CustomerCopy => {
@@ -87,6 +91,8 @@ export const customerCopy = (locale: Locale, brandName: string): CustomerCopy =>
     footer: t('customer.footer', { brandName }),
     replySubject: (reference, subject) => t('customer.replySubject', { reference, subject }),
     fromVia: (agent, sender) => t('customer.fromVia', { agent, sender }),
+    quoteIntro: (date, time, name) => t('customer.quoteIntro', { date, time, name }),
+    quoteAnonymous: t('customer.quoteAnonymous'),
   };
 };
 

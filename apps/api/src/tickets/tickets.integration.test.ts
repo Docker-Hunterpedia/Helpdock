@@ -1237,6 +1237,172 @@ describe.skipIf(!hasDocker)('tickets', () => {
     });
   });
 
+  describe('replying to one email (M14-31)', () => {
+    const messagesOf = (ticketId: string, brandId = seeded.brandId) =>
+      `${brandPath(brandId)}/tickets/${ticketId}/messages`;
+
+    /** A message as a mailbox would have filed it, with the facts the guard reads. */
+    const file = async (
+      ticketId: string,
+      values: Partial<typeof ticketMessages.$inferInsert> = {},
+      brandId = seeded.brandId,
+    ): Promise<string> =>
+      withSystem(runtime.db, brandId, async (tx) => {
+        const [next] = await tx
+          .select({ seq: sql<number>`coalesce(max(${ticketMessages.seq}), 0) + 1` })
+          .from(ticketMessages)
+          .where(eq(ticketMessages.ticketId, ticketId));
+        const [ticketRow] = await tx
+          .select({ departmentId: tickets.departmentId })
+          .from(tickets)
+          .where(eq(tickets.id, ticketId));
+        const [row] = await tx
+          .insert(ticketMessages)
+          .values({
+            brandId,
+            ticketId,
+            departmentId: ticketRow?.departmentId ?? '',
+            seq: Number(next?.seq),
+            kind: 'public',
+            authorType: 'contact',
+            bodyHtml: '<p>Can you send the invoice?</p>',
+            bodyText: 'Can you send the invoice?',
+            channel: 'email',
+            externalMessageId: `${uuidv7()}@mail.example.com`,
+            ...values,
+          })
+          .returning({ id: ticketMessages.id });
+
+        return row?.id ?? '';
+      });
+
+    const send = (who: Person, ticketId: string, body: Record<string, unknown>) =>
+      call<TicketMessage & ErrorResponse>('POST', messagesOf(ticketId), who, {
+        kind: 'public',
+        bodyHtml: '<p>The invoice is attached.</p>',
+        ...body,
+      });
+
+    it('stores the link, returns it, and keeps it on the thread', async () => {
+      const { ticket } = await createTicket(sam);
+      const target = await file(ticket.id);
+
+      const sent = await send(sam, ticket.id, { replyToMessageId: target });
+
+      expect(sent.status).toBe(201);
+      expect(sent.body.replyToMessageId).toBe(target);
+      const thread = await call<TicketMessagePage>('GET', messagesOf(ticket.id), sam);
+      const stored = thread.body.messages.find((message) => message.id === sent.body.id);
+      expect(stored?.replyToMessageId).toBe(target);
+      expect(stored?.bodyText).toBe('The invoice is attached.');
+    });
+
+    it('leaves an ordinary reply with no link', async () => {
+      const { ticket } = await createTicket(sam);
+      await file(ticket.id);
+
+      const sent = await send(sam, ticket.id, {});
+
+      expect(sent.status).toBe(201);
+      expect(sent.body.replyToMessageId).toBeNull();
+    });
+
+    it.each([
+      ['an internal note', { kind: 'note' as const }],
+      ['a staff reply', { authorType: 'staff' as const }],
+      ['a chat message', { channel: 'chat' as const }],
+      ['a message from the customer that is not public', { kind: 'system' as const }],
+    ])('refuses %s as the target with a 400', async (_name, values) => {
+      const { ticket } = await createTicket(sam);
+      const target = await file(ticket.id, values);
+
+      const sent = await send(sam, ticket.id, { replyToMessageId: target });
+
+      expect(sent.status).toBe(400);
+      expect(sent.body.error.message).toBe('reply-to.not-a-customer-email');
+      const rows = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(ticketMessages).where(eq(ticketMessages.replyToMessageId, target)),
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("refuses another ticket's message with a 400", async () => {
+      const { ticket } = await createTicket(sam);
+      const { ticket: other } = await createTicket(sam);
+      const target = await file(other.id);
+
+      const sent = await send(sam, ticket.id, { replyToMessageId: target });
+
+      expect(sent.status).toBe(400);
+      expect(sent.body.error.message).toBe('reply-to.not-a-customer-email');
+      expect(sent.body.error.fields).toEqual([
+        { path: 'body.replyToMessageId', message: 'reply-to.not-a-customer-email' },
+      ]);
+    });
+
+    it('refuses a target on a note, and a target that is not a uuid', async () => {
+      const { ticket } = await createTicket(sam);
+      const target = await file(ticket.id);
+
+      const note = await call<ErrorResponse>('POST', messagesOf(ticket.id), sam, {
+        kind: 'note',
+        bodyHtml: '<p>note</p>',
+        replyToMessageId: target,
+      });
+      const malformed = await send(sam, ticket.id, { replyToMessageId: 'not-a-uuid' });
+
+      expect(note.status).toBe(400);
+      expect(note.body.error.message).toBe('reply-to.not-allowed');
+      expect(malformed.status).toBe(400);
+    });
+
+    it("cannot be pointed at another brand's or another department's message", async () => {
+      const { ticket } = await createTicket(sam);
+      const foreign = await call<TicketDetail>('POST', `${brandPath(otherBrand)}/tickets`, ola, {
+        subject: 'Globex',
+        bodyHtml: '<p>hi</p>',
+        departmentId: otherDepartment,
+      });
+      const inOtherBrand = await file(foreign.body.ticket.id, {}, otherBrand);
+      const { ticket: billingTicket } = await createTicket(bo, { departmentId: billing });
+      const inBilling = await file(billingTicket.id);
+
+      for (const replyToMessageId of [inOtherBrand, inBilling]) {
+        const sent = await send(sam, ticket.id, { replyToMessageId });
+
+        expect(sent.status).toBe(409);
+        expect(sent.body.error.message).toBe('reply-to.gone');
+      }
+      const sentCount = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ id: ticketMessages.id })
+          .from(ticketMessages)
+          .where(and(eq(ticketMessages.ticketId, ticket.id), eq(ticketMessages.kind, 'public'))),
+      );
+      expect(sentCount).toHaveLength(1);
+    });
+
+    it('does not send a reply whose target is gone, and unlinks one whose target is purged later', async () => {
+      const { ticket } = await createTicket(sam);
+      const target = await file(ticket.id);
+      const sent = await send(sam, ticket.id, { replyToMessageId: target });
+      expect(sent.status).toBe(201);
+
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.delete(ticketMessages).where(eq(ticketMessages.id, target)),
+      );
+
+      const after = await call<TicketMessagePage>('GET', messagesOf(ticket.id), sam);
+      expect(after.status).toBe(200);
+      expect(after.body.messages.find((message) => message.id === sent.body.id)).toMatchObject({
+        replyToMessageId: null,
+      });
+      const again = await send(sam, ticket.id, { replyToMessageId: target });
+      expect(again.status).toBe(409);
+      expect(again.body.error.message).toBe('reply-to.gone');
+    });
+  });
+
   // ------------------------------------------------------------------- list
 
   describe('the list', () => {

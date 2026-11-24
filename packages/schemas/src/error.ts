@@ -14,7 +14,7 @@ import { passkeysRefusalSchema } from './passkeys.js';
 import { ssoRefusalSchema } from './sso.js';
 import { staffRefusalSchema } from './staff.js';
 import { telegramRefusalSchema } from './telegram.js';
-import { ticketLifecycleRefusalSchema } from './ticket.js';
+import { replyTargetRefusalSchema, ticketLifecycleRefusalSchema } from './ticket.js';
 import { ticketingRefusalSchema } from './ticketing.js';
 import { widgetErrorCodeSchema } from './widget-protocol.js';
 
@@ -140,6 +140,8 @@ export const errorResponseSchema = z.object({
      * domains another enabled connection already lists.
      */
     sso: z.object({ reason: ssoRefusalSchema, domains: z.array(z.string()).optional() }).optional(),
+    /** Only on a public reply whose `replyToMessageId` was refused (M14-31). */
+    replyTarget: z.object({ reason: replyTargetRefusalSchema }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

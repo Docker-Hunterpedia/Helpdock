@@ -567,6 +567,17 @@ export class TicketRepository {
     return rows[0];
   }
 
+  /** One message by id, as the caller's policies let them see it. */
+  async findMessage(tx: DbTransaction, messageId: string): Promise<TicketMessageRow | undefined> {
+    const rows = await tx
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.id, messageId))
+      .limit(1);
+
+    return rows[0];
+  }
+
   async insertMessage(tx: DbTransaction, values: NewTicketMessage): Promise<TicketMessageRow> {
     const rows = await tx.insert(ticketMessages).values(values).returning();
 

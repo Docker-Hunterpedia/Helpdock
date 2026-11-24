@@ -52,6 +52,7 @@ import { statusName } from './format.js';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
 import { MetaCount, MetaRecipient } from './meta/composer-meta.tsx';
 import type { ComposerMeta } from './meta/use-ticket-meta.tsx';
+import { type ComposerReplyTo, ReplyToStrip } from './reply-to-strip.tsx';
 
 /**
  * DESIGN §6.3 Composer: the Reply / Internal note segmented control and the
@@ -170,6 +171,11 @@ export interface ComposerProps {
    */
   readonly email?: ComposerEmail | undefined;
   /**
+   * M14-31: the customer email this reply answers, shown as a strip above the
+   * text. Only drawn for a public reply on an email ticket.
+   */
+  readonly replyTo?: ComposerReplyTo | undefined;
+  /**
    * M6-02: a ticket that answers in a Telegram chat. A reply then says which
    * chat it goes to and that the bot sends it as plain text, unsigned.
    */
@@ -215,6 +221,7 @@ export function Composer({
   onSendAndClose,
   onBodyFocus,
   email,
+  replyTo,
   telegram,
   meta,
   inline,
@@ -247,7 +254,9 @@ export function Composer({
   // Held, not disabled: the button keeps its place and its focus, so the reason
   // is read where the agent is. Nothing is sent while it is.
   const sendHeld = metaReply && meta.closed;
-  const canSend = !sendHeld && !busy && !uploading && body.trim() !== '';
+  // A strip that says its email is gone holds Send until it is cleared or moved.
+  const targetGone = emailReply && replyTo?.unavailable === true;
+  const canSend = !sendHeld && !targetGone && !busy && !uploading && body.trim() !== '';
   const { singleKeys } = useKeyboard();
   const sendKeys = useAriaKeyShortcuts('composer.send');
   const replyKeys = useAriaKeyShortcuts('ticket.reply');
@@ -327,7 +336,7 @@ export function Composer({
       data-shortcut-scope="composer"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!sendHeld) {
+        if (!sendHeld && !targetGone) {
           onSend();
         }
       }}
@@ -429,6 +438,16 @@ export function Composer({
           <RecipientLines email={email} />
         </Box>
       ) : null}
+
+      {emailReply ? (
+        // Always present, so the strip appearing or moving is announced once.
+        <Box role="status" sx={visuallyHidden}>
+          {replyTo === undefined
+            ? ''
+            : t('tickets:replyTo.strip', { name: replyTo.name, time: replyTo.time })}
+        </Box>
+      ) : null}
+      {emailReply && replyTo !== undefined ? <ReplyToStrip replyTo={replyTo} /> : null}
 
       {suggestion}
 
@@ -628,7 +647,7 @@ export function Composer({
         <Button
           type="submit"
           variant="contained"
-          disabled={!sendHeld && (busy || uploading || body.trim() === '')}
+          disabled={!sendHeld && (busy || uploading || targetGone || body.trim() === '')}
           aria-disabled={sendHeld ? true : undefined}
           aria-keyshortcuts={sendKeys}
           aria-describedby={sendHeld ? meta.stripId : undefined}

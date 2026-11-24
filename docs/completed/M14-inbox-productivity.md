@@ -2276,3 +2276,7 @@ these in its guides), and where each lands in Helpdock.
 | Gravatar and company logos | Declined by default (third-party lookups) |
 | Sample data in report empty states | M15-11 and M19-08 |
 | Ownership transfer, private teams | Not here; install work; departments cover privacy |
+
+## Added after the milestone shipped
+
+- **M14-31, reply to one email of a ticket** ([#465](https://github.com/Docker-Hunterpedia/Helpdock/issues/465), `Admin/Ticket-ListToggle-ReplyTo`). Requested in November 2026, after M14 shipped on 2026-11-01: a Reply button on each email a customer sent, which quotes that email under the reply and threads the outgoing mail to it. It adds `ticket_messages.reply_to_message_id` (migration 0078), an optional `replyToMessageId` on the public reply request, the `reply-to.*` refusals, and the quote and header rules of [DOMAIN-RULES §4.3](../planning/DOMAIN-RULES.md#43-email-threading). The composer stays visible as before. See [Tickets](../guides/tickets.md#replying-to-one-email) and [Email](../guides/email.md#a-reply-aimed-at-one-email).

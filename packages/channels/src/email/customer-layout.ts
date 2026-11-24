@@ -39,6 +39,11 @@ export interface CustomerEmailLayout {
   readonly signature: string | null;
   /** "This is an automatic reply…". */
   readonly note: string | null;
+  /**
+   * M14-31. The message a reply answers, under the reply, its signature and
+   * note. Both parts are built by the caller and already escaped.
+   */
+  readonly quote?: { readonly html: string; readonly text: string } | undefined;
   readonly reference: CustomerEmailReference;
   /** "You are receiving this because you contacted Helpdock support." */
   readonly footer: string;
@@ -150,7 +155,7 @@ export const renderCustomerEmail = (
       `padding:20px 32px;border-bottom:1px solid ${COLOURS.divider}`,
     ),
     row(
-      `${layout.bodyHtml}${signatureHtml}${noteHtml}`,
+      `${layout.bodyHtml}${signatureHtml}${noteHtml}${layout.quote?.html ?? ''}`,
       'padding:24px 32px;font-size:16px;line-height:24px',
     ),
     row(
@@ -169,6 +174,7 @@ export const renderCustomerEmail = (
     layout.bodyText.trim(),
     ...(lines.length === 0 ? [] : ['', '-- ', ...lines]),
     ...(layout.note === null ? [] : ['', layout.note]),
+    ...(layout.quote === undefined ? [] : ['', layout.quote.text]),
     '',
     `${reference.label} ${reference.token} · ${reference.subject}`,
     reference.hint,

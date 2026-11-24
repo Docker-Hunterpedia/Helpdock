@@ -6,6 +6,7 @@ import type {
   RenderedMacro,
   TicketDetail,
   TicketMergeResult,
+  TicketMessage,
   TicketPriority,
   TicketSplitRequest,
   TicketUpdateRequest,
@@ -30,7 +31,7 @@ import { EmptyState } from '../../shell/empty-state.tsx';
 import { isTicketingError } from '../../ticketing/api.js';
 import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { refusalCopy } from '../../ticketing/refusal-copy.js';
-import { isTicketLifecycleError } from '../../tickets/api.js';
+import { isReplyTargetError, isTicketLifecycleError } from '../../tickets/api.js';
 import { fieldLabelOf, ticketFieldsFor } from '../../tickets/custom-values.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import {
@@ -41,6 +42,7 @@ import {
 } from '../../tickets/macro-staging.js';
 import { mergeCandidates, visibleLinks } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
+import { NO_REPLY_TARGET, replyTargetReducer } from '../../tickets/reply-target.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
 import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { useToast } from '../../ui/toasts.tsx';
@@ -53,13 +55,21 @@ import { previousTickets } from './contact-history.js';
 import { CsatCard } from './csat-card.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
 import { assigneeName, staffName } from './directory.js';
-import { isolate, paragraph, statusName, ticketReference, wakeTime } from './format.js';
+import {
+  isolate,
+  messageTime,
+  paragraph,
+  statusName,
+  ticketReference,
+  wakeTime,
+} from './format.js';
 import { LogTimeDialog } from './log-time-dialog.tsx';
 import { MacroPicker } from './macro-picker.tsx';
 import { MergeDialog } from './merge-dialog.tsx';
 import { MergedIntoBanner } from './merged-block.tsx';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
 import { useTicketMeta } from './meta/use-ticket-meta.tsx';
+import type { ComposerReplyTo } from './reply-to-strip.tsx';
 import { RoutingTrail } from './routing-trail.tsx';
 import { SnoozeControl } from './snooze/snooze-control.tsx';
 import { SnoozedStrip } from './snooze/snoozed-strip.tsx';
@@ -67,7 +77,7 @@ import { SplitDialog } from './split-dialog.tsx';
 import { StagedMacroChips } from './staged-macro.tsx';
 import { ChannelIdentityCard } from './telegram/channel-identity-card.tsx';
 import { useTicketTelegram } from './telegram/use-ticket-telegram.tsx';
-import { Thread, type ThreadNames } from './thread.tsx';
+import { emailSenderName as emailSenderOf, Thread, type ThreadNames } from './thread.tsx';
 import type { TicketAction } from './ticket-actions-menu.tsx';
 import { type ListToggle, TicketHeader } from './ticket-header.tsx';
 import { closeStatusOf, type DetailsRequest, useTicketShortcuts } from './ticket-shortcuts.js';
@@ -104,6 +114,9 @@ const MERGE_SEARCH_LIMIT = 8;
 
 /** The most of the ticket column the composer takes before it scrolls inside (M14-19). */
 const COMPOSER_CAP = '45cqh';
+
+/** The strip's "Show quote" shows what the server will quote, which it cuts at this length. */
+const REPLY_QUOTE_PREVIEW_MAX = 2000;
 
 export function TicketView({
   brandId,
@@ -149,6 +162,8 @@ export function TicketView({
   const [mode, setMode] = useState<ComposerMode>('reply');
   const [body, setBody] = useState('');
   const [thenStatusId, setThenStatusId] = useState('');
+  // M14-31: the customer email the reply answers; the draft above is never touched by it.
+  const [replyTarget, dispatchTarget] = useReducer(replyTargetReducer, NO_REPLY_TARGET);
   const [attachments, setAttachments] = useState<readonly Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [pending, dispatch] = useReducer(pendingReducer, [] as readonly PendingMessage[]);
@@ -174,6 +189,13 @@ export function TicketView({
   const closeBySend = useRef(new Set<string>());
   // Changes when `r` or `n` was pressed, which is what moves the caret.
   const [focusSignal, setFocusSignal] = useState<number | undefined>(undefined);
+  // The Internal note tab leaves the email being answered behind: a note answers no one.
+  const changeMode = (next: ComposerMode): void => {
+    setMode(next);
+    if (next === 'note') {
+      dispatchTarget({ type: 'clear' });
+    }
+  };
   const [detailsRequest, setDetailsRequest] = useState<DetailsRequest | null>(null);
 
   const detail = useQuery({
@@ -323,6 +345,9 @@ export function TicketView({
         ...(message.kind === 'public' && ticketEmail.emailFrom !== undefined
           ? { emailFrom: ticketEmail.emailFrom }
           : {}),
+        ...(message.kind === 'public' && message.replyToMessageId !== undefined
+          ? { replyToMessageId: message.replyToMessageId }
+          : {}),
       };
       const macro = macroBySend.current.get(message.clientId);
       if (macro === undefined) {
@@ -409,6 +434,18 @@ export function TicketView({
         if (macro !== undefined) {
           setStaged(macro);
         }
+        return;
+      }
+      // M14-31: the email it answered is gone; nothing was sent. The text goes back
+      // into the composer under a strip that says so, to be cleared or moved.
+      if (isReplyTargetError(error) && message.replyToMessageId !== undefined) {
+        dispatch({ type: 'discarded', clientId: message.clientId });
+        closeBySend.current.delete(message.clientId);
+        macroBySend.current.delete(message.clientId);
+        filesBySend.current.delete(message.clientId);
+        setMode('reply');
+        setBody((held) => (held === '' ? message.bodyText : held));
+        dispatchTarget({ type: 'gone', messageId: message.replyToMessageId });
         return;
       }
       closeBySend.current.delete(message.clientId);
@@ -704,7 +741,7 @@ export function TicketView({
     writable:
       canWrite && shortcutTicket !== undefined && (detail.data?.mergedInto ?? null) === null,
     onCompose: (next) => {
-      setMode(next);
+      changeMode(next);
       setFocusSignal(Date.now());
     },
     onDetails: (control) => {
@@ -963,6 +1000,31 @@ export function TicketView({
     />
   );
 
+  // M14-31: the Reply button on a customer's email points the composer at it.
+  const replyToEmail = (message: TicketMessage): void => {
+    setMode('reply');
+    dispatchTarget({ type: 'point', messageId: message.id });
+    setFocusSignal(Date.now());
+  };
+  const targetMessage =
+    replyTarget.messageId === null
+      ? undefined
+      : messages.find((message) => message.id === replyTarget.messageId);
+  const composerReplyTo: ComposerReplyTo | undefined =
+    mode !== 'reply' || replyTarget.messageId === null
+      ? undefined
+      : {
+          name: targetMessage === undefined ? '' : emailSenderOf(targetMessage, names),
+          time:
+            targetMessage === undefined ? '' : messageTime(targetMessage.createdAt, locale, now),
+          quote: targetMessage?.bodyText.slice(0, REPLY_QUOTE_PREVIEW_MAX) ?? '',
+          // An email that vanished from the thread cannot be quoted either.
+          unavailable: replyTarget.unavailable || targetMessage === undefined,
+          onClear: () => {
+            dispatchTarget({ type: 'clear' });
+          },
+        };
+
   const queueSend = ({ close = false }: { readonly close?: boolean } = {}): void => {
     const text = body.trim();
     if (text === '') {
@@ -979,6 +1041,9 @@ export function TicketView({
       bodyText: text,
       attachmentIds: attachments.map((attachment) => attachment.id),
       ...(spent === null ? {} : { timeSpentSeconds: spent }),
+      ...(mode === 'reply' && replyTarget.messageId !== null
+        ? { replyToMessageId: replyTarget.messageId }
+        : {}),
       createdAt: new Date().toISOString(),
       sentAt: Date.now(),
       state: 'sending',
@@ -997,6 +1062,7 @@ export function TicketView({
     dispatch({ type: 'queued', message });
     setBody('');
     setAttachments([]);
+    dispatchTarget({ type: 'clear' });
     send.mutate(message);
   };
 
@@ -1189,6 +1255,14 @@ export function TicketView({
               meta={ticketMeta.thread}
               assist={assist.thread}
               ai={ticketAi.thread}
+              replyTo={
+                canWrite && ticketEmail.composer !== undefined && mergedInto === null
+                  ? {
+                      activeId: mode === 'reply' ? replyTarget.messageId : null,
+                      onReply: replyToEmail,
+                    }
+                  : undefined
+              }
               onRetry={(message) => {
                 dispatch({ type: 'retried', clientId: message.clientId, now: Date.now() });
                 send.mutate({ ...message, state: 'sending', sentAt: Date.now() });
@@ -1285,7 +1359,7 @@ export function TicketView({
                 focusSignal={focusSignal}
                 collapseSignal={collapseSignal}
                 suggestionHost={listHost}
-                onModeChange={setMode}
+                onModeChange={changeMode}
                 onBodyChange={setBody}
                 onThenStatusChange={setThenStatusId}
                 onAttach={(files) => {
@@ -1305,6 +1379,7 @@ export function TicketView({
                       }
                 }
                 email={ticketEmail.composer}
+                replyTo={composerReplyTo}
                 meta={ticketMeta.composer}
                 telegram={
                   telegramChat === undefined

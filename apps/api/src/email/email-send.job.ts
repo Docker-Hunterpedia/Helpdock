@@ -112,7 +112,7 @@ export const createEmailSendHandler =
     const message = renderDelivery({
       delivery,
       facts,
-      thread: await repository.threadIds(tx, delivery),
+      thread: await repository.threadIds(tx, delivery, facts.replyTarget),
       templates: (kind) => templatesFor(settings, kind),
       survey,
     });

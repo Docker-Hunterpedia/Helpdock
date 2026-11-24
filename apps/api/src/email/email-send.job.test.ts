@@ -27,6 +27,7 @@ const facts: SendFacts = {
   isSpam: false,
   message: { bodyHtml: '<p>Done.</p>', bodyText: 'Done.', authorId: null, authorType: 'staff' },
   author: null,
+  replyTarget: null,
   transcript: [],
 };
 

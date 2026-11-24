@@ -1,4 +1,5 @@
 import type { Attachment, EmailMessageView, TicketMessage } from '@helpdock/schemas';
+import { tokens as designTokens } from '@helpdock/ui';
 import { Box, Button, Link as MuiLink, Typography } from '@mui/material';
 import { ChevronDown, ChevronUp, Image, ImageOff, Link2, Mail, ShieldAlert } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
@@ -38,6 +39,9 @@ export function EmailMessageCard({
   time,
   body,
   facts,
+  anchorId,
+  selected = false,
+  replyAction,
 }: {
   readonly message: TicketMessage;
   readonly email: EmailMessageView;
@@ -47,6 +51,12 @@ export function EmailMessageCard({
   readonly body?: ReactNode;
   /** M7-05, M7-08: the AI facts line under the body. */
   readonly facts?: ReactNode;
+  /** M14-31: the id "In reply to" links scroll to and focus. */
+  readonly anchorId?: string | undefined;
+  /** M14-31: the composer's strip names this email, so it carries the accent outline. */
+  readonly selected?: boolean;
+  /** M14-31: the Reply button, at the inline end of the header line. */
+  readonly replyAction?: ReactNode;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -60,8 +70,12 @@ export function EmailMessageCard({
   return (
     <Box
       component="article"
+      id={anchorId}
+      // Focusable by script only: "In reply to …" moves focus here.
+      tabIndex={anchorId === undefined ? undefined : -1}
       aria-label={t('tickets:email.label', { name: author })}
       sx={{
+        outline: 'none',
         display: 'flex',
         gap: '10px',
         maxWidth: MESSAGE_MAX_WIDTH,
@@ -93,9 +107,14 @@ export function EmailMessageCard({
           flexGrow: 1,
           minWidth: 0,
           borderRadius: '10px',
-          border: `1px solid ${tokens['border.default']}`,
+          border: `1px solid ${selected ? tokens['action.primary'] : tokens['border.default']}`,
+          boxShadow: selected ? `0 0 0 2px ${designTokens.palette.teal.teal100}` : undefined,
           backgroundColor: tokens['bg.surface'],
           overflow: 'hidden',
+          // Focus lands here from "In reply to …"; the ring is the card's own.
+          'article:focus-visible > &': {
+            boxShadow: `0 0 0 2px ${tokens['action.primary']}`,
+          },
         }}
       >
         <Box
@@ -124,6 +143,7 @@ export function EmailMessageCard({
             <Box component="span" sx={{ marginInlineStart: 'auto', whiteSpace: 'nowrap' }}>
               <bdi>{time}</bdi>
             </Box>
+            {replyAction}
           </Box>
           {email.to.length === 0 && email.cc.length === 0 ? null : (
             <Box>

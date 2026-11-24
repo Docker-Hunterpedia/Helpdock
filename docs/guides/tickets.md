@@ -1180,6 +1180,51 @@ its denormalised `department_id`: the first is a channel's threading handle, the
 second is cost accounting, and the ticket already says which department it is
 in. M8 decides separately what the public API exposes.
 
+#### Replying to one email
+
+On an email ticket every email the customer sent has a **Reply** button at the
+end of its header line (M14-31). Pressing it moves the caret into the composer
+and shows a strip, "Replying to Mona Khalil’s email of Tue 12:05", with **Show
+quote** and a × button; the email it answers gets an accent outline. The
+composer stays where it was, and what you have typed is never touched. Pressing
+Reply on another email moves the strip. The × button, the **Internal note** tab
+and a sent reply clear it. Notes, staff replies, system events and messages from
+chat channels have no Reply button.
+
+The request takes one more optional field, `replyToMessageId`, the id of a
+public, inbound, email message of the same ticket:
+
+```http
+POST /api/brands/:brandId/tickets/:ticketId/messages
+
+{ "kind": "public", "bodyHtml": "<p>The invoice is attached.</p>", "replyToMessageId": "0199f4b2-…" }
+```
+
+A target on another ticket, of another kind or channel, or sent with a note is a
+400 naming `body.replyToMessageId` (`reply-to.not-a-customer-email`,
+`reply-to.not-allowed`). A target that was deleted, erased or is outside the
+caller's departments, or whose sender has since been erased ("Anonymise
+contact"), is a 409 `reply-to.gone` and nothing is sent. A retry of a reply that
+was already stored returns it, whatever became of its target since. When the
+composer is empty on the Reply tab it gets the text back under a strip that says
+"That message is no longer available" and holds Send until you clear it; if you
+have started something else (typing, or the Internal note tab), the composer is
+left as it is and the reply waits in the thread as not sent. The stored reply
+is only what you wrote. It comes back with `replyToMessageId` (null on an
+ordinary reply, and when the email was purged later), and the thread draws "In
+reply to Mona Khalil · Tue 12:05" above it, which scrolls to that email. The
+public API's v1 messages and the `ticket.replied` webhook's message carry the
+same field (an id of a message on the same ticket; the targeted email's
+`References` are in no output); v1 sends do not take it.
+
+**Who receives it.** A targeted reply goes to the ticket's To and Cc and is sent
+from the ticket's From, exactly as any reply. It quotes the email you chose to
+all of them. When that email's sender is not the address the reply's To goes to,
+the strip says so in a warning line, "This quotes Mona Khalil’s email to everyone
+on the reply: To Karim Nasser and Cc 2.", before you send. The
+[email guide](email.md#a-reply-aimed-at-one-email) says what the customer
+receives.
+
 ### Reply windows
 
 WhatsApp, Messenger and Instagram let a business write to a customer only for a

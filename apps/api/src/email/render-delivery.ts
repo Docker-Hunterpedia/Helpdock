@@ -22,6 +22,7 @@ import {
   firstNameOf,
   transcriptCopy,
 } from './email-copy.js';
+import { buildReplyQuote } from './reply-quote.js';
 
 /**
  * One delivery row, rendered to the message Nodemailer sends (artboard
@@ -141,6 +142,14 @@ const renderMessage = ({ delivery, facts, thread, templates }: RenderInput): Ema
           brandName: facts.brandName,
           departmentName: facts.departmentName,
         }),
+    quote:
+      facts.replyTarget === null || delivery.kind !== 'reply'
+        ? undefined
+        : buildReplyQuote(locale, facts.brandName, {
+            name: facts.replyTarget.senderName,
+            at: facts.replyTarget.sentAt,
+            text: facts.replyTarget.text,
+          }),
     note: transcript
       ? transcriptCopy(locale, { brandName: facts.brandName, reference: facts.ticket.reference })
           .note

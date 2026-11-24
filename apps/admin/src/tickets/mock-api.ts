@@ -99,13 +99,19 @@ import { MockTicketingApi } from '../ticketing/mock-api.js';
 import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import type { MockMacros } from '../ticketing/mock-macros.js';
-import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
+import {
+  ReplyTargetError,
+  TicketLifecycleError,
+  type TicketQuery,
+  type TicketsApi,
+} from './api.js';
 import { type BulkSnapshot, planBulk, snapshotOf, undoPlan, updateOf } from './mock-bulk.js';
 import { MOCK_IMPORTED_CSAT, mockImportedCsatEvent } from './mock-imported-csat.js';
 import { metaSeed } from './mock-meta-seed.js';
 import { mockRouting } from './mock-routing.js';
 import { mockSlaOf, mockSlaSummaryOf } from './mock-sla.js';
 import { MockViews } from './mock-views.js';
+import { canReplyToMessage } from './reply-target.js';
 
 /**
  * The fixture the ticket workspace runs against until an install is in front of
@@ -155,12 +161,31 @@ export const MOCK_MAILBOXES: readonly TicketMailbox[] = [
   },
 ];
 
+function msgIdOf(n: number): string {
+  return `0192c3f0-1a2b-7c3d-8e4f-0000000${String(700 + n).padStart(5, '0')}`;
+}
+
 export const MOCK_TICKET_REFUND = '0192c3f0-1a2b-7c3d-8e4f-000000001042';
 export const MOCK_TICKET_SIGN_IN = '0192c3f0-1a2b-7c3d-8e4f-000000001041';
 export const MOCK_TICKET_ARABIC = '0192c3f0-1a2b-7c3d-8e4f-000000001039';
 export const MOCK_TICKET_VAT = '0192c3f0-1a2b-7c3d-8e4f-000000001035';
 export const MOCK_TICKET_CLOSED = '0192c3f0-1a2b-7c3d-8e4f-000000001030';
 export const MOCK_TICKET_TRANSCRIPT = '0192c3f0-1a2b-7c3d-8e4f-000000001028';
+/**
+ * M14-31 (`Admin/Ticket-ListToggle-ReplyTo`): a ticket of three customer emails, a staff
+ * reply and a note, reachable by its address only. It is left out of every list, count and
+ * contact history, so the fixtures the other screens are tested against do not move.
+ */
+export const MOCK_TICKET_THREE_EMAILS = '0192c3f0-1a2b-7c3d-8e4f-000000001001';
+/**
+ * The last of its three customer emails. The mock treats it as erased by the time a reply
+ * names it, so the refusal path ("That message is no longer available") can be driven from
+ * the screen.
+ */
+export const MOCK_EMAIL_THIRD = msgIdOf(44);
+/** The middle one of its three customer emails, the one the artboard answers. */
+export const MOCK_EMAIL_SECOND = msgIdOf(42);
+const UNLISTED_TICKETS: ReadonlySet<string> = new Set([MOCK_TICKET_THREE_EMAILS]);
 /** M6: the agent replies on the Telegram ticket, one delivered and one the customer's block refused. */
 export const MOCK_TELEGRAM_REPLY_SENT = '0192c3f0-1a2b-7c3d-8e4f-000000000715';
 export const MOCK_TELEGRAM_REPLY_FAILED = '0192c3f0-1a2b-7c3d-8e4f-000000000716';
@@ -327,6 +352,15 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       updatedAt: at(-12 * MINUTE),
     }),
     ticket({
+      id: MOCK_TICKET_THREE_EMAILS,
+      number: 1001,
+      subject: 'Refund not received after 10 days, order 8841',
+      contactId: MOCK_CONTACT_MONA,
+      assigneeId: MOCK_SELF_ID,
+      createdAt: at(-3 * HOUR),
+      updatedAt: at(-30 * MINUTE),
+    }),
+    ticket({
       id: MOCK_TICKET_SIGN_IN,
       number: 1041,
       subject: 'Cannot sign in to the portal',
@@ -423,6 +457,63 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
     ...overrides,
   });
 
+  /** M14-31: a plain customer email: one sender, no copies, nothing blocked. */
+  const customerEmail = (n: number, seq: number, text: string, offset: number): TicketMessage =>
+    message({
+      id: msgId(n),
+      ticketId: MOCK_TICKET_THREE_EMAILS,
+      seq,
+      authorId: MOCK_CONTACT_MONA,
+      bodyText: text,
+      email: {
+        from: { address: 'mona@example.com', name: 'Mona Khalil' },
+        to: [{ address: 'billing@helpdock.io', name: 'Helpdock Billing' }],
+        cc: [],
+        date: at(offset),
+        quotedHtml: null,
+        remoteImages: { count: 0, hosts: [], policy: 'block' },
+        inlineAttachmentIds: [],
+        authFailed: false,
+        mismatch: null,
+      },
+      createdAt: at(offset),
+    });
+  const threeEmails = (): TicketMessage[] => [
+    customerEmail(
+      41,
+      1,
+      'Hello, I returned order 8841 on the 2nd and got the confirmation email, but there is still no refund on my card after 10 days. Can you check?',
+      -3 * HOUR,
+    ),
+    message({
+      id: msgId(45),
+      ticketId: MOCK_TICKET_THREE_EMAILS,
+      seq: 2,
+      kind: 'note',
+      authorType: 'staff',
+      authorId: MOCK_SELF_ID,
+      channel: 'manual',
+      bodyText: 'Finance says the refund batch of the 4th is being re-run.',
+      createdAt: at(-2 * HOUR - 30 * MINUTE),
+    }),
+    customerEmail(
+      42,
+      3,
+      'One more thing: can you also send the invoice for order 8790? I need it for my accountant.',
+      -2 * HOUR,
+    ),
+    message({
+      id: msgId(43),
+      ticketId: MOCK_TICKET_THREE_EMAILS,
+      seq: 4,
+      authorType: 'staff',
+      authorId: MOCK_SELF_ID,
+      bodyText: 'Hi Mona, your refund was issued on the 4th.',
+      createdAt: at(-HOUR - 30 * MINUTE),
+    }),
+    customerEmail(44, 5, 'Any news on the refund? My bank says nothing is pending.', -HOUR),
+  ];
+
   const messages: TicketMessage[] = [
     message({
       id: msgId(1),
@@ -484,6 +575,7 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       createdAt: at(-12 * MINUTE),
     }),
 
+    ...threeEmails(),
     message({
       id: msgId(5),
       ticketId: MOCK_TICKET_SIGN_IN,
@@ -764,8 +856,7 @@ const telegramFile = (
   ...fields,
 });
 
-const msgId = (n: number): string =>
-  `0192c3f0-1a2b-7c3d-8e4f-0000000${String(700 + n).padStart(5, '0')}`;
+const msgId = (n: number): string => msgIdOf(n);
 const actId = (n: number): string =>
   `0192c3f0-1a2b-7c3d-8e4f-0000000${String(800 + n).padStart(5, '0')}`;
 
@@ -917,7 +1008,12 @@ export class MockTicketsApi implements TicketsApi {
     contactId: string,
   ): Pick<ContactTimeline, 'items' | 'visibleCount' | 'hiddenCount'> {
     const items = this.#tickets
-      .filter((ticket) => ticket.contactId === contactId && !ticket.status.isSpam)
+      .filter(
+        (ticket) =>
+          ticket.contactId === contactId &&
+          !ticket.status.isSpam &&
+          !UNLISTED_TICKETS.has(ticket.id),
+      )
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
       .map((ticket) => ({
         id: ticket.id,
@@ -944,7 +1040,7 @@ export class MockTicketsApi implements TicketsApi {
     const term = searchTermOf(query);
     // #221: the tickets the term names come first, whatever the view's filters.
     const named = this.#tickets
-      .filter((ticket) => namesTicket(ticket, term))
+      .filter((ticket) => !UNLISTED_TICKETS.has(ticket.id) && namesTicket(ticket, term))
       .sort(comparator(query));
     const matches = [
       ...named,
@@ -1000,7 +1096,9 @@ export class MockTicketsApi implements TicketsApi {
   #matching(query: TicketQuery): Ticket[] {
     const term = searchTermOf(query);
 
-    return this.#tickets.filter((ticket) => matchesQuery(ticket, query, term, this.#now));
+    return this.#tickets.filter(
+      (ticket) => !UNLISTED_TICKETS.has(ticket.id) && matchesQuery(ticket, query, term, this.#now),
+    );
   }
 
   async ticket(_brandId: string, ticketId: string): Promise<TicketDetail> {
@@ -1333,6 +1431,15 @@ export class MockTicketsApi implements TicketsApi {
   ): Promise<TicketMessage> {
     const ticket = this.#require(ticketId);
     this.#assertCanDeliver(ticket, request);
+    if (request.replyToMessageId !== undefined) {
+      const target = this.#messages.find((row) => row.id === request.replyToMessageId);
+      if (target === undefined || target.id === MOCK_EMAIL_THIRD) {
+        throw new ReplyTargetError('gone');
+      }
+      if (!canReplyToMessage(target) || target.ticketId !== ticketId || request.kind !== 'public') {
+        throw new ReplyTargetError('not-a-customer-email');
+      }
+    }
 
     // DOMAIN-RULES §7: `(conversation_id, client_id)` is unique, so a retry
     // gets the message the first attempt wrote, with the same id and the same
@@ -1358,6 +1465,7 @@ export class MockTicketsApi implements TicketsApi {
       bodyHtml: request.bodyHtml,
       bodyText: textOf(request.bodyHtml),
       attachments: this.#link(ticketId, request.attachmentIds ?? []),
+      replyToMessageId: request.replyToMessageId ?? null,
       channel: request.kind === 'note' ? 'manual' : ticket.channel,
       createdAt: isoNow(),
     };

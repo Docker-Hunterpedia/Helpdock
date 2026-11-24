@@ -130,6 +130,8 @@
   "customer": {
     "replyMarker": "##- Please type your reply above this line -##",
     "replySubject": "Re: [{{reference}}] {{subject}}",
+    "quoteIntro": "On {{date}} at {{time}} UTC, {{name}} wrote:",
+    "quoteAnonymous": "the customer",
     "fromVia": "{{agent}} via {{sender}}",
     "referenceLabel": "Request",
     "replyHint": "Reply to this email to add to your request. Keep the reference in the subject.",

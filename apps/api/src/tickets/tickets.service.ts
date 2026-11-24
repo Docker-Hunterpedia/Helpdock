@@ -68,6 +68,7 @@ import {
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
 import { readMergeView } from './merge/merge-view.js';
 import { ReplyDeliveryHook } from './reply-delivery.hook.js';
+import { ReplyTargetFailure } from './reply-target-failure.js';
 import { arrivalOf, requestArrival, WIDGET_ENTRY } from './routing/arrival.js';
 import { planSnooze, recordSnooze } from './snooze/snooze-plan.js';
 import {
@@ -827,6 +828,10 @@ export class TicketsService {
       }
     }
 
+    // After the replay above, so a retry of a reply that was stored returns it even
+    // when its target has been purged since (M14-31).
+    const replyToMessageId = await this.#replyTarget(tx, ticketId, authorType, input);
+
     // DOMAIN-RULES §2.2 rows 1 and 5. It runs *before* the insert because on
     // the continuation branch the message belongs to a ticket that does not
     // exist yet, and it decides which ticket that is.
@@ -850,6 +855,7 @@ export class TicketsService {
       kind: input.kind,
       authorType,
       authorId: actor.actorId,
+      ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
       bodyHtml: body.html,
       bodyText: body.text,
       channel: target.channel,
@@ -944,6 +950,46 @@ export class TicketsService {
   }
 
   // ---------------------------------------------------------------- internals
+
+  /**
+   * M14-31. The customer email a public staff reply answers, when it names
+   * one: a public, inbound, email message of this ticket. A message the caller
+   * cannot read looks the same as one that is gone (the policies hide it), so
+   * the answer never says which, and a reply is never sent against a quote it
+   * could not have shown.
+   */
+  async #replyTarget(
+    tx: DbTransaction,
+    ticketId: string,
+    authorType: ReturnType<typeof authorTypeFor>,
+    input: MessageCreateRequest,
+  ): Promise<string | undefined> {
+    if (input.replyToMessageId === undefined) {
+      return undefined;
+    }
+    if (input.kind !== 'public' || authorType !== 'staff') {
+      throw new ReplyTargetFailure('not-allowed');
+    }
+
+    const target = await this.#tickets.findMessage(tx, input.replyToMessageId);
+    if (target === undefined) {
+      throw new ReplyTargetFailure('gone');
+    }
+    if (
+      target.ticketId !== ticketId ||
+      target.kind !== 'public' ||
+      target.authorType !== 'contact' ||
+      target.channel !== 'email'
+    ) {
+      throw new ReplyTargetFailure('not-a-customer-email');
+    }
+    // An erased person's email is not quoted: it reads as gone, as a purged one does.
+    if (await this.#tickets.contactAnonymised(tx, target.authorId)) {
+      throw new ReplyTargetFailure('gone');
+    }
+
+    return target.id;
+  }
 
   /**
    * M1-10's seam. The rules are the media pipeline's — count, ticket, uploader,

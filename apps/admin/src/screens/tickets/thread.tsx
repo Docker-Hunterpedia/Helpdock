@@ -1,3 +1,4 @@
+import type { Locale } from '@helpdock/i18n';
 import type {
   MergedTicket,
   TicketActivityEntry,
@@ -8,7 +9,7 @@ import type {
 import { importSourceSchema } from '@helpdock/schemas';
 import { Box, Link as MuiLink } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
@@ -16,6 +17,7 @@ import { ticketRoute } from '../../app/route-paths.js';
 import { usePriorityLabel } from '../../ticketing/priority-labels.tsx';
 import { linkReferences } from '../../tickets/merge.js';
 import type { PendingMessage } from '../../tickets/pending.js';
+import { canReplyToMessage } from '../../tickets/reply-target.js';
 import { closedWithoutKeys, type ThreadItem } from '../../tickets/thread.js';
 import { formatClock, formatDay } from '../../ui/format.js';
 import { AiEventText } from './ai/ai-event.tsx';
@@ -35,6 +37,7 @@ import {
   SystemEvent,
 } from './message-bubble.tsx';
 import type { ThreadMeta } from './meta/use-ticket-meta.tsx';
+import { InReplyToLink, messageAnchor, ReplyButton } from './reply-to-controls.tsx';
 import { LocationLine, splitLocation } from './telegram/location-line.tsx';
 import type { ThreadTelegram } from './telegram/use-ticket-telegram.tsx';
 import { VoiceNote } from './telegram/voice-note.tsx';
@@ -97,6 +100,47 @@ export interface ThreadMerges {
   onMergeInto?(reference: string): void;
 }
 
+/** The name a customer's email is drawn and answered under. */
+export const emailSenderName = (message: TicketMessage, names: ThreadNames): string =>
+  names.nameFor(message.authorType, message.authorId) ??
+  message.email?.from.name ??
+  message.email?.from.address ??
+  '';
+
+/** The "In reply to Mona Khalil · Tue 12:05" line of a reply that answered one email, or null. */
+const inReplyToOf = (
+  message: TicketMessage,
+  byId: ReadonlyMap<string, TicketMessage>,
+  names: ThreadNames,
+  locale: Locale,
+  now: number,
+): ReactNode => {
+  if (message.replyToMessageId == null || message.authorType !== 'staff') {
+    return null;
+  }
+  const target = byId.get(message.replyToMessageId);
+
+  return target === undefined ? (
+    <InReplyToLink name={null} time={null} targetId={null} />
+  ) : (
+    <InReplyToLink
+      name={emailSenderName(target, names)}
+      time={messageTime(target.createdAt, locale, now)}
+      targetId={target.id}
+    />
+  );
+};
+
+/**
+ * M14-31: which customer emails can be answered one by one, and which one the
+ * composer's strip names. Optional, so a thread nobody can reply to is drawn as before.
+ */
+export interface ThreadReplyTo {
+  /** The message the composer's strip names, or null. */
+  readonly activeId: string | null;
+  onReply(message: TicketMessage): void;
+}
+
 export function Thread({
   items,
   names,
@@ -107,6 +151,7 @@ export function Thread({
   meta,
   assist,
   ai,
+  replyTo,
   onRetry,
   onDiscard,
 }: {
@@ -124,6 +169,8 @@ export function Thread({
   readonly assist?: ThreadAssist | undefined;
   /** M7-06: the AI log behind auto-replies, for their disclosures. */
   readonly ai?: ThreadAi | undefined;
+  /** M14-31: the Reply button on a customer's email, and what it points the composer at. */
+  readonly replyTo?: ThreadReplyTo | undefined;
   onRetry(pending: PendingMessage): void;
   onDiscard(pending: PendingMessage): void;
 }): ReactNode {
@@ -134,6 +181,13 @@ export function Thread({
   const end = useRef<HTMLDivElement | null>(null);
   const count = items.length;
   const pinKey = meta?.pinKey;
+  const byId = useMemo(
+    () =>
+      new Map(
+        items.flatMap((item) => (item.kind === 'message' ? [[item.message.id, item.message]] : [])),
+      ),
+    [items],
+  );
   // M10-08: the line that marks an unsent Instagram message is drawn on the
   // message, so it is not a second event beside it.
   const shown =
@@ -229,14 +283,23 @@ export function Thread({
                 <EmailMessageCard
                   message={item.message}
                   email={item.message.email}
-                  author={
-                    names.nameFor(item.message.authorType, item.message.authorId) ??
-                    item.message.email.from.name ??
-                    item.message.email.from.address
-                  }
+                  author={emailSenderName(item.message, names)}
                   time={messageTime(item.message.createdAt, locale, now)}
                   body={assist?.bodyFor(item.message)}
                   facts={assist?.factsFor(item.message)}
+                  anchorId={messageAnchor(item.message.id)}
+                  selected={replyTo?.activeId === item.message.id}
+                  replyAction={
+                    replyTo === undefined || !canReplyToMessage(item.message) ? undefined : (
+                      <ReplyButton
+                        name={emailSenderName(item.message, names)}
+                        pressed={replyTo.activeId === item.message.id}
+                        onPress={() => {
+                          replyTo.onReply(item.message);
+                        }}
+                      />
+                    )
+                  }
                 />
               ) : (
                 <SentMessage
@@ -246,6 +309,7 @@ export function Thread({
                   telegram={telegram}
                   meta={meta}
                   assist={assist}
+                  inReplyTo={inReplyToOf(item.message, byId, names, locale, now)}
                   footer={deliveryFooter?.(item.message) ?? null}
                 />
               )
@@ -409,6 +473,7 @@ function SentMessage({
   telegram,
   meta,
   assist,
+  inReplyTo,
   footer,
 }: {
   readonly message: TicketMessage;
@@ -417,6 +482,8 @@ function SentMessage({
   readonly telegram: ThreadTelegram | undefined;
   readonly meta: ThreadMeta | undefined;
   readonly assist: ThreadAssist | undefined;
+  /** M14-31: the "In reply to …" line, for a reply that answered one email. */
+  readonly inReplyTo: ReactNode;
   readonly footer: ReactNode;
 }): ReactNode {
   const t = useT();
@@ -476,7 +543,16 @@ function SentMessage({
       author={author}
       meta={metaOf(message, names, locale, now, telegram, meta)}
       {...(label === undefined ? {} : { label })}
-      {...(content === undefined ? {} : { before: content.before })}
+      {...(content === undefined && inReplyTo === null
+        ? {}
+        : {
+            before: (
+              <>
+                {inReplyTo}
+                {content?.before}
+              </>
+            ),
+          })}
       bodyHtml={located?.html ?? html}
       body={assist?.bodyFor(message)}
       facts={assist?.factsFor(message)}

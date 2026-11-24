@@ -154,6 +154,8 @@
   "customer": {
     "replyMarker": "##- يُرجى كتابة ردّك أعلى هذا السطر -##",
     "replySubject": "Re: [{{reference}}] {{subject}}",
+    "quoteIntro": "في {{date}}، {{time}} UTC\u200e، كتب {{name}}:",
+    "quoteAnonymous": "العميل",
     "fromVia": "{{agent}} عبر {{sender}}",
     "referenceLabel": "رقم الطلب",
     "replyHint": "للرد، أجب على هذه الرسالة وسيُضاف ردّك إلى طلبك. أبقِ رقم الطلب في الموضوع.",

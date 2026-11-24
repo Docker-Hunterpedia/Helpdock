@@ -15,6 +15,7 @@ import type {
   MetaRefusal,
   MetaRefusalDetails,
   PasskeysRefusal,
+  ReplyTargetRefusal,
   SetupRefusal,
   SsoRefusal,
   StaffRefusal,
@@ -45,6 +46,7 @@ import { StaffFailure } from '../staff/staff-failure.js';
 import { TelegramFailure } from '../telegram/telegram-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { TicketLifecycleFailure } from '../tickets/lifecycle/lifecycle-failure.js';
+import { ReplyTargetFailure } from '../tickets/reply-target-failure.js';
 import { WebhooksFailure } from '../webhooks/webhooks-failure.js';
 import { WidgetFailure } from '../widget/widget-failure.js';
 
@@ -104,6 +106,8 @@ export interface MappedError {
   readonly webhooks?: { readonly reason: WebhooksRefusal; readonly address?: string };
   /** Only on a refused SSO connection save; see `sso/sso-failure.ts`. */
   readonly sso?: { readonly reason: SsoRefusal; readonly domains?: readonly string[] };
+  /** Only on a refused `replyToMessageId`; see `tickets/reply-target-failure.ts`. */
+  readonly replyTarget?: ReplyTargetRefusal;
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -213,6 +217,20 @@ export const mapError = (error: unknown): MappedError => {
         reason: error.reason,
         ...(error.fields.length === 0 ? {} : { fields: [...error.fields] }),
       },
+      unexpected: false,
+    };
+  }
+
+  // M14-31. A 400 addresses the field; the 409 is the target being gone.
+  if (error instanceof ReplyTargetFailure) {
+    return {
+      status: error.getStatus(),
+      code: error.reason === 'gone' ? 'conflict' : 'validation_failed',
+      message: error.message,
+      replyTarget: error.reason,
+      ...(error.reason === 'gone'
+        ? {}
+        : { fields: [{ path: 'body.replyToMessageId', message: error.message }] }),
       unexpected: false,
     };
   }
@@ -467,6 +485,7 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.knowledge === undefined ? {} : { knowledge: { reason: mapped.knowledge } }),
     ...(mapped.assist === undefined ? {} : { assist: { reason: mapped.assist } }),
     ...(mapped.webhooks === undefined ? {} : { webhooks: mapped.webhooks }),
+    ...(mapped.replyTarget === undefined ? {} : { replyTarget: { reason: mapped.replyTarget } }),
     ...(mapped.sso === undefined
       ? {}
       : {

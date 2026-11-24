@@ -25,6 +25,7 @@ const facts = (locale: 'en' | 'ar'): SendFacts => ({
   isSpam: false,
   message: null,
   author: null,
+  replyTarget: null,
   transcript: [],
 });
 

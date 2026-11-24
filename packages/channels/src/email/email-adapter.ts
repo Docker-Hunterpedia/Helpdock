@@ -34,6 +34,8 @@ export interface EmailFacts {
   readonly automated: AutomatedReason | null;
   /** An SPF or DKIM failure was reported (M2-07). */
   readonly authFailed: boolean;
+  /** The `References` ids as they arrived, oldest first (M14-31 files a targeted reply under them). */
+  readonly references?: readonly string[] | undefined;
   readonly recipients: readonly string[];
   /** Delivered-To, falling back to X-Original-To, for forwarded or Bcc mail. */
   readonly deliveryAddress?: string | undefined;
@@ -99,6 +101,7 @@ export const toEmailInboundMessage = (
       body,
       automated: automatedReason(email),
       authFailed: authenticationFailed(email),
+      references: email.references,
       recipients: envelope.recipients,
       deliveryAddress:
         email.headers.get('delivered-to')?.[0] ?? email.headers.get('x-original-to')?.[0],

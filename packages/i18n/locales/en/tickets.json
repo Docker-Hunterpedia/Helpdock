@@ -126,6 +126,22 @@
   "status": {
     "label": "Status"
   },
+  "replyTo": {
+    "button": "Reply",
+    "buttonLabel": "Reply to {{name}}’s message",
+    "strip": "Replying to {{name}}’s email of {{time}}",
+    "showQuote": "Show quote",
+    "hideQuote": "Hide quote",
+    "clear": "Stop replying to this message",
+    "recipients": "This quotes {{name}}’s email to everyone on the reply: To {{to}}{{cc}}.",
+    "recipientsCc": " and Cc {{count}}",
+    "unavailable": "That message is no longer available",
+    "inReplyTo": "In reply to {{name}} · {{time}}",
+    "inReplyToEarlier": "In reply to an earlier email",
+    "inReplyToLabel": "In reply to {{name}}, {{time}}. Go to that message",
+    "quoteLabel": "Quoted message",
+    "stripLabel": "Replying to one email"
+  },
   "thread": {
     "label": "Conversation",
     "note": "Internal note",

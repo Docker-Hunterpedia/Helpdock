@@ -95,6 +95,14 @@ export const ticketMessages = pgTable(
       (): AnyPgColumn => ticketMessages.id,
       { onDelete: 'set null' },
     ),
+    /**
+     * M14-31. The customer email an agent's public reply answers: it threads
+     * to that message and quotes it at delivery. `set null` when the target is
+     * purged, so the reply outlives it and only loses its "In reply to" link.
+     */
+    replyToMessageId: uuid('reply_to_message_id').references((): AnyPgColumn => ticketMessages.id, {
+      onDelete: 'set null',
+    }),
     /** Model, tokens, cost and the sources an AI answer cited (DOMAIN-RULES §9). */
     aiMeta: jsonb('ai_meta').$type<Record<string, unknown>>(),
     /**
@@ -128,6 +136,10 @@ export const ticketMessages = pgTable(
       .on(table.brandId, table.channel, table.externalMessageId)
       .where(sql`${table.externalMessageId} is not null`),
     index('ticket_messages_brand_department_idx').on(table.brandId, table.departmentId),
+    // M14-31: the FK's `ON DELETE SET NULL` finds the replies of a purged message by it.
+    index('ticket_messages_reply_to_idx')
+      .on(table.replyToMessageId)
+      .where(sql`${table.replyToMessageId} is not null`),
   ],
 );
 

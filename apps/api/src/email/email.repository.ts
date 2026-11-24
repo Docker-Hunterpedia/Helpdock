@@ -1,3 +1,4 @@
+import { safeMessageId } from '@helpdock/channels';
 import {
   brands,
   contactIdentities,
@@ -17,7 +18,7 @@ import {
   tickets,
   users,
 } from '@helpdock/db';
-import { publicNameOf } from '@helpdock/schemas';
+import { emailMessageMetaSchema, publicNameOf } from '@helpdock/schemas';
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 
 /**
@@ -50,6 +51,11 @@ export interface SendFacts {
   } | null;
   readonly author: EmailAuthor | null;
   /**
+   * M14-31. The customer email a reply answers, when it named one and that
+   * message is still there: what the quote and the threading headers read.
+   */
+  readonly replyTarget: ReplyTarget | null;
+  /**
    * M4-08. The conversation a transcript carries: its public replies and AI
    * answers in order, never a note or a system row. Empty for every other kind.
    */
@@ -70,6 +76,20 @@ export interface EmailAuthor {
   readonly publicPhone: string | null;
   readonly signatureEn: string | null;
   readonly signatureAr: string | null;
+}
+
+/** The message a targeted reply threads to and quotes. */
+export interface ReplyTarget {
+  /** The bare `Message-ID` it arrived with, only when it is safe to write into a header. */
+  readonly messageId: string | undefined;
+  /** Its `References` chain as it arrived, each entry checked, oldest first. */
+  readonly references: readonly string[];
+  /** The sender's name, when the message named one. */
+  readonly senderName: string | null;
+  /** The `Date:` it was written, else when it arrived. */
+  readonly sentAt: Date;
+  readonly arrivedAt: Date;
+  readonly text: string;
 }
 
 const authorColumns = {
@@ -106,6 +126,11 @@ export interface ReplyAddressing {
     readonly address: string;
   } | null;
 }
+
+/** `References` stays short enough for any relay; the newest ids are the ones that file a reply. */
+const REFERENCES_MAX = 20;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const reference = (prefix: string, number: number): string => `${prefix}-${String(number)}`;
 
@@ -478,6 +503,7 @@ export class EmailRepository {
                 bodyText: ticketMessages.bodyText,
                 authorId: ticketMessages.authorId,
                 authorType: ticketMessages.authorType,
+                replyToMessageId: ticketMessages.replyToMessageId,
               })
               .from(ticketMessages)
               .where(eq(ticketMessages.id, delivery.ticketMessageId))
@@ -495,6 +521,11 @@ export class EmailRepository {
           )[0]
         : undefined;
 
+    const replyTarget =
+      delivery.kind === 'reply' && message?.replyToMessageId != null
+        ? await this.#replyTarget(tx, delivery.ticketId, message.replyToMessageId)
+        : null;
+
     return {
       ticket: {
         id: ticket.id,
@@ -511,6 +542,7 @@ export class EmailRepository {
       isSpam: ticket.isSpam,
       message: message ?? null,
       author: author ?? null,
+      replyTarget,
       transcript: delivery.kind === 'transcript' ? await this.#transcript(tx, ticket.id) : [],
     };
   }
@@ -549,22 +581,114 @@ export class EmailRepository {
   }
 
   /**
+   * M14-31. The stored message a reply was aimed at, if it is still a customer
+   * email of this ticket. Every id read from it is checked to be one well-formed
+   * `msg-id` before it can reach a header.
+   */
+  async #replyTarget(
+    tx: DbTransaction,
+    ticketId: string,
+    messageId: string,
+  ): Promise<ReplyTarget | null> {
+    const [row] = await tx
+      .select({
+        authorId: ticketMessages.authorId,
+        externalMessageId: ticketMessages.externalMessageId,
+        bodyText: ticketMessages.bodyText,
+        email: ticketMessages.email,
+        createdAt: ticketMessages.createdAt,
+      })
+      .from(ticketMessages)
+      .where(
+        and(
+          eq(ticketMessages.id, messageId),
+          eq(ticketMessages.ticketId, ticketId),
+          eq(ticketMessages.kind, 'public'),
+          eq(ticketMessages.authorType, 'contact'),
+          eq(ticketMessages.channel, 'email'),
+        ),
+      )
+      .limit(1);
+    if (row === undefined) {
+      return null;
+    }
+    // An erased person's email is neither quoted nor threaded to: the reply goes out as
+    // an ordinary one.
+    if (row.authorId !== null && UUID.test(row.authorId)) {
+      const [person] = await tx
+        .select({ anonymisedAt: contacts.anonymisedAt })
+        .from(contacts)
+        .where(eq(contacts.id, row.authorId))
+        .limit(1);
+      if (person?.anonymisedAt != null) {
+        return null;
+      }
+    }
+
+    const meta = emailMessageMetaSchema.safeParse(row.email);
+    const arrived = meta.success ? meta.data : undefined;
+    const sentAt = arrived?.date == null ? row.createdAt : new Date(arrived.date);
+
+    return {
+      messageId: safeMessageId(row.externalMessageId),
+      references: (arrived?.references ?? []).flatMap((id) => safeMessageId(id) ?? []),
+      senderName: arrived?.from.name?.trim() || null,
+      sentAt: Number.isNaN(sentAt.getTime()) ? row.createdAt : sentAt,
+      arrivedAt: row.createdAt,
+      text: row.bodyText,
+    };
+  }
+
+  /**
    * The ids a reply threads under (RFC 5322 §3.6.4): the customer's last
    * message before it as `In-Reply-To`, and every id of the thread so far as
    * `References`, oldest first and bounded, so a client files the reply where
    * the customer's copy of the conversation already is.
+   *
+   * M14-31: a reply aimed at one email threads to that email instead: its id
+   * is `In-Reply-To`, and `References` is that email's own chain (what arrived
+   * with it, else the thread before it) plus its id. A target with no usable
+   * `Message-ID` leaves the reply threaded as an ordinary one.
    */
   async threadIds(
     tx: DbTransaction,
     delivery: EmailDelivery,
+    target?: ReplyTarget | null,
   ): Promise<{ inReplyTo: string | undefined; references: string[] }> {
-    const before = delivery.createdAt;
+    if (target?.messageId === undefined) {
+      return this.#chain(tx, delivery.ticketId, delivery.createdAt);
+    }
+
+    const before =
+      target.references.length > 0
+        ? target.references
+        : // Stored ids of other messages are checked like the target's own before they are
+          // copied into a header we write.
+          (await this.#chain(tx, delivery.ticketId, target.arrivedAt)).references.flatMap(
+            (id) => safeMessageId(id) ?? [],
+          );
+
+    return {
+      inReplyTo: target.messageId,
+      // The target's id ends the chain even when it already appears inside it.
+      references: [
+        ...new Set(before.filter((id) => id !== target.messageId)),
+        target.messageId,
+      ].slice(-REFERENCES_MAX),
+    };
+  }
+
+  async #chain(
+    tx: DbTransaction,
+    ticketId: string,
+    before: Date,
+  ): Promise<{ inReplyTo: string | undefined; references: string[] }> {
     const inbound = await tx
       .select({ id: ticketMessages.externalMessageId })
       .from(ticketMessages)
       .where(
         and(
-          eq(ticketMessages.ticketId, delivery.ticketId),
+          eq(ticketMessages.ticketId, ticketId),
           eq(ticketMessages.channel, 'email'),
           eq(ticketMessages.kind, 'public'),
           eq(ticketMessages.authorType, 'contact'),
@@ -579,7 +703,7 @@ export class EmailRepository {
       .from(emailDeliveries)
       .where(
         and(
-          eq(emailDeliveries.ticketId, delivery.ticketId),
+          eq(emailDeliveries.ticketId, ticketId),
           eq(emailDeliveries.status, 'sent'),
           lt(emailDeliveries.createdAt, before),
         ),

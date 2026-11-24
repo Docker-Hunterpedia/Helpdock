@@ -38,6 +38,9 @@ export function EmailMessageCard({
   time,
   body,
   facts,
+  anchorId,
+  selected = false,
+  replyAction,
 }: {
   readonly message: TicketMessage;
   readonly email: EmailMessageView;
@@ -47,10 +50,18 @@ export function EmailMessageCard({
   readonly body?: ReactNode;
   /** M7-05, M7-08: the AI facts line under the body. */
   readonly facts?: ReactNode;
+  /** M14-31: the id "In reply to" links scroll to and focus. */
+  readonly anchorId?: string | undefined;
+  /** M14-31: the composer's strip names this email, so it carries the accent outline. */
+  readonly selected?: boolean;
+  /** M14-31: the Reply button, at the inline end of the header line. */
+  readonly replyAction?: ReactNode;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const [quoted, setQuoted] = useState(false);
+  // An erased sender has neither a name nor an address: the card says "Contact".
+  const shownAuthor = author === '' ? t('tickets:thread.contact') : author;
   const inline = new Set(email.inlineAttachmentIds);
   const figures = message.attachments.filter((attachment) => inline.has(attachment.id));
   const files = message.attachments.filter((attachment) => !inline.has(attachment.id));
@@ -60,8 +71,12 @@ export function EmailMessageCard({
   return (
     <Box
       component="article"
-      aria-label={t('tickets:email.label', { name: author })}
+      id={anchorId}
+      // Focusable by script only: "In reply to …" moves focus here.
+      tabIndex={anchorId === undefined ? undefined : -1}
+      aria-label={t('tickets:email.label', { name: shownAuthor })}
       sx={{
+        outline: 'none',
         display: 'flex',
         gap: '10px',
         maxWidth: MESSAGE_MAX_WIDTH,
@@ -86,16 +101,22 @@ export function EmailMessageCard({
           flexShrink: 0,
         }}
       >
-        {initialsOf(author)}
+        {initialsOf(shownAuthor)}
       </Box>
       <Box
         sx={{
           flexGrow: 1,
           minWidth: 0,
           borderRadius: '10px',
-          border: `1px solid ${tokens['border.default']}`,
+          border: `1px solid ${selected ? tokens['action.primary'] : tokens['border.default']}`,
+          boxShadow: selected ? `0 0 0 2px ${tokens['action.primary.tint']}` : undefined,
           backgroundColor: tokens['bg.surface'],
           overflow: 'hidden',
+          // Focus lands here from "In reply to …", by a mouse as well as a key, so the
+          // ring follows `:focus`, not `:focus-visible`; the ring is the card's own.
+          'article:focus > &': {
+            boxShadow: `0 0 0 2px ${tokens['action.primary']}`,
+          },
         }}
       >
         <Box
@@ -118,12 +139,14 @@ export function EmailMessageCard({
               component="strong"
               sx={{ color: 'text.primary', fontWeight: 500, fontSize: 13 }}
             >
-              {author}
+              {shownAuthor}
             </Typography>
-            <bdi>{`<${email.from.address}>`}</bdi>
+            {/* An erased sender has no address: nothing is drawn rather than "<>". */}
+            {email.from.address === '' ? null : <bdi>{`<${email.from.address}>`}</bdi>}
             <Box component="span" sx={{ marginInlineStart: 'auto', whiteSpace: 'nowrap' }}>
               <bdi>{time}</bdi>
             </Box>
+            {replyAction}
           </Box>
           {email.to.length === 0 && email.cc.length === 0 ? null : (
             <Box>

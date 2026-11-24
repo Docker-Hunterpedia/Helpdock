@@ -54,3 +54,34 @@ export const outboundMessageId = ({
   readonly id: string;
   readonly fromAddress: string;
 }): string => `<hd.${KIND_TAG[kind]}.${id}@${messageIdDomain(fromAddress)}>`;
+
+/** One RFC 5322 `msg-id` without its angle brackets: a dot-atom, one `@`, a dot-atom. */
+const SAFE_MESSAGE_ID = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$/;
+const MESSAGE_ID_MAX_LENGTH = 255;
+
+/** The most `References` ids kept on a stored message. */
+export const STORED_REFERENCES_MAX = 100;
+
+/**
+ * The `References` of an inbound email as they are stored (M14-31): only ids
+ * that are one well-formed `msg-id`, the newest {@link STORED_REFERENCES_MAX}.
+ * A sender's 1,200-character entry is dropped here, so no field of the stored
+ * metadata can be one the schema refuses.
+ */
+export const storableReferences = (ids: readonly string[]): string[] =>
+  ids.flatMap((id) => safeMessageId(id) ?? []).slice(-STORED_REFERENCES_MAX);
+
+/**
+ * A stored `Message-ID` or `References` entry, as it may go into a header we
+ * write (M14-31): bare, one well-formed id and nothing else. Anything that
+ * could carry a second header, a second id or markup is refused, so a value a
+ * sender chose can never shape ours. Returns the bare id, or undefined.
+ */
+export const safeMessageId = (value: string | null | undefined): string | undefined => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  const bare = value.startsWith('<') && value.endsWith('>') ? value.slice(1, -1) : value;
+
+  return bare.length <= MESSAGE_ID_MAX_LENGTH && SAFE_MESSAGE_ID.test(bare) ? bare : undefined;
+};

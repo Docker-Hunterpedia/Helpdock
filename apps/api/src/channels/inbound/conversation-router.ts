@@ -1,4 +1,4 @@
-import type { EmailInboundMessage } from '@helpdock/channels';
+import { type EmailInboundMessage, storableReferences } from '@helpdock/channels';
 import {
   contactIdentities,
   type DbTransaction,
@@ -456,6 +456,7 @@ export class ConversationRouter {
       .filter((index) => index !== -1)
       .map((index) => attachmentIds[index] ?? '');
 
+    const references = storableReferences(message.email.references ?? []);
     const meta: EmailMessageMeta = {
       from: { address: message.from.value, name: message.from.name },
       to: [...message.email.to],
@@ -467,6 +468,7 @@ export class ConversationRouter {
       inlineAttachmentIds,
       authFailed: message.email.authFailed,
       mismatch: null,
+      ...(references.length === 0 ? {} : { references }),
     };
 
     const row = await this.#deps.tickets.insertMessage(tx, {

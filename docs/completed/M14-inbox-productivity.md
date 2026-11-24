@@ -272,6 +272,7 @@ L 6 d.
 | M14-28 | More webhook events for tickets, messages, contacts and accounts | 3 d | M14-03 (bulk changes emit them per ticket) |
 | M14-29 | Reports: volume by tag, and the current backlog by status with its unassigned share | 2 d | — |
 | M14-30 | A button to hide and show the ticket list: a 32 px button at the start of the ticket header on the split layout (`Admin/Ticket-ListToggle-ReplyTo`), in place of the full-width "Show the ticket list" row of M14-19. Added after the milestone shipped, on an owner request of 2026-11; not part of the 103.5-day total | — | M14-19 |
+| M14-31 | Reply to one email of a ticket, quoted and threaded to it: a Reply button on each customer email, a "Replying to" strip in the composer, `In-Reply-To` and `References` set to that email and its text quoted under the reply (`Admin/Ticket-ListToggle-ReplyTo`; [Tickets](../guides/tickets.md#replying-to-one-email), [Email](../guides/email.md#a-reply-aimed-at-one-email), [DOMAIN-RULES §4.3](../planning/DOMAIN-RULES.md#43-email-threading)). Added after the milestone shipped, on an owner request of 2026-11 ([#465](https://github.com/Docker-Hunterpedia/Helpdock/issues/465)); not part of the 103.5-day total | — | M14-19 |
 
 Total: about **103.5 working days** for one person (about 21 weeks): 75 days
 for M14-01 to M14-18 and M14-24, 16 for the UX additions M14-19 to M14-23, and

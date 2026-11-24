@@ -10,6 +10,7 @@ import type {
   KnowledgeRefusal,
   MetaRefusal,
   MetaRefusalDetails,
+  ReplyTargetRefusal,
   SsoRefusal,
   StaffRefusal,
   TelegramRefusal,
@@ -33,7 +34,7 @@ import { StaffError } from '../staff/api.js';
 import { TelegramError } from '../telegram/api.js';
 import { TicketingError } from '../ticketing/api.js';
 import { type FieldIssue, FieldValidationError } from '../ticketing/field-errors.js';
-import { TicketLifecycleError } from '../tickets/api.js';
+import { ReplyTargetError, TicketLifecycleError } from '../tickets/api.js';
 import { AuthError } from './api.js';
 
 /**
@@ -270,6 +271,7 @@ const toError = async (
   | TelegramError
   | TicketingError
   | TicketLifecycleError
+  | ReplyTargetError
   | WebhooksError
   | FieldValidationError
 > => {
@@ -283,6 +285,7 @@ const toError = async (
         fields?: string[] | undefined;
       }
     | undefined;
+  let replyTarget: ReplyTargetRefusal | undefined;
   let channels: ChannelsRefusal | undefined;
   let domains: DomainsRefusal | undefined;
   let helpCenter: HcRefusal | undefined;
@@ -303,6 +306,7 @@ const toError = async (
     contact = body.contact;
     ticketing = body.ticketing;
     lifecycle = body.lifecycle;
+    replyTarget = body.replyTarget?.reason;
     channels = body.channels?.reason;
     domains = body.domains?.reason;
     helpCenter = body.helpCenter?.reason;
@@ -334,6 +338,10 @@ const toError = async (
 
   if (lifecycle !== undefined) {
     return new TicketLifecycleError(lifecycle.reason, lifecycle.fields);
+  }
+
+  if (replyTarget !== undefined) {
+    return new ReplyTargetError(replyTarget);
   }
 
   if (channels !== undefined) {

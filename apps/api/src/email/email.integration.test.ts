@@ -8,6 +8,7 @@ import {
   emailDeliveries,
   mailboxes,
   outbox,
+  ticketMessages,
   tickets,
   userBrandRoles,
   users,
@@ -213,7 +214,11 @@ describe.skipIf(!hasDocker)('outbound email', () => {
     return response.body.ticket.id;
   };
 
-  const reply = async (ticketId: string, emailFrom?: string): Promise<TicketMessage> => {
+  const reply = async (
+    ticketId: string,
+    emailFrom?: string,
+    replyToMessageId?: string,
+  ): Promise<TicketMessage> => {
     const response = await call<TicketMessage>(
       'POST',
       `${brandPath()}/tickets/${ticketId}/messages`,
@@ -222,6 +227,7 @@ describe.skipIf(!hasDocker)('outbound email', () => {
         kind: 'public',
         bodyHtml: '<p>Your refund was issued on 4 September.</p>',
         ...(emailFrom === undefined ? {} : { emailFrom }),
+        ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
       },
     );
     expect(response.status).toBe(201);
@@ -470,6 +476,211 @@ describe.skipIf(!hasDocker)('outbound email', () => {
     });
     expect(delivered[0]?.Cc?.map((address) => address.Address)).toEqual(['karim@acme.test']);
     expect((await deliveryFor(message.id)).status).toBe('sent');
+  });
+
+  /** A customer email as a mailbox would have filed it, with the facts the targeted reply reads. */
+  const fileEmail = async (
+    ticketId: string,
+    input: {
+      externalMessageId: string;
+      text: string;
+      at: string;
+      references?: string[];
+      authorId?: string;
+    },
+  ): Promise<string> => {
+    const [next] = await owner.db
+      .select({ seq: sql<number>`coalesce(max(${ticketMessages.seq}), 0) + 1` })
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, ticketId));
+    const [row] = await owner.db
+      .insert(ticketMessages)
+      .values({
+        brandId: seeded.brandId,
+        ticketId,
+        departmentId: billing,
+        seq: Number(next?.seq),
+        kind: 'public',
+        authorType: 'contact',
+        authorId: input.authorId ?? contactId,
+        bodyHtml: `<p>${input.text}</p>`,
+        bodyText: input.text,
+        channel: 'email',
+        externalMessageId: input.externalMessageId,
+        email: {
+          from: { address: 'mona@example.com', name: 'Mona Khalil' },
+          to: [],
+          cc: [],
+          date: input.at,
+          quotedHtml: null,
+          remoteImages: [],
+          remoteImagePolicy: 'block',
+          inlineAttachmentIds: [],
+          authFailed: false,
+          mismatch: null,
+          ...(input.references === undefined ? {} : { references: input.references }),
+        },
+      })
+      .returning({ id: ticketMessages.id });
+    return row?.id ?? '';
+  };
+
+  /** Runs the `email.send` job of a reply's delivery, and answers what Mailpit then holds for it. */
+  const deliver = async (messageId: string) => {
+    const delivery = await deliveryFor(messageId);
+    const [event] = await sendEvents(delivery.id);
+    await processor()(await jobFor(event?.id ?? '', delivery.id));
+    const found = (await mailpitMessages()).find(
+      (candidate) => candidate.MessageID === `hd.m.${messageId}@helpdock.test`,
+    );
+    if (found === undefined) {
+      throw new Error(`nothing was delivered for ${messageId}`);
+    }
+    return {
+      headers: await mailpitHeaders(found.ID),
+      text: await mailpitText(found.ID),
+      html: (
+        (await (await fetch(`${mailpitApi}/api/v1/message/${found.ID}`)).json()) as { HTML: string }
+      ).HTML,
+    };
+  };
+
+  it('threads a reply to the one email it answers and quotes it, leaving an ordinary reply alone (M14-31)', async () => {
+    await clearMailpit();
+    const ticketId = await createTicket(billing);
+    await fileEmail(ticketId, {
+      externalMessageId: 'msg-1148@mail.example.com',
+      text: 'Where is my refund?',
+      at: '2026-11-10T11:48:00Z',
+    });
+    const second = await fileEmail(ticketId, {
+      externalMessageId: 'msg-1205@mail.example.com',
+      text: 'One more thing: the invoice for <order> 8790, please & thanks.',
+      references: ['msg-1148@mail.example.com', 'bad id@x.y\r\nBcc: spy@evil.test'],
+      at: '2026-11-10T12:05:00Z',
+    });
+    await fileEmail(ticketId, {
+      externalMessageId: 'msg-1330@mail.example.com',
+      text: 'Any news?',
+      at: '2026-11-10T13:30:00Z',
+    });
+
+    const targeted = await reply(ticketId, undefined, second);
+    await deliver(targeted.id);
+    const ordinary = await reply(ticketId);
+    await deliver(ordinary.id);
+
+    const delivered = await mailpitMessages();
+    const sentTargeted = delivered.find((m) => m.MessageID === `hd.m.${targeted.id}@helpdock.test`);
+    const sentOrdinary = delivered.find((m) => m.MessageID === `hd.m.${ordinary.id}@helpdock.test`);
+    const headers = await mailpitHeaders(sentTargeted?.ID ?? '');
+    expect(headers['In-Reply-To']).toEqual(['<msg-1205@mail.example.com>']);
+    // The target's own chain plus its id; the malformed entry never reaches a header.
+    expect(headers.References).toEqual(['<msg-1148@mail.example.com> <msg-1205@mail.example.com>']);
+    expect(headers.Bcc).toBeUndefined();
+    const text = await mailpitText(sentTargeted?.ID ?? '');
+    expect(text).toContain('wrote:');
+    expect(text).toContain('> One more thing: the invoice for <order> 8790, please & thanks.');
+    const html = await (
+      await fetch(`${mailpitApi}/api/v1/message/${sentTargeted?.ID ?? ''}`)
+    ).json();
+    expect((html as { HTML: string }).HTML).toContain('&lt;order&gt;');
+
+    // The stored reply is only what the agent wrote.
+    const [stored] = await owner.db
+      .select({ bodyText: ticketMessages.bodyText })
+      .from(ticketMessages)
+      .where(eq(ticketMessages.id, targeted.id));
+    expect(stored?.bodyText).toBe('Your refund was issued on 4 September.');
+
+    // An ordinary reply threads to the latest customer email and carries no quote.
+    const ordinaryHeaders = await mailpitHeaders(sentOrdinary?.ID ?? '');
+    expect(ordinaryHeaders['In-Reply-To']).toEqual(['<msg-1330@mail.example.com>']);
+    expect(await mailpitText(sentOrdinary?.ID ?? '')).not.toContain('wrote:');
+  });
+
+  it.each([
+    [
+      'a note by then',
+      async (messageId: string) =>
+        owner.db
+          .update(ticketMessages)
+          .set({ kind: 'note', authorType: 'staff' })
+          .where(eq(ticketMessages.id, messageId)),
+    ],
+    [
+      'a message of another ticket by then',
+      async (messageId: string, elsewhere: string) =>
+        owner.db
+          .update(ticketMessages)
+          .set({ ticketId: elsewhere, seq: 999 })
+          .where(eq(ticketMessages.id, messageId)),
+    ],
+  ])(
+    'sends an ordinary reply, with no quote, when the target turned into %s (M14-31)',
+    async (_name, change) => {
+      await clearMailpit();
+      const ticketId = await createTicket(billing);
+      const elsewhere = await createTicket(billing);
+      const unique = uuidv7();
+      await fileEmail(ticketId, {
+        externalMessageId: `latest-${unique}@mail.example.com`,
+        text: 'The latest email.',
+        at: '2026-11-10T13:30:00Z',
+      });
+      const target = await fileEmail(ticketId, {
+        externalMessageId: `target-${unique}@mail.example.com`,
+        text: 'Quote me not.',
+        at: '2026-11-10T12:05:00Z',
+      });
+      const sent = await reply(ticketId, undefined, target);
+      await change(target, elsewhere);
+
+      const delivered = await deliver(sent.id);
+
+      expect(delivered.text).not.toContain('wrote:');
+      expect(delivered.text).not.toContain('Quote me not.');
+      expect(delivered.headers['In-Reply-To']).toEqual([`<latest-${unique}@mail.example.com>`]);
+    },
+  );
+
+  it('sends no quote and no threading to an email whose sender was erased after the reply was written (M14-31)', async () => {
+    await clearMailpit();
+    const [erased] = await owner.db
+      .insert(contacts)
+      .values({ brandId: seeded.brandId, name: 'Karim Nasser' })
+      .returning({ id: contacts.id });
+    const ticketId = await createTicket(billing);
+    const target = await fileEmail(ticketId, {
+      externalMessageId: 'karim-1@mail.example.com',
+      text: 'My private words.',
+      at: '2026-11-10T12:05:00Z',
+      authorId: erased?.id ?? '',
+    });
+    const sent = await reply(ticketId, undefined, target);
+
+    const anonymised = await call(
+      'POST',
+      `${brandPath()}/contacts/${erased?.id ?? ''}/anonymise`,
+      admin,
+    );
+    expect(anonymised.status).toBe(201);
+    const delivered = await deliver(sent.id);
+
+    expect(delivered.text).not.toContain('My private words.');
+    expect(delivered.text).not.toContain('Karim');
+    expect(delivered.html).not.toContain('My private words.');
+    expect(delivered.headers['In-Reply-To'] ?? []).not.toContain('<karim-1@mail.example.com>');
+
+    // And a new reply cannot be aimed at it.
+    const again = await call<{ error: { message: string } }>(
+      'POST',
+      `${brandPath()}/tickets/${ticketId}/messages`,
+      admin,
+      { kind: 'public', bodyHtml: '<p>Hi</p>', replyToMessageId: target },
+    );
+    expect(again.status).toBe(409);
+    expect(again.body.error.message).toBe('reply-to.gone');
   });
 
   it("sends a composer reply from the rule's reply mailbox, and falls back for a mailbox that is not the ticket's (M14-26)", async () => {

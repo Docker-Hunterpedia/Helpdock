@@ -165,6 +165,7 @@ export const toTicketMessage = (
   bodyText: row.bodyText,
   channel: row.channel,
   attachments: attachments.map(toAttachment),
+  replyToMessageId: row.replyToMessageId,
   ...emailOf(row),
   ...aiOf(row),
   createdAt: row.createdAt.toISOString(),

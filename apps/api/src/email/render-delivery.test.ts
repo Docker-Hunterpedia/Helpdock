@@ -27,6 +27,7 @@ const facts: SendFacts = {
     authorType: 'staff',
   },
   author: LINA,
+  replyTarget: null,
   transcript: [],
 };
 
@@ -213,5 +214,63 @@ describe('renderDelivery, a widget transcript (M4-08)', () => {
   it('is not an auto-reply, so it carries no loop-protection headers and no reply marker', () => {
     expect(message.headers).toBeUndefined();
     expect(message.html).not.toContain('##-');
+  });
+});
+
+describe('renderDelivery, a reply aimed at one email (M14-31)', () => {
+  const target = {
+    messageId: 'msg-1205@mail.example.com',
+    references: ['msg-1148@mail.example.com', 'msg-1205@mail.example.com'],
+    senderName: 'Mona Khalil',
+    sentAt: new Date('2026-11-10T12:05:00Z'),
+    arrivedAt: new Date('2026-11-10T12:05:30Z'),
+    text: 'One more thing: can you also send the invoice for order 8790?',
+  };
+
+  it('appends the quote under the reply, in the customer language, in both parts', () => {
+    const message = renderDelivery({
+      delivery: deliveryRow(),
+      facts: { ...facts, replyTarget: target },
+      thread,
+      templates,
+    });
+
+    expect(message.text).toContain('On Tue, 10 Nov 2026 at 12:05 UTC, Mona Khalil wrote:');
+    expect(message.text).toContain('> One more thing: can you also send the invoice');
+    expect(message.html).toContain('<blockquote');
+    expect(message.html).toContain('Mona Khalil wrote:');
+    // Before the `-- ` delimiter, which a text client reads as the start of the signature.
+    expect(message.text.indexOf('> One more')).toBeLessThan(message.text.indexOf('-- \n'));
+    expect(message.text.indexOf('-- \n')).toBeLessThan(message.text.indexOf('Billing team'));
+  });
+
+  it('writes the intro in Arabic for an Arabic customer', () => {
+    const message = renderDelivery({
+      delivery: deliveryRow({ locale: 'ar' }),
+      facts: { ...facts, replyTarget: { ...target, senderName: 'منى خليل' } },
+      thread,
+      templates,
+    });
+
+    expect(message.text).toContain('كتب منى خليل:');
+    expect(message.text).toContain('12:05');
+  });
+
+  it('draws no quote for an ordinary reply', () => {
+    const message = renderDelivery({ delivery: deliveryRow(), facts, thread, templates });
+
+    expect(message.html).not.toContain('<blockquote');
+    expect(message.text).not.toContain('wrote:');
+  });
+
+  it('never quotes into an auto-reply', () => {
+    const message = renderDelivery({
+      delivery: deliveryRow({ kind: 'acknowledgment', ticketMessageId: null }),
+      facts: { ...facts, message: null, author: null, replyTarget: target },
+      thread: { inReplyTo: undefined, references: [] },
+      templates,
+    });
+
+    expect(message.html).not.toContain('<blockquote');
   });
 });

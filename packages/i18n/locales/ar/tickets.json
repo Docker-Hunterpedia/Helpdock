@@ -126,6 +126,22 @@
   "status": {
     "label": "الحالة"
   },
+  "replyTo": {
+    "button": "رد",
+    "buttonLabel": "الرد على رسالة {{name}}",
+    "strip": "رد على بريد {{name}}، {{time}}",
+    "showQuote": "إظهار الاقتباس",
+    "hideQuote": "إخفاء الاقتباس",
+    "clear": "إلغاء الرد على هذه الرسالة",
+    "recipients": "يقتبس هذا بريد {{name}} لكل من في الرد: إلى {{to}}{{cc}}.",
+    "recipientsCc": " ونسخة إلى {{count}}",
+    "unavailable": "لم تعد هذه الرسالة متاحة",
+    "inReplyTo": "ردًا على {{name}} · {{time}}",
+    "inReplyToEarlier": "ردًا على بريد سابق",
+    "inReplyToLabel": "ردًا على {{name}}، {{time}}. الانتقال إلى تلك الرسالة",
+    "quoteLabel": "الرسالة المقتبسة",
+    "stripLabel": "الرد على بريد واحد"
+  },
   "thread": {
     "label": "المحادثة",
     "note": "ملاحظة داخلية",

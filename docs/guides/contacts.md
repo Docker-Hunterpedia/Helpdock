@@ -232,7 +232,9 @@ A Viewer sees the button disabled, and an erased contact offers neither entry.
   attachment on a message they wrote. The rows go in the erasure's transaction;
   the objects are queued through the outbox and deleted by the worker (M1-14).
 - The **channel ids** of the messages they wrote (`external_message_id`) are
-  cleared. The messages themselves stay, still attributed to the erased contact,
+  cleared, and on their emails the stored header strip loses the sender's name
+  and address and the stored `References` (a reply aimed at such an email is
+  refused as gone). The messages themselves stay, still attributed to the erased contact,
   and the bodies are kept under the brand's
   [retention](data-retention.md).
 - **Copies in other tables** go with them (ASVS 8.3.2):

@@ -398,6 +398,11 @@ export const ticketMessageSchema = z.object({
    */
   attachments: z.array(attachmentSchema).default([]),
   /**
+   * M14-31. The customer email this reply answered, for the thread's "In reply
+   * to" line; null (or absent, on rows written before it) when it answered none, or when that message was purged.
+   */
+  replyToMessageId: z.uuid().nullable().optional(),
+  /**
    * M2: the email card's header strip, quoted text, remote images and inline
    * figures. Absent on every message that did not arrive by email.
    */
@@ -867,8 +872,22 @@ export const messageCreateRequestSchema = z.object({
    * ticket's own department's sender is used. Ignored on anything else.
    */
   emailFrom: emailSenderKeySchema.optional(),
+  /**
+   * M14-31. The customer email this public reply answers: a public, inbound,
+   * email-channel message of this ticket. The reply threads to it and quotes it
+   * when the email is sent. Refused on a note.
+   */
+  replyToMessageId: z.uuid().optional(),
 });
 export type MessageCreateRequest = z.infer<typeof messageCreateRequestSchema>;
+
+/**
+ * M14-31. Why a public reply's `replyToMessageId` was refused. `gone` (409) is a
+ * target that was deleted or erased, or that the caller cannot read; the reply
+ * was not sent. The other two are 400s that also name the field.
+ */
+export const replyTargetRefusalSchema = z.enum(['not-allowed', 'not-a-customer-email', 'gone']);
+export type ReplyTargetRefusal = z.infer<typeof replyTargetRefusalSchema>;
 
 export const messagePageQuerySchema = z.object({
   /** Return messages with `seq` greater than this (DOMAIN-RULES §7). */

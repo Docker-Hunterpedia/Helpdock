@@ -136,6 +136,10 @@ export const ticketMessages = pgTable(
       .on(table.brandId, table.channel, table.externalMessageId)
       .where(sql`${table.externalMessageId} is not null`),
     index('ticket_messages_brand_department_idx').on(table.brandId, table.departmentId),
+    // M14-31: the FK's `ON DELETE SET NULL` finds the replies of a purged message by it.
+    index('ticket_messages_reply_to_idx')
+      .on(table.replyToMessageId)
+      .where(sql`${table.replyToMessageId} is not null`),
   ],
 );
 

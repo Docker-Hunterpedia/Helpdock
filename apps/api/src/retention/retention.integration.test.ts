@@ -1246,6 +1246,59 @@ describe.skipIf(!hasDocker)('data retention', () => {
       expect(storage.removed).toEqual(expect.arrayContaining([...ticket.keys]));
     });
 
+    it("strips the sender and the thread ids from an email's stored header, and a reply aimed at it reads as gone (M14-31)", async () => {
+      const contactId = uuidv7();
+      await withSystem(db(), brandA.id, async (tx) => {
+        await tx
+          .insert(contacts)
+          .values({ id: contactId, brandId: brandA.id, name: 'Mona Khalil' });
+      });
+      const ticket = await seedTicket(brandA, { status: 'open', contactId });
+      await withSystem(db(), brandA.id, (tx) =>
+        tx
+          .update(ticketMessages)
+          .set({
+            email: {
+              from: { address: 'mona@customer.example', name: 'Mona Khalil' },
+              to: [],
+              cc: [],
+              date: null,
+              quotedHtml: null,
+              remoteImages: [],
+              remoteImagePolicy: 'block',
+              inlineAttachmentIds: [],
+              authFailed: true,
+              mismatch: null,
+              references: ['first@mail.customer.example'],
+            },
+          })
+          .where(eq(ticketMessages.id, ticket.messageId)),
+      );
+
+      const erased = await call<ContactDetail>(
+        'POST',
+        `/api/brands/${brandA.id}/contacts/${contactId}/anonymise`,
+        adminToken,
+      );
+
+      expect(erased.status).toBe(201);
+      const [row] = await withSystem(db(), brandA.id, (tx) =>
+        tx.select().from(ticketMessages).where(eq(ticketMessages.id, ticket.messageId)),
+      );
+      expect(row?.email).toMatchObject({ from: { address: '', name: null }, authFailed: true });
+      expect(row?.email).not.toHaveProperty('references');
+      expect(JSON.stringify(row?.email)).not.toContain('mona@customer.example');
+
+      const reply = await call<{ error: { message: string } }>(
+        'POST',
+        `/api/brands/${brandA.id}/tickets/${ticket.id}/messages`,
+        adminToken,
+        { kind: 'public', bodyHtml: '<p>Hi</p>', replyToMessageId: ticket.messageId },
+      );
+      expect(reply.status).toBe(409);
+      expect(reply.body.error.message).toBe('reply-to.gone');
+    });
+
     it('takes the Telegram chat, the AI redaction map and the webhook copies, and leaves other people alone', async () => {
       const contactId = uuidv7();
       const bystanderId = uuidv7();

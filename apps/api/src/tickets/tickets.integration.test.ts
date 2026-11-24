@@ -1382,6 +1382,48 @@ describe.skipIf(!hasDocker)('tickets', () => {
       expect(sentCount).toHaveLength(1);
     });
 
+    it('returns the stored reply to a retry whose target was purged since, not a 409', async () => {
+      const { ticket } = await createTicket(sam);
+      const target = await file(ticket.id);
+      const clientId = uuidv7();
+      const first = await send(sam, ticket.id, { replyToMessageId: target, clientId });
+      expect(first.status).toBe(201);
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.delete(ticketMessages).where(eq(ticketMessages.id, target)),
+      );
+
+      const retry = await send(sam, ticket.id, { replyToMessageId: target, clientId });
+
+      expect(retry.status).toBe(201);
+      expect(retry.body.id).toBe(first.body.id);
+    });
+
+    it('still shows the sender, the authentication warning and the images of an email whose References were hostile', async () => {
+      const { ticket } = await createTicket(sam);
+      await file(ticket.id, {
+        email: {
+          from: { address: 'mona@example.com', name: 'Mona Khalil' },
+          to: [],
+          cc: [],
+          date: null,
+          quotedHtml: null,
+          remoteImages: [],
+          remoteImagePolicy: 'block',
+          inlineAttachmentIds: [],
+          authFailed: true,
+          mismatch: null,
+          // One entry past the 998 characters the schema allows for each.
+          references: ['ok@x.y', `${'a'.repeat(1204)}@x.y`],
+        },
+      });
+
+      const thread = await call<TicketMessagePage>('GET', messagesOf(ticket.id), sam);
+
+      const email = thread.body.messages.find((message) => message.email !== undefined)?.email;
+      expect(email).toMatchObject({ authFailed: true, from: { address: 'mona@example.com' } });
+      expect(JSON.stringify(thread.body)).not.toContain('aaaaaaaaaa');
+    });
+
     it('does not send a reply whose target is gone, and unlinks one whose target is purged later', async () => {
       const { ticket } = await createTicket(sam);
       const target = await file(ticket.id);

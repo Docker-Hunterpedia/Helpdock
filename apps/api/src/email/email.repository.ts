@@ -590,6 +590,7 @@ export class EmailRepository {
   ): Promise<ReplyTarget | null> {
     const [row] = await tx
       .select({
+        authorId: ticketMessages.authorId,
         externalMessageId: ticketMessages.externalMessageId,
         bodyText: ticketMessages.bodyText,
         email: ticketMessages.email,
@@ -608,6 +609,18 @@ export class EmailRepository {
       .limit(1);
     if (row === undefined) {
       return null;
+    }
+    // An erased person's email is neither quoted nor threaded to: the reply goes out as
+    // an ordinary one.
+    if (row.authorId !== null) {
+      const [person] = await tx
+        .select({ anonymisedAt: contacts.anonymisedAt })
+        .from(contacts)
+        .where(sql`${contacts.id}::text = ${row.authorId}`)
+        .limit(1);
+      if (person?.anonymisedAt != null) {
+        return null;
+      }
     }
 
     const meta = emailMessageMetaSchema.safeParse(row.email);
@@ -655,7 +668,11 @@ export class EmailRepository {
 
     return {
       inReplyTo: target.messageId,
-      references: [...new Set([...before, target.messageId])].slice(-REFERENCES_MAX),
+      // The target's id ends the chain even when it already appears inside it.
+      references: [
+        ...new Set(before.filter((id) => id !== target.messageId)),
+        target.messageId,
+      ].slice(-REFERENCES_MAX),
     };
   }
 

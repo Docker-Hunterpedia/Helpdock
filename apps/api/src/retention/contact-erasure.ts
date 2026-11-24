@@ -1,5 +1,5 @@
 import { attachments, type DbTransaction, ticketMessages } from '@helpdock/db';
-import { and, eq, inArray, isNotNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import type { ContactErasureProvider, ContactErasureResult } from '../contacts/providers.js';
 import { enqueueObjectPurge } from '../media/object-purge.js';
 import {
@@ -29,7 +29,9 @@ import {
  * (whose right-hand side is the sender's mail host), a Telegram message id in a
  * chat with that person or a WhatsApp `wamid`. Those are cleared, and so are
  * the ones a Meta channel's system lines carry for the person's messages
- * (`eraseMetaLineKeys`). The body stays, as §11 says.
+ * (`eraseMetaLineKeys`). An email's stored header strip loses the sender's name and
+ * address and its `References` (M14-31), so a reply aimed at it can neither quote it
+ * nor thread to it. The body stays, as §11 says.
  *
  * **Copies in other tables** (ASVS 8.3.2): the Telegram chat rows and the Meta
  * conversations, the redaction maps of model calls on their tickets, and the
@@ -87,6 +89,16 @@ export class DbContactErasureProvider implements ContactErasureProvider {
       .set({ externalMessageId: null })
       .where(and(authoredByContact, isNotNull(ticketMessages.externalMessageId)))
       .returning({ id: ticketMessages.id });
+
+    // M14-31. What an email's stored metadata names of the sender: their name and address
+    // and the ids of the thread they wrote into. A reply aimed at such an email reads as gone.
+    await tx
+      .update(ticketMessages)
+      .set({
+        email: sql`(${ticketMessages.email} - 'references')
+          || jsonb_build_object('from', jsonb_build_object('address', '', 'name', null))`,
+      })
+      .where(and(authoredByContact, isNotNull(ticketMessages.email)));
 
     const metaLines = await eraseMetaLineKeys(tx, brandId, contactId);
 

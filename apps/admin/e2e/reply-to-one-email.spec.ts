@@ -104,6 +104,29 @@ test.describe('replying to one email of a ticket', () => {
     await expect(body).toHaveValue('Kept');
   });
 
+  test('says the email is no longer available when the api refuses it, and holds Send', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const { t, form, body, replyButtons, strip, clear } = await openThreeEmails(page, locale);
+    const send = form.getByRole('button', { name: t('tickets:email.send') });
+
+    // The fixture treats the last email as erased by the time a reply names it.
+    await replyButtons.nth(2).click();
+    await body.fill('The invoice is attached.');
+    await send.click();
+
+    await expect(strip.getByText(t('tickets:replyTo.unavailable'))).toBeVisible();
+    await expect(body).toHaveValue('The invoice is attached.');
+    await expect(send).toBeDisabled();
+
+    // Clearing the strip lets the same text go as an ordinary reply.
+    await clear.click();
+    await expect(send).toBeEnabled();
+    await send.click();
+    await expect(strip).toBeHidden();
+  });
+
   test('has no Reply button on the note or on the staff reply', async ({
     page,
     appLocale: locale,

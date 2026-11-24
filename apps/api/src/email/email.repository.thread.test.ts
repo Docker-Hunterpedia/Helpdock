@@ -45,6 +45,16 @@ describe('EmailRepository.threadIds for a targeted reply', () => {
     expect(ids.references).toEqual(['a@x.y', 'msg-1205@mail.example.com']);
   });
 
+  it('puts the target last even when it already stands inside its own chain', async () => {
+    const ids = await repository.threadIds(
+      noQueries,
+      delivery,
+      target({ references: ['a@x.y', 'msg-1205@mail.example.com', 'b@x.y'] }),
+    );
+
+    expect(ids.references).toEqual(['a@x.y', 'b@x.y', 'msg-1205@mail.example.com']);
+  });
+
   it('keeps the newest twenty ids, the target last', async () => {
     const chain = Array.from({ length: 40 }, (_, index) => `m${String(index)}@x.y`);
     const ids = await repository.threadIds(noQueries, delivery, target({ references: chain }));

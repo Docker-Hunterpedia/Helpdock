@@ -40,8 +40,10 @@ export interface CustomerEmailLayout {
   /** "This is an automatic reply…". */
   readonly note: string | null;
   /**
-   * M14-31. The message a reply answers, under the reply, its signature and
-   * note. Both parts are built by the caller and already escaped.
+   * M14-31. The message a reply answers, under the reply and above its
+   * signature (a text client reads everything after `-- ` as the signature, so
+   * a quote below it would be lost). Both parts are built by the caller and
+   * already escaped.
    */
   readonly quote?: { readonly html: string; readonly text: string } | undefined;
   readonly reference: CustomerEmailReference;
@@ -54,7 +56,7 @@ export interface CustomerEmailLayout {
 const DEFAULT_ACCENT = '#0F766E';
 const HEX = /^#[0-9a-f]{6}$/i;
 
-const COLOURS = {
+export const COLOURS = {
   page: '#EFECE5',
   surface: '#FFFFFF',
   subtle: '#F7F5F0',
@@ -155,7 +157,7 @@ export const renderCustomerEmail = (
       `padding:20px 32px;border-bottom:1px solid ${COLOURS.divider}`,
     ),
     row(
-      `${layout.bodyHtml}${signatureHtml}${noteHtml}${layout.quote?.html ?? ''}`,
+      `${layout.bodyHtml}${layout.quote?.html ?? ''}${signatureHtml}${noteHtml}`,
       'padding:24px 32px;font-size:16px;line-height:24px',
     ),
     row(
@@ -172,9 +174,9 @@ export const renderCustomerEmail = (
   const text = [
     ...(layout.replyMarker === null ? [] : [layout.replyMarker, '']),
     layout.bodyText.trim(),
+    ...(layout.quote === undefined ? [] : ['', layout.quote.text]),
     ...(lines.length === 0 ? [] : ['', '-- ', ...lines]),
     ...(layout.note === null ? [] : ['', layout.note]),
-    ...(layout.quote === undefined ? [] : ['', layout.quote.text]),
     '',
     `${reference.label} ${reference.token} · ${reference.subject}`,
     reference.hint,

@@ -1,5 +1,4 @@
 import type { Attachment, EmailMessageView, TicketMessage } from '@helpdock/schemas';
-import { tokens as designTokens } from '@helpdock/ui';
 import { Box, Button, Link as MuiLink, Typography } from '@mui/material';
 import { ChevronDown, ChevronUp, Image, ImageOff, Link2, Mail, ShieldAlert } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
@@ -108,11 +107,12 @@ export function EmailMessageCard({
           minWidth: 0,
           borderRadius: '10px',
           border: `1px solid ${selected ? tokens['action.primary'] : tokens['border.default']}`,
-          boxShadow: selected ? `0 0 0 2px ${designTokens.palette.teal.teal100}` : undefined,
+          boxShadow: selected ? `0 0 0 2px ${tokens['action.primary.tint']}` : undefined,
           backgroundColor: tokens['bg.surface'],
           overflow: 'hidden',
-          // Focus lands here from "In reply to …"; the ring is the card's own.
-          'article:focus-visible > &': {
+          // Focus lands here from "In reply to …", by a mouse as well as a key, so the
+          // ring follows `:focus`, not `:focus-visible`; the ring is the card's own.
+          'article:focus > &': {
             boxShadow: `0 0 0 2px ${tokens['action.primary']}`,
           },
         }}

@@ -7,13 +7,13 @@ describe('buildReplyQuote', () => {
   it('writes the English intro and prefixes every text line', () => {
     const quote = buildReplyQuote('en', 'Helpdock', { name: 'Mona Khalil', at, text: 'a\nb' });
 
-    expect(quote.text).toBe('On Tue, 10 Nov 2026 at 12:05, Mona Khalil wrote:\n> a\n> b');
+    expect(quote.text).toBe('On Tue, 10 Nov 2026 at 12:05 UTC, Mona Khalil wrote:\n> a\n> b');
   });
 
   it('writes the Arabic intro with Latin digits', () => {
     const quote = buildReplyQuote('ar', 'Helpdock', { name: 'منى خليل', at, text: 'مرحبا' });
 
-    expect(quote.text.split('\n')[0]).toMatch(/^في .*2026.*12:05.*كتب منى خليل:$/u);
+    expect(quote.text.split('\n')[0]).toMatch(/^في .*2026.*12:05 UTC.*كتب منى خليل:$/u);
     expect(quote.text).toContain('> مرحبا');
   });
 
@@ -46,6 +46,31 @@ describe('buildReplyQuote', () => {
       'the customer wrote:',
     );
     expect(buildReplyQuote('ar', 'H', { name: '  ', at, text: 'x' }).text).toContain('العميل');
+  });
+});
+
+describe('buildReplyQuote, the sender name and the layout', () => {
+  it('strips bidirectional format characters from the name', () => {
+    const quote = buildReplyQuote('en', 'H', { name: 'Mo\u202Ena\u2066 K', at, text: 'x' });
+
+    expect(quote.text.split('\n')[0]).toBe('On Tue, 10 Nov 2026 at 12:05 UTC, Mona K wrote:');
+  });
+
+  it('cuts a long name on code points, never inside a pair', () => {
+    const quote = buildReplyQuote('en', 'H', { name: '😀'.repeat(300), at, text: 'x' });
+    const name = /UTC, (.*) wrote:/u.exec(quote.text)?.[1] ?? '';
+
+    expect(Array.from(name)).toHaveLength(200);
+    expect(name).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+  });
+
+  it('draws the rule with a physical property on the side the text starts from', () => {
+    const en = buildReplyQuote('en', 'H', { name: 'A', at, text: 'x' }).html;
+    const ar = buildReplyQuote('ar', 'H', { name: 'A', at, text: 'x' }).html;
+
+    expect(en).toContain('border-left:3px solid');
+    expect(ar).toContain('border-right:3px solid');
+    expect(en).toContain('<blockquote dir="auto"');
   });
 });
 

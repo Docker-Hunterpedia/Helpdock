@@ -79,16 +79,19 @@ The outgoing mail then:
 - sets `In-Reply-To` to that email's `Message-ID` and `References` to the chain
   that arrived with it plus that id, so the customer's mail client files the
   reply under the email it answers;
-- carries, under the reply and signature, "On Tue, 10 Nov 2026 at 12:05, Mona
-  Khalil wrote:" in the customer's language (dates in UTC) and that email's
-  text: a blockquote in the HTML part and `> ` lines in the text part, cut at
-  2,000 characters and escaped. Its attachments are not sent again.
+- carries, under the reply and above its signature, "On Tue, 10 Nov 2026 at 12:05
+  UTC, Mona Khalil wrote:" in the customer's language and that email's text: a
+  blockquote in the HTML part and `> ` lines in the text part, cut at 2,000
+  characters and escaped. The quote sits above the `-- ` line because a text
+  client reads everything after it as the signature. Its attachments are not
+  sent again.
 
 The quote is added when the mail is sent; the reply stored on the ticket is only
 what the agent wrote. A `Message-ID` or `References` entry that is not a single
 well-formed id is left out of the headers rather than copied, and an email with
 no usable `Message-ID` is answered as an ordinary reply. To, Cc and From are the
-ticket's, as for any reply.
+ticket's, as for any reply. An email whose sender was erased is neither quoted
+nor threaded to, and cannot be chosen.
 
 ## Health
 

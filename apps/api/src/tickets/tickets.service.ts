@@ -798,7 +798,6 @@ export class TicketsService {
     const authorType = authorTypeFor(principal);
     const { ticket, status } = await this.#require(tx, ticketId);
     const context: LifecycleContext = { tx, brandId, actor, now };
-    const replyToMessageId = await this.#replyTarget(tx, ticketId, authorType, input);
 
     // M10-06. A channel that cannot carry this reply refuses it here, before
     // the lock below and before anything is written, so a refusal costs the
@@ -828,6 +827,10 @@ export class TicketsService {
         return toTicketMessage(continued);
       }
     }
+
+    // After the replay above, so a retry of a reply that was stored returns it even
+    // when its target has been purged since (M14-31).
+    const replyToMessageId = await this.#replyTarget(tx, ticketId, authorType, input);
 
     // DOMAIN-RULES §2.2 rows 1 and 5. It runs *before* the insert because on
     // the continuation branch the message belongs to a ticket that does not
@@ -979,6 +982,10 @@ export class TicketsService {
       target.channel !== 'email'
     ) {
       throw new ReplyTargetFailure('not-a-customer-email');
+    }
+    // An erased person's email is not quoted: it reads as gone, as a purged one does.
+    if (await this.#tickets.contactAnonymised(tx, target.authorId)) {
+      throw new ReplyTargetFailure('gone');
     }
 
     return target.id;

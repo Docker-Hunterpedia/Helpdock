@@ -156,3 +156,35 @@ describe('the email card', () => {
     expect(remoteImageParamSchema.safeParse({ ...ids, index: '-1' }).success).toBe(false);
   });
 });
+
+describe('emailMessageMetaSchema, references (M14-31)', () => {
+  const base = {
+    from: { address: 'mona@example.com', name: 'Mona Khalil' },
+    to: [],
+    cc: [],
+    date: null,
+    quotedHtml: null,
+    remoteImages: [],
+    remoteImagePolicy: 'block',
+    inlineAttachmentIds: [],
+    authFailed: true,
+    mismatch: null,
+  };
+
+  it('keeps the rest of the metadata when references do not parse', () => {
+    const parsed = emailMessageMetaSchema.parse({
+      ...base,
+      references: [`${'a'.repeat(1204)}@x.y`],
+    });
+
+    expect(parsed.authFailed).toBe(true);
+    expect(parsed.from.address).toBe('mona@example.com');
+    expect(parsed.references).toBeUndefined();
+  });
+
+  it('reads valid references', () => {
+    expect(emailMessageMetaSchema.parse({ ...base, references: ['a@x.y'] }).references).toEqual([
+      'a@x.y',
+    ]);
+  });
+});

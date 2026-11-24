@@ -42,7 +42,12 @@ import {
 } from '../../tickets/macro-staging.js';
 import { mergeCandidates, visibleLinks } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
-import { NO_REPLY_TARGET, replyTargetReducer } from '../../tickets/reply-target.js';
+import {
+  NO_REPLY_TARGET,
+  quotePreview,
+  recipientsNote,
+  replyTargetReducer,
+} from '../../tickets/reply-target.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
 import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { useToast } from '../../ui/toasts.tsx';
@@ -115,9 +120,6 @@ const MERGE_SEARCH_LIMIT = 8;
 /** The most of the ticket column the composer takes before it scrolls inside (M14-19). */
 const COMPOSER_CAP = '45cqh';
 
-/** The strip's "Show quote" shows what the server will quote, which it cuts at this length. */
-const REPLY_QUOTE_PREVIEW_MAX = 2000;
-
 export function TicketView({
   brandId,
   ticketId,
@@ -189,6 +191,9 @@ export function TicketView({
   const closeBySend = useRef(new Set<string>());
   // Changes when `r` or `n` was pressed, which is what moves the caret.
   const [focusSignal, setFocusSignal] = useState<number | undefined>(undefined);
+  // What the composer holds now, for a send that is refused after the agent has moved on.
+  const composerNow = useRef({ body, mode });
+  composerNow.current = { body, mode };
   // The Internal note tab leaves the email being answered behind: a note answers no one.
   const changeMode = (next: ComposerMode): void => {
     setMode(next);
@@ -439,12 +444,19 @@ export function TicketView({
       // M14-31: the email it answered is gone; nothing was sent. The text goes back
       // into the composer under a strip that says so, to be cleared or moved.
       if (isReplyTargetError(error) && message.replyToMessageId !== undefined) {
-        dispatch({ type: 'discarded', clientId: message.clientId });
         closeBySend.current.delete(message.clientId);
+        const now = composerNow.current;
+        // The agent has moved on: something is typed, or the Internal note tab is open. The
+        // composer stays exactly as it is and the reply waits as "not sent" in the thread.
+        if (now.body.trim() !== '' || now.mode !== 'reply') {
+          dispatch({ type: 'failed', clientId: message.clientId });
+          toast({ tone: 'danger', message: t('tickets:replyTo.unavailable') });
+          return;
+        }
+        dispatch({ type: 'discarded', clientId: message.clientId });
         macroBySend.current.delete(message.clientId);
         filesBySend.current.delete(message.clientId);
-        setMode('reply');
-        setBody((held) => (held === '' ? message.bodyText : held));
+        setBody(message.bodyText);
         dispatchTarget({ type: 'gone', messageId: message.replyToMessageId });
         return;
       }
@@ -1017,7 +1029,12 @@ export function TicketView({
           name: targetMessage === undefined ? '' : emailSenderOf(targetMessage, names),
           time:
             targetMessage === undefined ? '' : messageTime(targetMessage.createdAt, locale, now),
-          quote: targetMessage?.bodyText.slice(0, REPLY_QUOTE_PREVIEW_MAX) ?? '',
+          quote: targetMessage === undefined ? '' : quotePreview(targetMessage.bodyText),
+          recipients: recipientsNote(
+            targetMessage,
+            targetMessage === undefined ? '' : emailSenderOf(targetMessage, names),
+            ticketEmail.composer,
+          ),
           // An email that vanished from the thread cannot be quoted either.
           unavailable: replyTarget.unavailable || targetMessage === undefined,
           onClear: () => {

@@ -177,6 +177,12 @@ export const MOCK_TICKET_TRANSCRIPT = '0192c3f0-1a2b-7c3d-8e4f-000000001028';
  * contact history, so the fixtures the other screens are tested against do not move.
  */
 export const MOCK_TICKET_THREE_EMAILS = '0192c3f0-1a2b-7c3d-8e4f-000000001001';
+/**
+ * The last of its three customer emails. The mock treats it as erased by the time a reply
+ * names it, so the refusal path ("That message is no longer available") can be driven from
+ * the screen.
+ */
+export const MOCK_EMAIL_THIRD = msgIdOf(44);
 /** The middle one of its three customer emails, the one the artboard answers. */
 export const MOCK_EMAIL_SECOND = msgIdOf(42);
 const UNLISTED_TICKETS: ReadonlySet<string> = new Set([MOCK_TICKET_THREE_EMAILS]);
@@ -1427,7 +1433,7 @@ export class MockTicketsApi implements TicketsApi {
     this.#assertCanDeliver(ticket, request);
     if (request.replyToMessageId !== undefined) {
       const target = this.#messages.find((row) => row.id === request.replyToMessageId);
-      if (target === undefined) {
+      if (target === undefined || target.id === MOCK_EMAIL_THIRD) {
         throw new ReplyTargetError('gone');
       }
       if (!canReplyToMessage(target) || target.ticketId !== ticketId || request.kind !== 'public') {

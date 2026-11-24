@@ -578,6 +578,20 @@ export class TicketRepository {
     return rows[0];
   }
 
+  /** M14-31. Whether the contact a message names (`author_id`) has been erased. */
+  async contactAnonymised(tx: DbTransaction, contactId: string | null): Promise<boolean> {
+    if (contactId === null) {
+      return false;
+    }
+    const rows = await tx
+      .select({ anonymisedAt: contacts.anonymisedAt })
+      .from(contacts)
+      .where(sql`${contacts.id}::text = ${contactId}`)
+      .limit(1);
+
+    return rows[0]?.anonymisedAt != null;
+  }
+
   async insertMessage(tx: DbTransaction, values: NewTicketMessage): Promise<TicketMessageRow> {
     const rows = await tx.insert(ticketMessages).values(values).returning();
 

@@ -1203,12 +1203,25 @@ POST /api/brands/:brandId/tickets/:ticketId/messages
 A target on another ticket, of another kind or channel, or sent with a note is a
 400 naming `body.replyToMessageId` (`reply-to.not-a-customer-email`,
 `reply-to.not-allowed`). A target that was deleted, erased or is outside the
-caller's departments is a 409 `reply-to.gone` and nothing is sent; the composer
-keeps the text and says "That message is no longer available". The stored reply
+caller's departments, or whose sender has since been erased ("Anonymise
+contact"), is a 409 `reply-to.gone` and nothing is sent. A retry of a reply that
+was already stored returns it, whatever became of its target since. When the
+composer is empty on the Reply tab it gets the text back under a strip that says
+"That message is no longer available" and holds Send until you clear it; if you
+have started something else (typing, or the Internal note tab), the composer is
+left as it is and the reply waits in the thread as not sent. The stored reply
 is only what you wrote. It comes back with `replyToMessageId` (null on an
 ordinary reply, and when the email was purged later), and the thread draws "In
 reply to Mona Khalil · Tue 12:05" above it, which scrolls to that email. The
-public API's v1 messages carry the same field; v1 sends do not take it. The
+public API's v1 messages and the `ticket.replied` webhook's message carry the
+same field (an id of a message on the same ticket; the targeted email's
+`References` are in no output); v1 sends do not take it.
+
+**Who receives it.** A targeted reply goes to the ticket's To and Cc and is sent
+from the ticket's From, exactly as any reply. It quotes the email you chose to
+all of them. When that email's sender is not the address the reply's To goes to,
+the strip says so in a warning line, "This quotes Mona Khalil’s email to everyone
+on the reply: To Karim Nasser and Cc 2.", before you send. The
 [email guide](email.md#a-reply-aimed-at-one-email) says what the customer
 receives.
 

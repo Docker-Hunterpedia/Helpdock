@@ -1,5 +1,5 @@
 {
-  "id": "76963e06-b3c9-4f76-bca8-2c89dfea902d",
+  "id": "8bc062a5-08bf-48f8-a1b0-0d18e71bc224",
   "prevId": "346624fc-9c2e-41ad-9e97-1b821fefc300",
   "version": "7",
   "dialect": "postgresql",
@@ -13048,6 +13048,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ticket_messages_reply_to_idx": {
+          "name": "ticket_messages_reply_to_idx",
+          "columns": [
+            {
+              "expression": "reply_to_message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"ticket_messages\".\"reply_to_message_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

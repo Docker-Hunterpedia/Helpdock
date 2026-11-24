@@ -130,7 +130,7 @@
   "customer": {
     "replyMarker": "##- Please type your reply above this line -##",
     "replySubject": "Re: [{{reference}}] {{subject}}",
-    "quoteIntro": "On {{date}} at {{time}}, {{name}} wrote:",
+    "quoteIntro": "On {{date}} at {{time}} UTC, {{name}} wrote:",
     "quoteAnonymous": "the customer",
     "fromVia": "{{agent}} via {{sender}}",
     "referenceLabel": "Request",

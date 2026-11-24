@@ -30,7 +30,7 @@ const wideViewport = (): void => {
   }));
 };
 
-const open = async (tickets = new MockTicketsApi()) => {
+const open = async (tickets = new MockTicketsApi(), emailApi = new MockEmailApi()) => {
   const apis = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
     authApi: apis.auth,
@@ -38,7 +38,7 @@ const open = async (tickets = new MockTicketsApi()) => {
     contactsApi: apis.contacts,
     ticketingApi: apis.ticketing,
     ticketsApi: tickets,
-    emailApi: new MockEmailApi(),
+    emailApi,
     initialEntries: [`/tickets/${MOCK_TICKET_THREE_EMAILS}?view=all`],
   });
   await screen.findByRole('list', { name: 'Conversation' });
@@ -193,6 +193,106 @@ describe('replying to one email of a ticket', () => {
     );
     await waitFor(() => {
       expect(within(composer()).getByRole('button', { name: 'Send email' })).toBeEnabled();
+    });
+  });
+
+  it('says who else a quote reaches when the sender is not who the reply goes to, and says nothing when they are', async () => {
+    const same = await open();
+    await same.user.click(replyButtons()[1] as HTMLElement);
+    expect(within(composer()).queryByText(/This quotes/)).toBeNull();
+    same.unmount();
+
+    const email = new MockEmailApi();
+    const real = await email.ticketEmail('brand', MOCK_TICKET_THREE_EMAILS);
+    vi.spyOn(email, 'ticketEmail').mockResolvedValue({
+      ...real,
+      to: { name: 'Karim Nasser', address: 'karim@acme.test' },
+    });
+    const tickets = new MockTicketsApi();
+    await tickets.addCc('brand', MOCK_TICKET_THREE_EMAILS, { email: 'finance@acme.test' });
+    const other = await open(tickets, email);
+
+    await other.user.click(replyButtons()[1] as HTMLElement);
+
+    expect(
+      await within(composer()).findByText(/This quotes Mona Khalil’s email to everyone/),
+    ).toHaveTextContent(
+      'This quotes Mona Khalil’s email to everyone on the reply: To Karim Nasser and Cc 1.',
+    );
+  });
+
+  describe('when the api says the email is gone after Send', () => {
+    /** A reply the test can refuse whenever it chooses, so the agent can move on first. */
+    const refusable = () => {
+      const tickets = new MockTicketsApi();
+      let refuse: (error: Error) => void = () => {};
+      vi.spyOn(tickets, 'reply').mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+      );
+
+      return { tickets, refuse: (error: Error) => refuse(error) };
+    };
+
+    it('leaves a note in progress alone, and the reply waits as not sent', async () => {
+      const { tickets, refuse } = refusable();
+      const { user } = await open(tickets);
+      await user.click(replyButtons()[1] as HTMLElement);
+      await user.type(within(composer()).getByRole('textbox', { name: 'Message' }), 'Reply text');
+      await user.click(within(composer()).getByRole('button', { name: 'Send email' }));
+      await user.click(within(composer()).getByRole('button', { name: 'Internal note' }));
+      await user.type(within(composer()).getByRole('textbox', { name: 'Message' }), 'Note text');
+
+      refuse(new ReplyTargetError('gone'));
+
+      expect(await screen.findAllByText('That message is no longer available')).not.toHaveLength(0);
+      expect(within(composer()).getByRole('button', { name: 'Internal note' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(within(composer()).getByRole('textbox', { name: 'Message' })).toHaveValue('Note text');
+      expect(await screen.findAllByText(/not sent/i)).not.toHaveLength(0);
+      expect(strip()).toBeNull();
+    });
+
+    it('leaves a new reply in progress alone', async () => {
+      const { tickets, refuse } = refusable();
+      const { user } = await open(tickets);
+      await user.click(replyButtons()[1] as HTMLElement);
+      await user.type(within(composer()).getByRole('textbox', { name: 'Message' }), 'First');
+      await user.click(within(composer()).getByRole('button', { name: 'Send email' }));
+      await user.type(within(composer()).getByRole('textbox', { name: 'Message' }), 'Second draft');
+
+      refuse(new ReplyTargetError('gone'));
+
+      expect(await screen.findAllByText(/not sent/i)).not.toHaveLength(0);
+      expect(within(composer()).getByRole('textbox', { name: 'Message' })).toHaveValue(
+        'Second draft',
+      );
+      expect(strip()).toBeNull();
+    });
+
+    it('puts the text back under a strip that says so, in an empty reply composer', async () => {
+      const { tickets, refuse } = refusable();
+      const { user } = await open(tickets);
+      await user.click(replyButtons()[1] as HTMLElement);
+      await user.type(within(composer()).getByRole('textbox', { name: 'Message' }), 'The invoice.');
+      await user.click(within(composer()).getByRole('button', { name: 'Send email' }));
+
+      refuse(new ReplyTargetError('gone'));
+
+      expect(
+        await within(composer()).findByText('That message is no longer available'),
+      ).toBeVisible();
+      expect(within(composer()).getByRole('textbox', { name: 'Message' })).toHaveValue(
+        'The invoice.',
+      );
+      expect(within(composer()).getByRole('button', { name: 'Reply' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
     });
   });
 });

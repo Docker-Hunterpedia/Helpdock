@@ -20,6 +20,12 @@ export interface ComposerReplyTo {
   readonly quote: string;
   /** The api refused the target: "That message is no longer available". */
   readonly unavailable: boolean;
+  /** The sender is not who the reply goes to: said in the warning tone (S4). */
+  readonly recipients: {
+    readonly name: string;
+    readonly to: string;
+    readonly ccCount: number;
+  } | null;
   onClear(): void;
 }
 
@@ -105,6 +111,30 @@ export function ReplyToStrip({ replyTo }: { readonly replyTo: ComposerReplyTo })
       >
         {replyTo.quote}
       </Box>
+      {replyTo.recipients === null ? null : (
+        <Typography
+          variant="caption"
+          role="status"
+          dir="auto"
+          sx={{
+            display: 'block',
+            paddingBlock: 1,
+            paddingInline: 2,
+            borderRadius: '6px',
+            backgroundColor: tokens['status.warning.tint'],
+            color: tokens['status.warning.text'],
+          }}
+        >
+          {t('tickets:replyTo.recipients', {
+            name: replyTo.recipients.name,
+            to: replyTo.recipients.to,
+            cc:
+              replyTo.recipients.ccCount > 0
+                ? t('tickets:replyTo.recipientsCc', { count: replyTo.recipients.ccCount })
+                : '',
+          })}
+        </Typography>
+      )}
       {replyTo.unavailable ? (
         <Typography
           variant="caption"

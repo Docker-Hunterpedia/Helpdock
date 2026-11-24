@@ -59,6 +59,18 @@ export const outboundMessageId = ({
 const SAFE_MESSAGE_ID = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$/;
 const MESSAGE_ID_MAX_LENGTH = 255;
 
+/** The most `References` ids kept on a stored message. */
+export const STORED_REFERENCES_MAX = 100;
+
+/**
+ * The `References` of an inbound email as they are stored (M14-31): only ids
+ * that are one well-formed `msg-id`, the newest {@link STORED_REFERENCES_MAX}.
+ * A sender's 1,200-character entry is dropped here, so no field of the stored
+ * metadata can be one the schema refuses.
+ */
+export const storableReferences = (ids: readonly string[]): string[] =>
+  ids.flatMap((id) => safeMessageId(id) ?? []).slice(-STORED_REFERENCES_MAX);
+
 /**
  * A stored `Message-ID` or `References` entry, as it may go into a header we
  * write (M14-31): bare, one well-formed id and nothing else. Anything that

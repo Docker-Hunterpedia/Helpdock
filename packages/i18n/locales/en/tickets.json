@@ -133,6 +133,8 @@
     "showQuote": "Show quote",
     "hideQuote": "Hide quote",
     "clear": "Stop replying to this message",
+    "recipients": "This quotes {{name}}’s email to everyone on the reply: To {{to}}{{cc}}.",
+    "recipientsCc": " and Cc {{count}}",
     "unavailable": "That message is no longer available",
     "inReplyTo": "In reply to {{name}} · {{time}}",
     "inReplyToEarlier": "In reply to an earlier email",

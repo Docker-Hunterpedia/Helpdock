@@ -235,11 +235,13 @@ describe('renderDelivery, a reply aimed at one email (M14-31)', () => {
       templates,
     });
 
-    expect(message.text).toContain('On Tue, 10 Nov 2026 at 12:05, Mona Khalil wrote:');
+    expect(message.text).toContain('On Tue, 10 Nov 2026 at 12:05 UTC, Mona Khalil wrote:');
     expect(message.text).toContain('> One more thing: can you also send the invoice');
     expect(message.html).toContain('<blockquote');
     expect(message.html).toContain('Mona Khalil wrote:');
-    expect(message.text.indexOf('Billing team')).toBeLessThan(message.text.indexOf('> One more'));
+    // Before the `-- ` delimiter, which a text client reads as the start of the signature.
+    expect(message.text.indexOf('> One more')).toBeLessThan(message.text.indexOf('-- \n'));
+    expect(message.text.indexOf('-- \n')).toBeLessThan(message.text.indexOf('Billing team'));
   });
 
   it('writes the intro in Arabic for an Arabic customer', () => {

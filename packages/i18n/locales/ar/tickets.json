@@ -133,6 +133,8 @@
     "showQuote": "إظهار الاقتباس",
     "hideQuote": "إخفاء الاقتباس",
     "clear": "إلغاء الرد على هذه الرسالة",
+    "recipients": "يقتبس هذا بريد {{name}} لكل من في الرد: إلى {{to}}{{cc}}.",
+    "recipientsCc": " ونسخة إلى {{count}}",
     "unavailable": "لم تعد هذه الرسالة متاحة",
     "inReplyTo": "ردًا على {{name}} · {{time}}",
     "inReplyToEarlier": "ردًا على بريد سابق",

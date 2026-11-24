@@ -539,8 +539,11 @@ CREATE POLICY "report_help_center_daily_no_customer" ON "report_help_center_dail
 --
 --   tickets.account_id          the requester's account now
 --   tickets.portal_eligible     not deleted, not merged away, not Spam
---   tickets.portal_contact_ids  the requester, plus every CC whose address is a
---                               verified email identity of that CC's contact
+--   tickets.portal_contact_ids  the requester, plus every CC whose source shows a
+--                               staff action (`agent`, or `merge`) and whose
+--                               address is a verified email identity of that
+--                               CC's contact; a CC from mail or an import never
+--                               counts (DOMAIN-RULES §2.5)
 --   ticket_messages / attachments .portal_contact_ids, .portal_account_id
 --                               the ticket's, copied down; empty for a note
 --

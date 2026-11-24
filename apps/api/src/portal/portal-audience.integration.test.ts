@@ -25,6 +25,7 @@ import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { loadImportedParticipants } from '../imports/loader/load-participants.js';
 import { createLogger } from '../logging/logger.js';
+import { ParticipantsRepository } from '../participants/participants.repository.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
@@ -369,6 +370,63 @@ describe.skipIf(!hasDocker)('the portal audience through the real services (M21-
     await expect(
       loadCustomerScope(runtime.db, { brandId: seeded.brandId, contactId: kim }),
     ).rejects.toMatchObject({ reason: 'contact-unavailable' });
+  });
+
+  it('raises a mail CC to a staff CC when an agent adds the same contact, and mail never lowers it again', async () => {
+    const ticketId = await createTicket(mona);
+    // Their own contact: the erasure test above anonymised Kim.
+    const lou = uuidv7();
+    await withSystem(runtime.db, seeded.brandId, async (tx) => {
+      await tx.insert(contacts).values({ id: lou, brandId: seeded.brandId, name: 'Lou' });
+      await tx.insert(contactIdentities).values({
+        brandId: seeded.brandId,
+        contactId: lou,
+        kind: 'email',
+        value: 'lou@example.com',
+        verified: true,
+        source: 'email.inbound',
+      });
+    });
+    await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx.insert(ticketParticipants).values({
+        brandId: seeded.brandId,
+        ticketId,
+        departmentId: support,
+        contactId: lou,
+        address: 'lou@example.com',
+        source: 'email',
+      }),
+    );
+    const sourceOfKim = () =>
+      withSystem(runtime.db, seeded.brandId, async (tx) => {
+        const [row] = await tx
+          .select({ source: ticketParticipants.source })
+          .from(ticketParticipants)
+          .where(eq(ticketParticipants.ticketId, ticketId));
+        return row?.source;
+      });
+    expect((await audience(ticketId)).ticket).toEqual([mona]);
+
+    const added = await call('POST', `${ticketPath(ticketId)}/participants`, ada, {
+      email: 'lou@example.com',
+    });
+    expect(added.status).toBe(201);
+    expect(await sourceOfKim()).toBe('agent');
+    expect((await audience(ticketId)).ticket.sort()).toEqual([mona, lou].sort());
+
+    // A later inbound mail Cc of the same contact leaves it a staff CC.
+    await withSystem(runtime.db, seeded.brandId, (tx) =>
+      new ParticipantsRepository().insert(tx, {
+        brandId: seeded.brandId,
+        ticket: { id: ticketId, departmentId: support, contactId: mona, assigneeId: null },
+        contactId: lou,
+        address: 'lou@example.com',
+        source: 'email',
+        addedBy: null,
+      }),
+    );
+    expect(await sourceOfKim()).toBe('agent');
+    expect((await audience(ticketId)).ticket.sort()).toEqual([mona, lou].sort());
   });
 
   it('does not put a CC an import loads in the audience', async () => {

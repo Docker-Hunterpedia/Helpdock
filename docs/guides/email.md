@@ -74,7 +74,7 @@ Everyone on the `To` and `Cc` lines, except the brand's own mailboxes and the se
 
 Helpdock acts on what the receiving mail server reported. Mail reported as failing SPF or DKIM, as failing DMARC, or as passing only for some other domain than its From address adds no `To` or `Cc` participants and does not verify its sender's address. It still joins the ticket it replies to, with the "authentication failed" warning when SPF or DKIM failed, so forwarded mail is not lost, and its sender is found by address: an existing contact keeps their ticket, and a new address gets one unverified contact that the first sound message verifies.
 
-Mail with no report is treated as before. The report is the `Authentication-Results` header (a DKIM or SPF pass counts only for the From domain or a subdomain or parent of it). Which inbound methods carry it:
+Mail with no report is treated as before. The report is the `Authentication-Results` header. Only the topmost one, which your receiving server wrote, can count in the message's favour (a DKIM or SPF pass for the From domain or a parent of it, or `dmarc=pass`), because a sender can add headers of its own below it; a failure in any of them counts against the message. A pass on a subdomain of the From domain counts only with `dmarc=pass`, and no public-suffix list is used, so a From address directly on a domain that hands out subdomains or on a two-label suffix, on a server that reports no DMARC result, can be matched by a pass for the shared parent. Which inbound methods carry it:
 
 | Method | Carries it |
 |---|---|

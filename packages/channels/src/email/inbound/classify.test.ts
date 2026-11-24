@@ -94,18 +94,24 @@ describe('senderCheck (DOMAIN-RULES §4.3, §4.4)', () => {
     readonly [Record<string, string[]>, Partial<InboundEmail>?, string?],
     SenderCheck,
   ];
+  const from = (address: string): Partial<InboundEmail> => ({ from: { address, name: null } });
 
   it.each([
     ['dmarc=pass', [ar('mx.example; dmarc=pass header.from=example.com')], 'aligned'],
     ['an aligned DKIM pass', [ar('mx.example; dkim=pass header.d=example.com')], 'aligned'],
     [
-      'an aligned DKIM pass on a subdomain of the From domain',
-      [ar('mx.example; dkim=pass header.d=mail.example.com')],
+      'a DKIM pass on the parent of a subdomain From',
+      [ar('mx.example; dkim=pass header.d=example.com'), from('mona@news.example.com')],
       'aligned',
     ],
     [
-      'an aligned DKIM pass on the parent of a subdomain From',
-      [ar('mx.example; dkim=pass header.d=example.com'), {}, 'mona@news.example.com'],
+      'a DKIM pass named only by header.i, as Gmail writes it',
+      [ar('mx.example; dkim=pass header.i=@example.com')],
+      'aligned',
+    ],
+    [
+      'header.i with a local part',
+      [ar('mx.example; dkim=pass header.i=mona@example.com')],
       'aligned',
     ],
     [
@@ -116,6 +122,11 @@ describe('senderCheck (DOMAIN-RULES §4.3, §4.4)', () => {
     [
       'SPF softfail with an aligned DKIM pass (forwarded mail)',
       [ar('mx.example; spf=softfail smtp.mailfrom=example.com; dkim=pass header.d=example.com')],
+      'aligned',
+    ],
+    [
+      'SPF softfail with dmarc=pass',
+      [ar('mx.example; spf=softfail smtp.mailfrom=relay.test; dmarc=pass')],
       'aligned',
     ],
     [
@@ -131,6 +142,17 @@ describe('senderCheck (DOMAIN-RULES §4.3, §4.4)', () => {
       'passes that all belong to another domain, with no DMARC verdict',
       [ar('mx.example; spf=pass smtp.mailfrom=evil.test; dkim=pass header.d=evil.test')],
       'misaligned',
+    ],
+    [
+      // Changed from "aligned": a subdomain's pass no longer speaks for its parent alone.
+      'a DKIM pass on a subdomain of the From domain, without dmarc=pass',
+      [ar('mx.example; dkim=pass header.d=mail.example.com')],
+      'misaligned',
+    ],
+    [
+      'a pass on a subdomain of the From domain, with dmarc=pass',
+      [ar('mx.example; dkim=pass header.d=mail.example.com; dmarc=pass')],
+      'aligned',
     ],
     ['an SPF fail', [ar('mx.example; spf=fail smtp.mailfrom=example.com')], 'misaligned'],
     ['an SPF softfail alone', [ar('mx.example; spf=softfail')], 'misaligned'],
@@ -149,29 +171,101 @@ describe('senderCheck (DOMAIN-RULES §4.3, §4.4)', () => {
     ['a pass that names no domain', [ar('mx.example; spf=pass')], 'unknown'],
     ['a malformed header', [ar('this is not; a report = at all;;')], 'unknown'],
     [
-      'two headers, one aligned DKIM pass beating a failure in the other',
+      // Changed from "aligned": only the top header (the first) can support the message.
+      'a failure on top and an aligned DKIM pass below it',
       [ar('relay.example; spf=fail', 'mx.example; dkim=pass header.d=example.com')],
+      'misaligned',
+    ],
+    [
+      'an aligned DKIM pass on top and a failure below it',
+      [ar('mx.example; spf=softfail; dkim=pass header.d=example.com', 'old.example; spf=fail')],
       'aligned',
     ],
     [
-      'two headers, a failure in one and nothing aligned in the other',
+      'a failure in one header and nothing aligned in the other',
       [ar('relay.example; spf=pass smtp.mailfrom=example.com', 'mx.example; dkim=fail')],
       'misaligned',
     ],
     [
-      'two headers, dmarc=fail in one beating dmarc=pass in the other',
+      'dmarc=fail on top and dmarc=pass below',
+      [ar('a.example; dmarc=fail', 'b.example; dmarc=pass')],
+      'misaligned',
+    ],
+    [
+      'dmarc=pass on top and dmarc=fail below',
       [ar('a.example; dmarc=pass', 'b.example; dmarc=fail')],
       'misaligned',
     ],
-  ] satisfies Row[])('reads %s as %s', (_label, [headers, overrides, from], expected) => {
-    const message = email(
-      { ...headers },
-      {
-        ...(overrides ?? {}),
-        ...(from === undefined ? {} : { from: { address: from, name: null } }),
-      },
-    );
-    expect(senderCheck(message)).toBe(expected);
+    // A header the sender wrote sits below the receiving server's own.
+    [
+      'an injected DKIM pass for the victim below a real dmarc=fail',
+      [
+        ar(
+          'mx.example; spf=pass smtp.mailfrom=evil.test; dmarc=fail',
+          'mx.fake; dkim=pass header.d=example.com',
+        ),
+      ],
+      'misaligned',
+    ],
+    [
+      'an injected dmarc=pass below a real header with no dmarc clause',
+      [ar('mx.example; spf=pass smtp.mailfrom=evil.test', 'x; dmarc=pass')],
+      'misaligned',
+    ],
+    [
+      'an injected dmarc=pass below a real spf=fail',
+      [ar('mx.example; spf=fail smtp.mailfrom=evil.test', 'x; dmarc=pass')],
+      'misaligned',
+    ],
+    [
+      'an injected pass below a real header that reports nothing',
+      [ar('mx.example; spf=none', 'x; dkim=pass header.d=example.com')],
+      'unknown',
+    ],
+    // Comments and quoted strings are text, not properties.
+    [
+      'a victim domain written inside a comment and a quoted local part',
+      [
+        ar(
+          'mx.example; spf=pass (domain of "smtp.mailfrom=example.com x"@evil.test designates 1.2.3.4) smtp.mailfrom="smtp.mailfrom=example.com"@evil.test',
+        ),
+      ],
+      'misaligned',
+    ],
+    [
+      'a victim domain in a nested comment',
+      [ar('mx.example; spf=pass (a (smtp.mailfrom=example.com) b) smtp.mailfrom=evil.test')],
+      'misaligned',
+    ],
+    [
+      'the last of two smtp.mailfrom properties',
+      [ar('mx.example; spf=pass smtp.mailfrom=example.com smtp.mailfrom=evil.test')],
+      'misaligned',
+    ],
+    [
+      'a comment after the real property',
+      [ar('mx.example; spf=pass smtp.mailfrom=example.com (sender SPF authorized)')],
+      'aligned',
+    ],
+    // A parent without two labels never speaks for anyone.
+    [
+      'a single-label parent',
+      [ar('mx.example; dkim=pass header.d=com'), from('mona@example.com')],
+      'misaligned',
+    ],
+    [
+      'dmarc=pass does not need the domains to align',
+      [ar('mx.example; dkim=pass header.d=com; dmarc=pass'), from('mona@example.com')],
+      'aligned',
+    ],
+    [
+      'a two-label public suffix is not recognised (documented gap)',
+      [ar('mx.example; dkim=pass header.d=co.uk'), from('mona@shop.co.uk')],
+      'aligned',
+    ],
+  ] satisfies Row[])('reads %s as %s', (_label, [headers, overrides, ...rest], expected) => {
+    expect(rest).toEqual([]);
+    expect(senderCheck(email({ ...headers }, overrides))).toBe(expected);
   });
 
   it('has no opinion on a message with no sender', () => {
@@ -182,14 +276,16 @@ describe('senderCheck (DOMAIN-RULES §4.3, §4.4)', () => {
 describe('domainsAlign', () => {
   it.each([
     ['example.com', 'example.com', true],
-    ['mail.example.com', 'example.com', true],
-    ['example.com', 'mail.example.com', true],
     ['Example.COM', 'example.com', true],
+    ['example.com', 'news.example.com', true],
+    ['news.example.com', 'example.com', false],
     ['badexample.com', 'example.com', false],
     ['example.com.evil.test', 'example.com', false],
+    ['com', 'example.com', false],
+    ['com', 'com', false],
     ['', 'example.com', false],
-  ])('%s and %s: %s', (a, b, expected) => {
-    expect(domainsAlign(a, b)).toBe(expected);
+  ])('a pass for %s speaks for a From on %s: %s', (authenticated, from, expected) => {
+    expect(domainsAlign(authenticated, from)).toBe(expected);
   });
 });
 

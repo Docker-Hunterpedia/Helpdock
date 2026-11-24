@@ -117,13 +117,23 @@ export const authenticationFailed = (email: InboundEmail): boolean => {
  * Helpdock only reads what the receiving server wrote. A relay the operator
  * does not control can write its own `Authentication-Results`, so this is a
  * best-effort check, not proof of who sent the message.
+ *
+ * Header trust: a sender can put `Authentication-Results` headers of its own
+ * into the message, and they sit *below* the one the last receiving hop
+ * added, which is the first in message order. So anything that can make the
+ * result `aligned` is read from the topmost header only, while evidence
+ * against the message is read from every header (a forged failure only hurts
+ * its own sender).
  */
 export type SenderCheck = 'aligned' | 'misaligned' | 'unknown';
 
 interface AuthResult {
   readonly method: 'spf' | 'dkim' | 'dmarc';
   readonly result: string;
-  /** `smtp.mailfrom` (SPF) or `header.d` (DKIM), lower-cased, without a local part. */
+  /**
+   * The domain the result is about: `smtp.mailfrom` for SPF, `header.d` (or
+   * the domain of `header.i`, as Gmail writes it) for DKIM. Lower-cased.
+   */
   readonly domain: string | null;
 }
 
@@ -132,81 +142,133 @@ const domainOfAddress = (value: string): string => {
   return (at === -1 ? value : value.slice(at + 1)).toLowerCase();
 };
 
+const labelCount = (domain: string): number => domain.split('.').filter(Boolean).length;
+
 /**
- * Same organisational domain, approximated as "equal, or one is a subdomain
- * of the other". There is no public-suffix list behind it, so it is a little
- * generous for a From on a shared suffix; it adds no dependency.
+ * Whether a pass for `authenticated` speaks for a From on `from`: the same
+ * domain, or the authenticated one is a parent of the From (`bank.com`
+ * signing for `news.bank.com`).
+ *
+ * The other direction (a pass on `evil.bank.com` for a From on `bank.com`) is
+ * not accepted here: a domain that hands out subdomains would let any tenant
+ * speak for the parent. Only a `dmarc=pass` from the receiving server vouches
+ * for it. The parent needs two labels, so `com` never speaks for anyone, but
+ * with no public-suffix list a two-label suffix such as `co.uk` is not
+ * recognised; that gap is documented in the email guide.
  */
-export const domainsAlign = (a: string, b: string): boolean => {
-  const left = a.toLowerCase();
-  const right = b.toLowerCase();
-  return (
-    left !== '' &&
-    right !== '' &&
-    (left === right || left.endsWith(`.${right}`) || right.endsWith(`.${left}`))
-  );
+export const domainsAlign = (authenticated: string, from: string): boolean => {
+  const parent = authenticated.toLowerCase();
+  const child = from.toLowerCase();
+  return labelCount(parent) >= 2 && (parent === child || child.endsWith(`.${parent}`));
 };
 
-/** The results of every `Authentication-Results` header. A malformed clause is skipped. */
-const authResultsOf = (email: InboundEmail): AuthResult[] => {
-  const found: AuthResult[] = [];
-  for (const header of email.headers.get('authentication-results') ?? []) {
-    for (const clause of header.split(';')) {
-      const head = /^\s*(spf|dkim|dmarc)\s*=\s*([a-z]+)/i.exec(clause);
-      if (head === null) {
-        continue;
+/** Drops `( ... )` comments, nested, honouring quoted strings and backslashes. */
+const stripComments = (value: string): string => {
+  let out = '';
+  let depth = 0;
+  let quoted = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value.charAt(index);
+    if (char === '\\' && index + 1 < value.length) {
+      if (depth === 0) {
+        out += char + value.charAt(index + 1);
       }
-      const property = (name: string): string | null => {
-        const match = new RegExp(`\\b${name}\\s*=\\s*"?([^\\s;"]+)`, 'i').exec(clause);
-        return match?.[1] === undefined ? null : domainOfAddress(match[1]);
-      };
-      const method = (head[1] ?? '').toLowerCase() as AuthResult['method'];
-      found.push({
-        method,
-        result: (head[2] ?? '').toLowerCase(),
-        domain: method === 'spf' ? property('smtp\\.mailfrom') : property('header\\.d'),
-      });
+      index += 1;
+    } else if (char === '"' && depth === 0) {
+      quoted = !quoted;
+      out += char;
+    } else if (!quoted && char === '(') {
+      depth += 1;
+    } else if (!quoted && char === ')' && depth > 0) {
+      depth -= 1;
+    } else if (depth === 0) {
+      out += char;
     }
+  }
+  return out;
+};
+
+/** A quoted string's content is somebody else's text; it never names a property. */
+const blankQuotes = (value: string): string => value.replace(/"(?:[^"\\]|\\.)*"/g, '"_"');
+
+const PROPERTY_VALUE = '((?:"_"|[^\\s";])+)';
+
+/** The last `name=value` of a clause (a later one is the one the server wrote after any decoy). */
+const lastProperty = (clause: string, names: readonly string[]): string | null => {
+  const matches = [
+    ...clause.matchAll(new RegExp(`\\b(?:${names.join('|')})\\s*=\\s*${PROPERTY_VALUE}`, 'gi')),
+  ];
+  const value = matches.at(-1)?.[1];
+  if (value === undefined) {
+    return null;
+  }
+  const domain = domainOfAddress(value.replace(/"_"/g, ''));
+  return /^[a-z0-9.-]+$/.test(domain) ? domain : null;
+};
+
+/** The results one `Authentication-Results` header reports. A malformed clause is skipped. */
+const resultsOfHeader = (header: string): AuthResult[] => {
+  const found: AuthResult[] = [];
+  for (const clause of blankQuotes(stripComments(header)).split(';')) {
+    const head = /^\s*(spf|dkim|dmarc)\s*=\s*([a-z]+)/i.exec(clause);
+    if (head === null) {
+      continue;
+    }
+    const method = (head[1] ?? '').toLowerCase() as AuthResult['method'];
+    found.push({
+      method,
+      result: (head[2] ?? '').toLowerCase(),
+      domain:
+        method === 'spf'
+          ? lastProperty(clause, ['smtp\\.mailfrom'])
+          : method === 'dkim'
+            ? (lastProperty(clause, ['header\\.d']) ?? lastProperty(clause, ['header\\.i']))
+            : null,
+    });
   }
   return found;
 };
 
 /**
- * The truth table, first row that applies wins:
+ * The truth table, first row that applies wins. "Top" is the first
+ * `Authentication-Results` header in message order, the receiving server's own.
  *
  * | Report | Result |
  * |---|---|
- * | a `dkim=pass` whose `header.d` aligns with the From domain | aligned (this also rescues forwarded mail whose SPF soft-fails) |
- * | `dmarc=fail` | misaligned |
- * | `dmarc=pass` | aligned |
- * | an SPF or DKIM failure ({@link authenticationFailed}) | misaligned |
- * | an `spf=pass` whose `smtp.mailfrom` aligns with the From domain | aligned |
- * | `spf=pass` or `dkim=pass` naming a domain, none of them aligned | misaligned |
- * | anything else: no header, none, neutral, temperror, malformed | unknown |
+ * | `dmarc=fail` in any header | misaligned |
+ * | `dmarc=pass` in the top header | aligned |
+ * | top `dkim=pass` for a domain that speaks for the From domain (this also rescues forwarded mail whose SPF soft-fails) | aligned |
+ * | an SPF or DKIM failure ({@link authenticationFailed}) in any header | misaligned |
+ * | top `spf=pass` whose `smtp.mailfrom` speaks for the From domain | aligned |
+ * | top `spf=pass` or `dkim=pass` naming a domain, none of them speaking for it | misaligned |
+ * | anything else: no header, none, neutral, temperror, malformed, a pass naming no domain | unknown |
  *
- * With several `Authentication-Results` headers all are read, and any
- * evidence against the message wins unless an aligned DKIM pass exists.
+ * Headers are kept in message order by every inbound path (mailparser's header
+ * lines, the providers' ordered header lists); the generic JSON endpoint can
+ * carry one value per name, which is then the top.
  */
 export const senderCheck = (email: InboundEmail): SenderCheck => {
   const fromDomain = domainOfAddress(email.from?.address ?? '');
-  const results = authResultsOf(email);
-  const passes = results.filter((entry) => entry.result === 'pass');
-  const aligns = (entry: AuthResult): boolean =>
+  const headers = email.headers.get('authentication-results') ?? [];
+  const everything = headers.flatMap(resultsOfHeader);
+  const top = headers.length === 0 ? [] : resultsOfHeader(headers[0] ?? '');
+  const passes = top.filter((entry) => entry.result === 'pass');
+  const speaks = (entry: AuthResult): boolean =>
     entry.domain !== null && domainsAlign(entry.domain, fromDomain);
 
-  if (passes.some((entry) => entry.method === 'dkim' && aligns(entry))) {
-    return 'aligned';
-  }
-  if (results.some((entry) => entry.method === 'dmarc' && entry.result === 'fail')) {
+  if (everything.some((entry) => entry.method === 'dmarc' && entry.result === 'fail')) {
     return 'misaligned';
   }
   if (passes.some((entry) => entry.method === 'dmarc')) {
     return 'aligned';
   }
+  if (passes.some((entry) => entry.method === 'dkim' && speaks(entry))) {
+    return 'aligned';
+  }
   if (authenticationFailed(email)) {
     return 'misaligned';
   }
-  if (passes.some((entry) => entry.method === 'spf' && aligns(entry))) {
+  if (passes.some((entry) => entry.method === 'spf' && speaks(entry))) {
     return 'aligned';
   }
   // A pass that names no domain neither matches nor contradicts the From.

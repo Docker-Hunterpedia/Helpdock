@@ -1,6 +1,6 @@
 # M21 Customer portal
 
-Status: in progress (started 2026-11-24; M21-01 in review)
+Status: in progress (started 2026-11-24; M21-01 merged, M21-02 in review)
 Started: 2026-11-24
 Owner: @Docker-Hunterpedia
 Phase: 5 — 1.x. Proposed release: a minor of its own once the exit criteria are met (plan approved by the owner on 2026-11-24)
@@ -342,6 +342,7 @@ plan ([decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal)).
 | Id | Status | Notes |
 |---|---|---|
 | M21-01 | in review ([#481](https://github.com/Docker-Hunterpedia/Helpdock/pull/481), issue #471) | Done: the migration `0078_customer_portal` (the two tenant tables, `portal_visibility`, `account_role`, `tickets.account_id`, `portal_private`, `portal_eligible`, `portal_contact_ids`, and the denormalised `portal_contact_ids` and `portal_account_id` on messages and attachments, with the triggers that keep them and a backfill); the `customer` principal in `@helpdock/schemas` and `TenantContext`; the restrictive customer policies on every tenant table; `customerSees`; `brands.settings.portal`; `withCustomerContext`; negative tests in `portal-isolation.integration.test.ts` and the per-table sweep of `rls.integration.test.ts`. Not done on purpose: any route, page, email, cookie or admin screen. What M21-02 needs: system-context helpers for sessions and sign-in links (the policies already allow only the system path to write them). What M21-04 must add: customer INSERT policies for a reply, its attachments and a new ticket, and an activity actor for a customer. What M21-03 must add: customer read policies for whatever else a page joins (`ticket_statuses` for the four customer-facing words, `departments`, and coworkers' names from `contacts` for M21-05), and a reader for a merged ticket's inline messages (a merged-away ticket is invisible to a customer). |
+| M21-02 | in review (issue [#472](https://github.com/Docker-Hunterpedia/Helpdock/issues/472)) | Done: `/sign-in`, the Continue page, `/sign-out`, `/sign-out-everywhere` and a signed-in `/tickets` landing on the help center site (`apps/api/src/portal/`), the sign-in email (`Email/Portal-SignIn`, en and ar) through the outbox and a `portal.sign_in_email` job, the session cookie and its guard, CSRF, limits and the built-in CAPTCHA, the header links and signed-in menu, the guide and DOMAIN-RULES §4.9. Not done on purpose: the expired-row sweep (M21-08), any admin screen (M21-06), the ticket list (M21-03). |
 
 ## As built (M21-01)
 
@@ -350,6 +351,15 @@ plan ([decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal)).
 - The customer policies are an allow-list: the type must be `customer` for the customer branch, and one of the four known types for every other principal. An unset or unknown type reads nothing.
 - `loadCustomerScope` refuses a contact that is merged away, erased or from another brand, a brand that is not active or is soft-deleted, and a brand with the portal off.
 - The migration rewrites every ticket, every public message and every attachment of a message once, under exclusive locks, and builds its two ticket indexes after that. It needs a maintenance window ([operations guide](../guides/operations.md#upgrading)).
+
+## As built (M21-02)
+
+- **Where it lives.** `apps/api/src/portal/`: `portal-site.ts` (the routes, over a `PortalStore` port), `db-portal-store.ts` (the store over Postgres, every call on the system path), `portal-pages.ts` (the bodies), `session-rules.ts` (tokens, lifetimes, cookie names, CSRF, `next`), `sign-in-email.ts` (outbox row, job, rendering). `HelpCenterSite` hands a portal path to `PortalSite` after its brand and config reads; with `portalEnabled` false it never does, so the help center's own 404 answers.
+- **After the response.** The lookup, token and outbox row of a link request run in `SiteResponse.after`, which the controller awaits once the reply is sent. The synchronous part (validate, CAPTCHA, the two budgets) is the same for every address.
+- **Public pages stay cacheable.** The header carries the same two links for every visitor when the portal is on; the signed-in menu is drawn only on portal pages (`PageContext.portalSession`, set by the portal alone). A page cached before the setting changes keeps its old header until the cache turns over (10 minutes); M21-06 should bump the brand's page-cache generation when it saves the setting.
+- **Third-party CAPTCHA** (Turnstile and the others) is not drawn on the sign-in form: only the built-in check, required exactly when the brand's web form requires it. The limits apply either way.
+- **Session writes** go through `asSystem` (`withTenant` with the system context `portal:sign-in`). `loadCustomerScope` runs on every portal request (via `DbPortalStore.session`) and its `scope` is on the returned session for M21-03.
+- **Sweep.** Expired sessions and links are inert and removed only when a session is presented past its expiry; the scheduled purge is M21-08's (the retention job's result shape is a contract of its own).
 
 ## Notes for later deliverables
 

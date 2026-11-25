@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { PowChallenge } from '@helpdock/channels';
 import type { RateLimitRule } from '../auth/rate-limit.js';
 import type {
@@ -7,7 +8,6 @@ import type {
   PortalStore,
 } from '../portal/portal-site.js';
 import type { LiveSession, TokenState } from '../portal/portal-store.js';
-import { createHash } from 'node:crypto';
 
 /**
  * The portal's store, limiter and CAPTCHA held in memory, for the pages' unit

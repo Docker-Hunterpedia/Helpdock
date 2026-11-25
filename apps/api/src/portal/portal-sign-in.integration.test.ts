@@ -315,7 +315,7 @@ describe.skipIf(!hasDocker)('customer sign-in (M21-02)', () => {
     runtime = await createRuntime({
       env: envFor(),
       logger: createLogger({
-        env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: process.env.TEST_LOG ?? 'silent' },
+        env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' },
       }),
     });
     app = await createApiApp({ runtime, objectStorage: new FakeStorage('/tmp/helpdock-portal') });
@@ -485,6 +485,9 @@ describe.skipIf(!hasDocker)('customer sign-in (M21-02)', () => {
       await ask(HOST_A, email, { lang: 'ar' });
       await linkFor(brandA(), email);
       const [mail] = (await sealed(brandA())).filter((candidate) => candidate.to === email);
+      if (mail === undefined) {
+        throw new Error('no sign-in email was queued');
+      }
       const sent: { to: string; subject: string; text: string; html: string; locale: string }[] =
         [];
       const handler = createSignInEmailHandler({
@@ -509,9 +512,9 @@ describe.skipIf(!hasDocker)('customer sign-in (M21-02)', () => {
         handler({
           payload: {
             brandId: brandA(),
-            sourceOutboxId: mail?.row.id ?? '',
+            sourceOutboxId: mail.row.id,
             locale: 'ar',
-            sealed: (mail?.row.payload as { sealed: string }).sealed,
+            sealed: (mail.row.payload as { sealed: string }).sealed,
           },
           brandId: brandA(),
           tx,
@@ -523,7 +526,7 @@ describe.skipIf(!hasDocker)('customer sign-in (M21-02)', () => {
       expect(sent[0]?.to).toBe(email);
       expect(sent[0]?.locale).toBe('ar');
       expect(sent[0]?.html).toContain('dir="rtl"');
-      expect(sent[0]?.text).toContain(mail?.url ?? 'missing');
+      expect(sent[0]?.text).toContain(mail.url);
     });
   });
 

@@ -21,10 +21,10 @@
 import cookie from '@fastify/cookie';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { NoPageCache } from '../dist/help-center/site/page-cache.js';
-import { PortalSite } from '../dist/portal/portal-site.js';
-import { csrfKeyFrom } from '../dist/portal/session-rules.js';
 import { send, siteRequest } from '../dist/help-center/site/site.controller.js';
 import { HelpCenterSite } from '../dist/help-center/site/site.js';
+import { PortalSite } from '../dist/portal/portal-site.js';
+import { csrfKeyFrom } from '../dist/portal/session-rules.js';
 import { loadFonts } from '../dist/static/fonts.js';
 import { articleId, memorySiteContent } from '../src/testing/help-center-site.ts';
 import {
@@ -111,14 +111,19 @@ const fonts = loadFonts();
  */
 const portalStore = new MemoryPortalStore();
 portalStore.newCustomers = true;
-portalStore.known.set('mona@acme.example', { contactId: 'contact-mona', companyName: PORTAL_COMPANY });
+portalStore.known.set('mona@acme.example', {
+  contactId: 'contact-mona',
+  companyName: PORTAL_COMPANY,
+});
 const portalLimiter = new MemoryLimiter();
 const portalSite = new PortalSite({
   store: portalStore,
   captcha: new MemoryCaptcha(),
   limiter: {
     consume: (rule, subject) =>
-      rule.bucket === 'portal-link-email' ? portalLimiter.consume(rule, subject) : Promise.resolve(true),
+      rule.bucket === 'portal-link-email'
+        ? portalLimiter.consume(rule, subject)
+        : Promise.resolve(true),
   },
   csrfKey: csrfKeyFrom(Buffer.alloc(32, 9)),
   log: silentSecurityLog(),

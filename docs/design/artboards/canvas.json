@@ -1016,6 +1016,13 @@
    "w": 1920,
    "x": 0,
    "y": 97620
+  },
+  "HelpCenterPortalSignIn.dc.html": {
+   "h": 4040,
+   "title": "HelpCenter/Portal-SignIn",
+   "w": 2400,
+   "x": 0,
+   "y": 103000
   }
  },
  "createdOnFiles": {
@@ -1228,6 +1235,14 @@
    "w": 240,
    "x": 0,
    "y": 49836
+  },
+  "m21": {
+   "kind": "title1",
+   "maxW": 7000,
+   "text": "M21 Customer portal — sign-in by emailed link, my tickets, company view",
+   "w": 240,
+   "x": 0,
+   "y": 102700
   }
  },
  "order": [
@@ -1375,7 +1390,8 @@
   "AdminAcceptInviteProviders.dc.html",
   "AdminUxFixes.dc.html",
   "AdminTicketingPriorities.dc.html",
-  "AdminTicketListToggleReplyTo.dc.html"
+  "AdminTicketListToggleReplyTo.dc.html",
+  "HelpCenterPortalSignIn.dc.html"
  ],
  "pages": [],
  "title": "Helpdock Design System"

@@ -95,8 +95,12 @@ test('signs in end to end: the form, the email, Continue, the header menu and Si
   const menu = page.getByRole('group').filter({ hasText: email }).first();
   await page.locator('summary').click();
   await expect(menu).toContainText(t('portal.menu.signedInAs'));
-  await expect(page.getByRole('button', { name: t('portal.menu.signOut'), exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: t('portal.menu.signOutEverywhere') })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: t('portal.menu.signOut'), exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: t('portal.menu.signOutEverywhere') }),
+  ).toBeVisible();
   expect(await violations(page)).toEqual([]);
 
   await page.getByRole('button', { name: t('portal.menu.signOut'), exact: true }).click();
@@ -132,16 +136,24 @@ test('a malformed address gets a field error, announced and tied to the field', 
   await openForm(page, pageLocale);
   await submit(page, t, 'not an address');
 
-  await expect(page.getByRole('alert').filter({ hasText: t('portal.signIn.invalid') })).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({ hasText: t('portal.signIn.invalid') }),
+  ).toBeVisible();
   const field = page.getByLabel(t('portal.signIn.email'));
   await expect(field).toHaveAttribute('aria-invalid', 'true');
   await expect(field).toHaveAttribute('aria-describedby', 'hd-email-error');
   await expect(field).toHaveValue('not an address');
-  await expect(page.getByRole('heading', { level: 1, name: t('portal.signIn.title') })).toBeFocused();
+  await expect(
+    page.getByRole('heading', { level: 1, name: t('portal.signIn.title') }),
+  ).toBeFocused();
   expect(await violations(page)).toEqual([]);
 });
 
-test('an expired link has its own page with a way forward', async ({ page, pageLocale, request }) => {
+test('an expired link has its own page with a way forward', async ({
+  page,
+  pageLocale,
+  request,
+}) => {
   const t = strings(pageLocale);
   const email = address(pageLocale, 'expired');
   await openForm(page, pageLocale);
@@ -150,7 +162,9 @@ test('an expired link has its own page with a way forward', async ({ page, pageL
   await request.post(`/__e2e/expire?email=${encodeURIComponent(email)}`);
 
   await page.goto(link);
-  await expect(page.getByRole('heading', { level: 1, name: t('portal.expired.title') })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: t('portal.expired.title') }),
+  ).toBeVisible();
   await expect(page.getByRole('link', { name: t('portal.expired.newLink') })).toBeVisible();
   await expect(page.getByRole('link', { name: t('portal.nav.tickets') }).last()).toBeVisible();
   expect(await violations(page)).toEqual([]);
@@ -181,12 +195,16 @@ test('the sixth request for one address in an hour shows the warning and disable
   for (let n = 0; n < 5; n += 1) {
     await openForm(page, pageLocale);
     await submit(page, t, email);
-    await expect(page.getByRole('heading', { level: 1, name: t('portal.sent.title') })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: t('portal.sent.title') }),
+    ).toBeVisible();
   }
   await openForm(page, pageLocale);
   await submit(page, t, email);
 
-  await expect(page.getByRole('alert').filter({ hasText: t('portal.signIn.tooMany') })).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({ hasText: t('portal.signIn.tooMany') }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: t('portal.signIn.submit') })).toBeDisabled();
   expect(await violations(page)).toEqual([]);
 });

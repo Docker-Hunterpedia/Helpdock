@@ -1,5 +1,5 @@
 import type { HttpTransport } from '@helpdock/ai';
-import type { Env, Settings } from '@helpdock/config';
+import { createKeyring, type Env, type Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
@@ -8,10 +8,16 @@ import { createAiRuntime } from '../ai/db-ai-ports.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { RefreshStore } from '../auth/session/refresh-store.js';
 import type { SigningKeys } from '../auth/session/signing-keys.js';
+import { DbCaptchaKeys } from '../captcha/captcha-keys.js';
+import { PowCaptcha } from '../captcha/pow-captcha.js';
 import type { BrandResolver } from '../context/brand-resolver.js';
 import { createQueryEmbedder } from '../knowledge/retrieval/retrieve.js';
 import type { Logger } from '../logging/logger.js';
 import { createS3Client, type ObjectStorage, S3ObjectStorage } from '../media/storage.js';
+import { DbPortalCaptcha } from '../portal/db-portal-captcha.js';
+import { DbPortalStore } from '../portal/db-portal-store.js';
+import { PortalSite } from '../portal/portal-site.js';
+import { csrfKeyFrom } from '../portal/session-rules.js';
 import { DB, HOST_PAGES, SETTINGS } from '../runtime/tokens.js';
 import { HelpCenterArticlesService } from './articles.service.js';
 import { HelpCenterContentService } from './content.service.js';
@@ -92,6 +98,20 @@ export class HelpCenterModule {
       families: new RefreshStore(redis),
     });
     const siteSettings = new HelpCenterSiteSettingsService({ appUrl: env.APP_URL });
+    // M21-02: the customer portal's sign-in pages, served by the same site.
+    const keyring = createKeyring(env);
+    const portalFor = (db: Db): PortalSite =>
+      new PortalSite({
+        store: new DbPortalStore({ db, keyring }),
+        captcha: new DbPortalCaptcha({
+          db,
+          keys: new DbCaptchaKeys(db, keyring),
+          pow: new PowCaptcha(keyring, redis),
+        }),
+        limiter: new RateLimiter(redis),
+        csrfKey: csrfKeyFrom(keyring.current.key),
+        log: logger,
+      });
 
     return {
       module: HelpCenterModule,
@@ -180,6 +200,7 @@ export class HelpCenterModule {
               imageSources: imageSourcesOf(env),
               visitorSecret: `hd-help-center-visitor:${env.APP_MASTER_KEY}`,
               feedbackBudget: feedbackBudget(new RateLimiter(redis)),
+              portal: portalFor(db),
               log: logger,
             }),
         },

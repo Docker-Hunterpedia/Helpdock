@@ -78,6 +78,28 @@ h1, h2, h3 { text-wrap: pretty; }
 }
 .hd-icon-button:hover { background: var(--hd-bg-muted); }
 
+/* The portal's header links and signed-in menu (M21-02). Pure CSS: a details element, so no script. */
+.hd-portal-link { color: var(--hd-text-secondary); min-block-size: 44px; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.hd-portal-signin { color: var(--hd-text-link); font-weight: 500; }
+.hd-menu { position: relative; }
+.hd-menu summary {
+  min-block-size: 44px; padding-inline: 12px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; list-style: none;
+  border-radius: var(--hd-radius-md); border: 1px solid var(--hd-border-strong); background: var(--hd-bg-surface); font-size: 14px;
+}
+.hd-menu summary::-webkit-details-marker { display: none; }
+.hd-menu-panel {
+  position: absolute; inset-block-start: 100%; inset-inline-end: 0; z-index: 2; margin-block-start: 4px; min-inline-size: 240px;
+  padding: 8px; border-radius: var(--hd-radius-lg); border: 1px solid var(--hd-border-default); background: var(--hd-bg-surface);
+  box-shadow: var(--hd-elevation-2); display: flex; flex-direction: column; gap: 4px;
+}
+.hd-menu-who { margin: 0; padding: 8px; display: flex; flex-direction: column; font-size: 14px; line-height: 20px; border-block-end: 1px solid var(--hd-border-default); }
+.hd-menu-panel form { margin: 0; }
+.hd-menu-panel button {
+  inline-size: 100%; min-block-size: 44px; padding-inline: 8px; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  border: 0; border-radius: var(--hd-radius-md); background: transparent; color: var(--hd-text-primary); font: inherit; font-size: 14px; text-align: start;
+}
+.hd-menu-panel button:hover { background: var(--hd-bg-muted); }
+
 .hd-preview {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-block: 12px; padding-inline: 64px; font-size: 14px; line-height: 20px;
   background: var(--hd-status-warning-tint); color: var(--hd-status-warning-text); border-block-end: 1px solid var(--hd-status-warning);

@@ -52,6 +52,24 @@ export interface ExternalLink {
   readonly url: string;
 }
 
+/**
+ * The portal's part of the header (M21-02, `HelpCenter/Portal-SignIn`). On a
+ * public page `session` is always null, so the header is the same for every
+ * visitor and the page stays cacheable (DOMAIN-RULES §5); only portal pages,
+ * which are never cached, know who is signed in.
+ */
+export interface PortalHeader {
+  readonly ticketsHref: string;
+  readonly signInHref: string;
+  readonly session: {
+    readonly address: string;
+    readonly companyName: string | null;
+    readonly signOutHref: string;
+    readonly signOutEverywhereHref: string;
+    readonly csrf: string;
+  } | null;
+}
+
 export interface ChromeView {
   readonly locale: HcLocale;
   readonly t: Translate;
@@ -78,6 +96,12 @@ export interface ChromeView {
   /** A banner above the header: the editor's preview. */
   readonly banner: string | null;
   readonly head: HeadView;
+  /** Present when the brand has the portal on. */
+  readonly portal?: PortalHeader | null;
+  /** Rules a page adds after the shared stylesheet. */
+  readonly extraCss?: string;
+  /** Inline scripts a page carries under the response's nonce (the portal's focus and CAPTCHA). */
+  readonly scripts?: readonly string[];
 }
 
 const OTHER_LOCALE: Readonly<Record<HcLocale, HcLocale>> = { en: 'ar', ar: 'en' };
@@ -134,7 +158,7 @@ const head = (view: ChromeView): string => {
   }
   lines.push(
     `<link rel="stylesheet" href="${FONTS_STYLESHEET}">`,
-    `<style nonce="${NONCE}">${view.themeCss}\n${PAGE_CSS}\n${view.customCss}</style>`,
+    `<style nonce="${NONCE}">${view.themeCss}\n${PAGE_CSS}\n${view.extraCss ?? ''}\n${view.customCss}</style>`,
   );
   for (const data of meta.jsonLd) {
     lines.push(`<script type="application/ld+json">${jsonForScript(data)}</script>`);
@@ -160,7 +184,29 @@ const staffControls = (view: ChromeView): string => {
   return `<span class="hd-staff"><span class="hd-avatar" aria-hidden="true">${esc(initialsOf(view.staff.name))}</span><span>${esc(view.staff.name)}</span><form class="hd-inline-form" method="post" action="${esc(view.links.signOut())}"><button class="hd-icon-button" type="submit" aria-label="${esc(view.t('states.signOut'))}">${icon('logOut', 16, true)}</button></form></span>`;
 };
 
+const portalLinks = (view: ChromeView): { before: string; after: string } => {
+  const portal = view.portal;
+  if (portal === null || portal === undefined) {
+    return { before: '', after: '' };
+  }
+  const before = `<a class="hd-portal-link" href="${esc(portal.ticketsHref)}">${icon('ticket', 16)}${esc(view.t('portal.nav.tickets'))}</a>`;
+  const { session } = portal;
+  if (session === null) {
+    return {
+      before,
+      after: `<a class="hd-portal-link hd-portal-signin" href="${esc(portal.signInHref)}">${esc(view.t('portal.nav.signIn'))}</a>`,
+    };
+  }
+  const form = (action: string, iconName: 'logOut' | 'shieldCheck', label: string): string =>
+    `<form method="post" action="${esc(action)}"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><input type="hidden" name="lang" value="${view.locale}"><button type="submit">${icon(iconName, 16)}${esc(label)}</button></form>`;
+  return {
+    before,
+    after: `<details class="hd-menu"><summary aria-label="${esc(view.t('portal.menu.label'))}"><bdi dir="ltr">${esc(session.address)}</bdi>${icon('chevronDown', 16)}</summary><div class="hd-menu-panel"><p class="hd-menu-who"><span class="hd-caption">${esc(view.t('portal.menu.signedInAs'))}</span><bdi dir="ltr">${esc(session.address)}</bdi>${session.companyName === null ? '' : `<span class="hd-caption">${esc(session.companyName)}</span>`}</p>${form(session.signOutHref, 'logOut', view.t('portal.menu.signOut'))}${form(session.signOutEverywhereHref, 'shieldCheck', view.t('portal.menu.signOutEverywhere'))}</div></details>`,
+  };
+};
+
 const header = (view: ChromeView): string => {
+  const portalPart = portalLinks(view);
   const other = OTHER_LOCALE[view.locale];
   const nav =
     view.nav.length + view.headerLinks.length === 0
@@ -180,8 +226,8 @@ const header = (view: ChromeView): string => {
 
   return `<header class="hd-header">
 ${brandLink(view)}
-${nav}<span class="hd-push"></span>${search}${internal}${staffControls(view)}
-<a class="hd-lang" href="${esc(view.otherLocaleHref)}" lang="${other}" hreflang="${other}" dir="${other === 'ar' ? 'rtl' : 'ltr'}">${esc(view.t('otherLanguage'))}</a>
+${nav}<span class="hd-push"></span>${search}${internal}${staffControls(view)}${portalPart.before}
+<a class="hd-lang" href="${esc(view.otherLocaleHref)}" lang="${other}" hreflang="${other}" dir="${other === 'ar' ? 'rtl' : 'ltr'}">${esc(view.t('otherLanguage'))}</a>${portalPart.after}
 </header>`;
 };
 
@@ -229,6 +275,7 @@ ${header(view)}
 ${main}
 ${footer(view)}
 ${widgetScripts(view)}
+${(view.scripts ?? []).map((script) => `<script nonce="${NONCE}">${script}</script>`).join('\n')}
 </body>
 </html>`;
 };

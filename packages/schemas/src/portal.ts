@@ -57,3 +57,35 @@ export const portalSettingsSchema = z.object({
   departmentIds: z.union([z.array(z.uuid()), z.literal('all')]).default('all'),
 });
 export type PortalSettings = z.infer<typeof portalSettingsSchema>;
+
+// --------------------------------------------------------------------------
+// The sign-in pages' own inputs (M21-02)
+// --------------------------------------------------------------------------
+
+/** What the `/sign-in` form posts. The address is validated by the page, so a bad one is a field error, not a 400. */
+export const portalSignInFormSchema = z.object({
+  email: z.string().max(500).default(''),
+  lang: z.string().max(10).optional(),
+  /** Where to land after Continue; checked against the allow-list by `safePortalNext`. */
+  next: z.string().max(300).optional(),
+  csrf: z.string().max(200).default(''),
+  /** The built-in check's solution (ADR 0052). */
+  hd_pow: z.string().max(8192).optional(),
+});
+export type PortalSignInForm = z.infer<typeof portalSignInFormSchema>;
+
+/** What the Continue button posts. */
+export const portalConfirmFormSchema = z.object({
+  token: z.string().max(200).default(''),
+  lang: z.string().max(10).optional(),
+  next: z.string().max(300).optional(),
+  csrf: z.string().max(200).default(''),
+});
+export type PortalConfirmForm = z.infer<typeof portalConfirmFormSchema>;
+
+/** Sign out and Sign out everywhere carry the CSRF token only. */
+export const portalSessionFormSchema = z.object({
+  csrf: z.string().max(200).default(''),
+  lang: z.string().max(10).optional(),
+});
+export type PortalSessionForm = z.infer<typeof portalSessionFormSchema>;

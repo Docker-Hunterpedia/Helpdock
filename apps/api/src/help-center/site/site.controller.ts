@@ -149,4 +149,6 @@ export const send = async (reply: FastifyReply, response: SiteResponse): Promise
     });
   }
   await reply.code(response.status).headers(response.headers).send(response.body);
+  // After the reply has gone out, so the work behind it (the portal's lookup) cannot be timed.
+  await response.after?.();
 };

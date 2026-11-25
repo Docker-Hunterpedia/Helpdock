@@ -20,6 +20,7 @@ import {
   hcLinksSchema,
   hcMediaPath,
   hcThemeSchema,
+  parseBrandSettings,
 } from '@helpdock/schemas';
 import { and, eq, inArray } from 'drizzle-orm';
 import { readPrimaryDomain } from './site-url.js';
@@ -52,6 +53,8 @@ export interface SiteConfig {
   readonly widgetOrigins: readonly string[];
   /** The brand's primary verified help center host, or null while it has none (ADR 0013's fallback). */
   readonly primaryDomain: string | null;
+  /** The brand has the customer portal on (M21-02): the header links and the portal addresses exist. */
+  readonly portalEnabled: boolean;
 }
 
 const EMPTY_LINKS: HcLinks = { header: [], footer: [] };
@@ -99,6 +102,7 @@ export const readSiteConfig = async (
       defaultLocale: brands.defaultLocale,
       timezone: brands.timezone,
       status: brands.status,
+      settings: brands.settings,
     })
     .from(brands)
     .where(eq(brands.id, brandId))
@@ -136,6 +140,7 @@ export const readSiteConfig = async (
     customCss: settings?.customCss ?? '',
     widgetOrigins: widget?.allowedOrigins ?? [],
     primaryDomain: await readPrimaryDomain(tx, brandId),
+    portalEnabled: parseBrandSettings(brand.settings).portal.enabled,
   };
 };
 

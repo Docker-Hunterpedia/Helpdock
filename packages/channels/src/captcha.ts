@@ -28,7 +28,7 @@ export type SiteverifyProviderName = Exclude<CaptchaProviderName, 'pow'>;
  * another even when two brands share a site key. hCaptcha has neither field:
  * its tokens are bound by hostname only.
  */
-export type CaptchaSurface = 'widget-first-message' | 'web-form';
+export type CaptchaSurface = 'widget-first-message' | 'web-form' | 'portal-sign-in';
 
 /** Who a challenge is for: what Turnstile is told to render and must answer back. */
 export interface CaptchaBinding {

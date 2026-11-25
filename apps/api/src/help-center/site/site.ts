@@ -8,6 +8,13 @@ import type {
 } from '@helpdock/schemas';
 import { hcFeedbackFormSchema, localeSchema } from '@helpdock/schemas';
 import { z } from 'zod';
+import { normaliseHost } from '../../domains/brand-host.js';
+import type {
+  PortalCookie,
+  PortalHost,
+  PortalResponse,
+  PortalSite,
+} from '../../portal/portal-site.js';
 import type { HelpCenterFeedback, HelpCenterSearch } from '../ports.js';
 import {
   type FeedbackStep,
@@ -129,6 +136,8 @@ export interface HelpCenterSiteDependencies {
    * cookie voting twice; this stops one source minting cookies to vote again.
    */
   readonly feedbackBudget: (brandId: string, ip: string) => Promise<boolean>;
+  /** The customer portal (M21-02). Absent in a suite or a process that does not serve it. */
+  readonly portal?: PortalSite;
   readonly log: { warn(fields: Record<string, unknown>, message: string): void };
 }
 
@@ -164,6 +173,8 @@ export interface SiteResponse {
   readonly headers: Readonly<Record<string, string>>;
   readonly body: string;
   readonly cookies: readonly SiteCookie[];
+  /** Work to run once the response is sent (the portal's sign-in link), so its timing is not in it. */
+  readonly after?: () => Promise<void>;
 }
 
 interface Target {
@@ -176,6 +187,11 @@ interface Where extends Target {
   readonly links: SiteLinks;
   /** See `PageContext.seo`. */
   readonly seo: SiteLinks;
+  /**
+   * Where the browser says the page is (`Host`, port included): only for the
+   * same-origin check of a POST. Links are built from the verified domain.
+   */
+  readonly requestOrigin: string;
 }
 
 const nonceOf = (): string => randomBytes(16).toString('base64');
@@ -207,7 +223,17 @@ export class HelpCenterSite {
       return plain(404, 'Not found');
     }
     const links = this.#linksFor(target.brandId, config, request);
-    const where: Where = { ...target, links, seo: this.#seoFor(target.brandId, config, links) };
+    const where: Where = {
+      ...target,
+      links,
+      seo: this.#seoFor(target.brandId, config, links),
+      requestOrigin: this.#requestOrigin(request),
+    };
+
+    const portal = await this.#portal(request, where, config);
+    if (portal !== null) {
+      return portal;
+    }
 
     if (request.method === 'POST') {
       return this.#post(request, where, config);
@@ -240,6 +266,126 @@ export class HelpCenterSite {
       default:
         return this.#page(request, where, config, route);
     }
+  }
+
+  /**
+   * The customer portal's addresses (M21-02). Only a brand with the portal on
+   * has any: for the rest this answers null and the help center's own 404 follows.
+   * A POST first passes the same-origin check as every form the pages post.
+   */
+  async #portal(
+    request: SiteRequest,
+    where: Where,
+    config: SiteConfig,
+  ): Promise<SiteResponse | null> {
+    const portal = this.#deps.portal;
+    if (portal === undefined || !config.portalEnabled) {
+      return null;
+    }
+    const path = where.rest.replace(/\/+$/, '') || '/';
+    if (request.method === 'POST') {
+      const origin = request.headers.origin;
+      if (origin !== undefined && origin !== 'null' && origin !== where.requestOrigin) {
+        return plain(403, 'Forbidden');
+      }
+    }
+    const host = this.#portalHost(request, where, config, path);
+    const response = await portal.handle(host);
+    return response === null ? null : this.#fromPortal(response);
+  }
+
+  #portalHost(request: SiteRequest, where: Where, config: SiteConfig, path: string): PortalHost {
+    const secure = this.#secure;
+    return {
+      request: {
+        method: request.method,
+        host: request.host?.toLowerCase(),
+        query: request.query,
+        headers: request.headers,
+        cookies: request.cookies,
+        ip: request.ip,
+        ...(request.body === undefined ? {} : { body: request.body }),
+      },
+      brandId: where.brandId,
+      path,
+      links: where.links,
+      config,
+      byHost: request.byHost,
+      secure,
+      locale: (requested) => {
+        const parsed = localeSchema.safeParse(requested);
+        return parsed.success
+          ? parsed.data
+          : pickLocale(request.headers.acceptLanguage, config.defaultLocale);
+      },
+      context: (locale, session, csrf) => ({
+        config,
+        locale,
+        links: where.links,
+        seo: where.seo,
+        audience: 'public',
+        staff: null,
+        tree: [],
+        publicIds: null,
+        widget: false,
+        adminUrl: (adminPath) => `${this.#appOrigin}${adminPath}`,
+        portalSession:
+          session === undefined || csrf === undefined
+            ? undefined
+            : {
+                address: session.address,
+                companyName: session.companyName,
+                signOutHref: where.links.portalSignOut(),
+                signOutEverywhereHref: where.links.portalSignOutEverywhere(),
+                csrf,
+              },
+      }),
+      respond: ({ status, rendered, pow, cookies }) => {
+        const nonce = nonceOf();
+        return {
+          status,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'content-security-policy': pageContentSecurityPolicy(nonce, {
+              widget: false,
+              imageSources: this.#deps.imageSources,
+              scripts: true,
+              connect: pow,
+            }),
+            'cache-control': PRIVATE_CACHE_CONTROL,
+            'x-robots-tag': 'noindex',
+            'referrer-policy': 'no-referrer',
+          },
+          body: rendered.html.replaceAll(NONCE, nonce),
+          cookies: cookies ?? [],
+        };
+      },
+      redirect: (location, cookies) => ({
+        ...redirect(303, location, true),
+        cookies: cookies ?? [],
+      }),
+      json: (status, body) => ({
+        status,
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': PRIVATE_CACHE_CONTROL,
+        },
+        body: JSON.stringify(body),
+        cookies: [],
+      }),
+      plain: (status, body) => plain(status, body),
+    };
+  }
+
+  #fromPortal(response: PortalResponse): SiteResponse {
+    const cookies: readonly PortalCookie[] = response.cookies;
+    return {
+      status: response.status,
+      headers: response.headers,
+      body: response.body,
+      cookies,
+      ...(response.after === undefined ? {} : { after: response.after }),
+    };
   }
 
   /** A page: the wall, a cache hit, a preview, search, or a render (stored when public). */
@@ -331,12 +477,21 @@ export class HelpCenterSite {
     return { brandId, rest: match?.[2] ?? '/' };
   }
 
+  /** The origin the browser used, from the raw `Host` on a brand's host and the install's origin otherwise. */
+  #requestOrigin(request: SiteRequest): string {
+    return request.byHost
+      ? `${this.#secure ? 'https:' : 'http:'}//${request.host ?? ''}`
+      : this.#appOrigin;
+  }
+
   #linksFor(brandId: string, config: SiteConfig, request: SiteRequest): SiteLinks {
     if (request.byHost) {
       const scheme = this.#secure ? 'https:' : 'http:';
       return new SiteLinks({
         base: '',
-        origin: `${scheme}//${request.host ?? config.primaryDomain ?? ''}`,
+        // The verified domain the resolver matched, never the header as sent: a port
+        // or a stray label in `Host` must not reach an emailed link or a canonical URL.
+        origin: `${scheme}//${normaliseHost(request.host) ?? config.primaryDomain ?? ''}`,
         brandId,
       });
     }
@@ -529,7 +684,7 @@ export class HelpCenterSite {
 
   async #post(request: SiteRequest, where: Where, config: SiteConfig): Promise<SiteResponse> {
     const origin = request.headers.origin;
-    if (origin !== undefined && origin !== 'null' && origin !== where.links.origin) {
+    if (origin !== undefined && origin !== 'null' && origin !== where.requestOrigin) {
       return plain(403, 'Forbidden');
     }
     const path = where.rest.replace(/\/+$/, '');
@@ -766,7 +921,14 @@ const VIDEO_FRAMES = ['https://www.youtube-nocookie.com', 'https://player.vimeo.
  */
 export const pageContentSecurityPolicy = (
   nonce: string,
-  options: { readonly widget: boolean; readonly imageSources: readonly string[] },
+  options: {
+    readonly widget: boolean;
+    readonly imageSources: readonly string[];
+    /** The portal's own nonce'd inline scripts (M21-02), without the widget. */
+    readonly scripts?: boolean;
+    /** The built-in CAPTCHA's "Try again" fetches its own origin. */
+    readonly connect?: boolean;
+  },
 ): string => {
   const images = ["'self'", 'data:', ...options.imageSources].join(' ');
   return [
@@ -774,8 +936,13 @@ export const pageContentSecurityPolicy = (
     `style-src 'self' 'nonce-${nonce}'`,
     "font-src 'self'",
     `img-src ${images}`,
-    options.widget ? `script-src 'self' 'nonce-${nonce}'` : "script-src 'none'",
+    options.widget
+      ? `script-src 'self' 'nonce-${nonce}'`
+      : options.scripts === true
+        ? `script-src 'nonce-${nonce}'`
+        : "script-src 'none'",
     ...(options.widget ? ["connect-src 'self'", `media-src ${images}`] : []),
+    ...(!options.widget && options.connect === true ? ["connect-src 'self'"] : []),
     `frame-src ${VIDEO_FRAMES.join(' ')}`,
     "form-action 'self'",
     "base-uri 'none'",

@@ -60,6 +60,7 @@ import {
   PHOTO_SWEEP_CRON,
   parseJobPayloadOrFail,
   photoSweepScheduleJob,
+  portalSignInEmailJob,
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
@@ -193,6 +194,11 @@ import { readPacingConfig } from '../notifications/pacing-settings.js';
 import { WebPushSender } from '../notifications/push.js';
 import { UnsubscribeTokens } from '../notifications/unsubscribe-tokens.js';
 import { StorageUsageStore } from '../observability/storage-usage.js';
+import {
+  createSignInEmailEventHandler,
+  createSignInEmailProcessor,
+  PORTAL_SIGN_IN_EVENT,
+} from '../portal/sign-in-email.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
 import { createStatsProcessor } from '../reports/rollup.job.js';
@@ -820,6 +826,19 @@ export const workerDependencies: WorkerDependencies = {
       createAuthEmailEventHandler({
         add: async (jobId, payload) => {
           await notify.add(authEmailJob.name, payload, { ...authEmailJob.options, jobId });
+        },
+      }),
+    );
+
+    // M21-02: a customer's sign-in link, one `portal.sign_in_email` job per row.
+    registerEventHandler(
+      PORTAL_SIGN_IN_EVENT,
+      createSignInEmailEventHandler({
+        add: async (jobId, payload) => {
+          await notify.add(portalSignInEmailJob.name, payload, {
+            ...portalSignInEmailJob.options,
+            jobId,
+          });
         },
       }),
     );
@@ -1634,9 +1653,24 @@ export const workerDependencies: WorkerDependencies = {
       { senders: channels, keyring: createKeyring(env) },
       { db, log },
     );
+    const keyring = createKeyring(env);
+    const signInEmail = createSignInEmailProcessor(
+      {
+        repository: new EmailRepository(),
+        keyring,
+        installSmtp: new SettingsInstallSmtp(settings),
+        transports: smtpTransportFactory,
+      },
+      { db, log },
+    );
     const worker = new Worker(
       QUEUE_NAMES.notify,
-      (job, token) => (job.name === authEmailJob.name ? authEmail(job) : notify(job, token)),
+      (job, token) =>
+        job.name === authEmailJob.name
+          ? authEmail(job)
+          : job.name === portalSignInEmailJob.name
+            ? signInEmail(job)
+            : notify(job, token),
       { connection: redis },
     );
     worker.on('failed', (job, error) =>

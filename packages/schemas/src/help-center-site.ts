@@ -253,6 +253,12 @@ export const hcSiteQuerySchema = z.object({
   pass: z.string().max(100).optional(),
   /** The search a result was opened from, for "Opened a result" (M5-08). */
   sid: z.string().max(100).optional(),
+  /** The portal's language switch (M21-02): its addresses have no language segment. */
+  lang: z.string().max(10).optional(),
+  /** The portal's emailed sign-in link (M21-02). Never logged. */
+  token: z.string().max(200).optional(),
+  /** The portal path to land on after signing in. */
+  next: z.string().max(300).optional(),
 });
 export type HcSiteQuery = z.infer<typeof hcSiteQuerySchema>;
 

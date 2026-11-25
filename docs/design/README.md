@@ -11,7 +11,7 @@ A rendered snapshot of every artboard on the Helpdock design canvas, so contribu
 | Path | Contents |
 |---|---|
 | [`artboards/`](artboards/) | The source of each artboard (`*.dc.html`) and `canvas.json`, the canvas manifest with every board's title, size and position. Diff these in a PR to review a design change. |
-| [`screens/`](screens/) | One PNG per artboard at its canvas size, grouped by the canvas section it sits under: `foundations`, `applications`, then `m0` to `m11`, and the 1.1 sections `m14` and `m18`, which are work in progress. |
+| [`screens/`](screens/) | One PNG per artboard at its canvas size, grouped by the canvas section it sits under: `foundations`, `applications`, then `m0` to `m11`, and the 1.1 sections `m14`, `m18` and `m21`, which are work in progress. |
 
 The artboards are static mockups. Names, numbers, domains and size caps on them are sample values; behaviour comes from [DOMAIN-RULES.md](../planning/DOMAIN-RULES.md).
 
@@ -879,3 +879,15 @@ Built from [`Admin/UX-Fixes-2026-11`](artboards/AdminUxFixes.dc.html) (issue #45
 #### `Admin/UX-Fixes-2026-11`
 
 ![Admin/UX-Fixes-2026-11](screens/m18/Admin-UX-Fixes-2026-11.png)
+
+### M21 Customer portal
+
+Customers sign in to a brand's help center by an emailed link and read their tickets there ([M21 plan](../in-development/M21-customer-portal.md)). The portal's other boards (`HelpCenter/Portal-Tickets`, `HelpCenter/Portal-Ticket`) are added with the deliverables that build them.
+
+| Artboard | Deliverables | Screen | Source |
+|---|---|---|---|
+| `HelpCenter/Portal-SignIn` | M21-02 | [HelpCenter-Portal-SignIn.png](screens/m21/HelpCenter-Portal-SignIn.png) | [HelpCenterPortalSignIn.dc.html](artboards/HelpCenterPortalSignIn.dc.html) |
+
+#### `HelpCenter/Portal-SignIn`
+
+![HelpCenter/Portal-SignIn](screens/m21/HelpCenter-Portal-SignIn.png)

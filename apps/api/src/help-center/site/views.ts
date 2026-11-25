@@ -11,7 +11,13 @@ import type { PopularArticle, SearchHit } from '../ports.js';
 import { type FeedbackStep, feedbackHref } from './feedback-step.js';
 import type { SiteLinks } from './paths.js';
 import { articleBodyHtml } from './render/article-body.js';
-import { type ChromeView, type HeadView, type NavLink, renderDocument } from './render/layout.js';
+import {
+  type ChromeView,
+  type HeadView,
+  type NavLink,
+  type PortalHeader,
+  renderDocument,
+} from './render/layout.js';
 import {
   articleMain,
   type Crumb,
@@ -70,6 +76,12 @@ export interface PageContext {
   readonly widget: boolean;
   /** An address in the admin, for "Edit in admin" and the wall's sign-in. */
   readonly adminUrl: (path: string) => string;
+  /**
+   * M21-02. Who is signed in to the portal, known only on a portal page (never
+   * cached). Every other page leaves it unset, so the header is the same for
+   * everyone and a cached page never carries somebody's address.
+   */
+  readonly portalSession?: NonNullable<PortalHeader['session']> | undefined;
 }
 
 export interface Rendered {
@@ -151,6 +163,8 @@ interface ChromeOptions {
   readonly banner?: string;
   /** Widget off: the states, the wall and a preview. */
   readonly widget: boolean;
+  readonly extraCss?: string;
+  readonly scripts?: readonly string[];
 }
 
 const chrome = (context: PageContext, options: ChromeOptions): ChromeView => {
@@ -188,6 +202,15 @@ const chrome = (context: PageContext, options: ChromeOptions): ChromeView => {
     widget: options.widget && context.widget ? { brandId: config.brandId } : null,
     banner: options.banner ?? null,
     head: options.head,
+    portal: config.portalEnabled
+      ? {
+          ticketsHref: links.portalTickets(locale),
+          signInHref: links.portalSignIn(locale),
+          session: context.portalSession ?? null,
+        }
+      : null,
+    ...(options.extraCss === undefined ? {} : { extraCss: options.extraCss }),
+    ...(options.scripts === undefined ? {} : { scripts: options.scripts }),
   };
 };
 
@@ -828,3 +851,33 @@ export const renderWall = (context: PageContext, returnPath: string): Rendered =
     401,
   );
 };
+
+/**
+ * A portal page (M21-02): the shared frame with the portal's own head and
+ * rules. It is `noindex` and never cached; the caller decides the status.
+ */
+export const renderPortalPage = (
+  context: PageContext,
+  page: {
+    readonly titleKey: string;
+    readonly otherLocaleHref: string;
+    readonly main: string;
+    readonly status?: number;
+    readonly css: string;
+    readonly scripts: readonly string[];
+  },
+): Rendered =>
+  document(
+    context,
+    {
+      head: stateHead(context, page.titleKey),
+      otherLocaleHref: page.otherLocaleHref,
+      headerSearch: false,
+      nav: true,
+      widget: false,
+      extraCss: page.css,
+      scripts: page.scripts,
+    },
+    page.main,
+    page.status ?? 200,
+  );

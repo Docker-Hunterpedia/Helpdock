@@ -864,6 +864,43 @@ export const authEmailJob = defineJob({
 /** The BullMQ job id of the email one outbox row asks for. Dots, because BullMQ refuses colons. */
 export const authEmailJobId = (sourceOutboxId: string): string => `auth.email.${sourceOutboxId}`;
 
+export const portalSignInEmailPayloadSchema = z.object({
+  brandId: z.uuid(),
+  /** The `portal.sign_in_requested` outbox row. The job id and the receipt are built from it. */
+  sourceOutboxId: z.uuid(),
+  /** The page's language, which is the email's (M21-02). */
+  locale: z.enum(['en', 'ar']),
+  /**
+   * `{ to, url }` sealed with AES-256-GCM under `APP_MASTER_KEY`. The link is a
+   * working credential and the address is the customer's, so neither the outbox
+   * row nor this job's data in Redis holds them in the clear.
+   */
+  sealed: z.string().min(1),
+});
+export type PortalSignInEmailPayload = z.infer<typeof portalSignInEmailPayloadSchema>;
+
+/**
+ * A customer's sign-in link (M21-02, ADR 0059). Added by the
+ * `portal.sign_in_requested` outbox handler with a job id derived from the
+ * outbox row. Few attempts, close together: the link lives 15 minutes, and one
+ * that arrives after it expired is worse than none.
+ */
+export const portalSignInEmailJob = defineJob({
+  name: 'portal.sign_in_email',
+  queue: QUEUE_NAMES.notify,
+  schema: portalSignInEmailPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `portal.sign_in_email:${payload.sourceOutboxId}`,
+});
+
+export const portalSignInEmailJobId = (sourceOutboxId: string): string =>
+  `portal.sign_in_email.${sourceOutboxId}`;
+
 export const domainVerifyPayloadSchema = z.object({
   brandId: z.uuid(),
   /**
@@ -1823,6 +1860,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [notifyPushJob.name]: notifyPushJob,
   [notifyEmailTestJob.name]: notifyEmailTestJob,
   [authEmailJob.name]: authEmailJob,
+  [portalSignInEmailJob.name]: portalSignInEmailJob,
   [domainVerifyJob.name]: domainVerifyJob,
   [domainVerifyScheduleJob.name]: domainVerifyScheduleJob,
   [helpCenterPublishDueJob.name]: helpCenterPublishDueJob,

@@ -225,3 +225,25 @@ it.each([
     expected,
   );
 });
+
+describe('the customer portal copy (M21-02)', () => {
+  it.each([
+    ['hcSite', 'portal'],
+    ['email', 'portalSignIn'],
+  ])('has a real Arabic sentence for every key of %s.%s', async (namespace, section) => {
+    const english = [...(await readCatalog('en', namespace))].filter(([key]) =>
+      key.startsWith(`${section}.`),
+    );
+    const arabic = await readCatalog('ar', namespace);
+
+    expect(english.length).toBeGreaterThan(0);
+    for (const [key, text] of english) {
+      const translated = arabic.get(key) ?? '';
+      // Not empty, not bare punctuation, and carrying every placeholder the English has.
+      expect(translated.replace(/[\s.،:؟?!]/g, ''), key).not.toBe('');
+      for (const [placeholder] of text.matchAll(/\{\{\w+\}\}/g)) {
+        expect(translated, key).toContain(placeholder);
+      }
+    }
+  });
+});

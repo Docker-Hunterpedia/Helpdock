@@ -62,6 +62,8 @@ Pages a visitor may read are kept in Redis and sent with `Cache-Control: public,
 
 A CDN in front of the help center may keep a public page for up to five minutes; views it serves are not counted.
 
+When a brand has the [customer portal](customer-portal.md) on, public pages show the same "My tickets" and "Sign in" links in the header to every visitor, so they stay cacheable; the portal's own pages (`/sign-in`, `/tickets` and the rest) are `private, no-store` and never cached.
+
 ## Search engines
 
 - Every page a visitor may read has its canonical address, `hreflang` alternates for English, Arabic and `x-default`, Open Graph tags and structured data (`WebSite` with search on home, `BreadcrumbList`, `Article`).

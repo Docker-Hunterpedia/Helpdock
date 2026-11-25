@@ -80,7 +80,7 @@ from**, and `isVerifiedIdentity(kind, source)` answers from the table above
 
 | Source | Kinds | Verified |
 |---|---|---|
-| `email.inbound`, `email.magic_link` | email | yes |
+| `email.inbound`, `email.magic_link`, `portal.sign_in` | email | yes |
 | `telegram.bot` | telegram | yes |
 | `whatsapp.cloud` | whatsapp, **phone** | yes |
 | `messenger.page` | messenger | yes |

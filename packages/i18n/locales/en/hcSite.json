@@ -138,5 +138,55 @@
   },
   "meta": {
     "description": "Answers and guides from {{brand}}."
+  },
+  "portal": {
+    "nav": {
+      "tickets": "My tickets",
+      "signIn": "Sign in"
+    },
+    "menu": {
+      "label": "Account menu",
+      "signedInAs": "Signed in as",
+      "signOut": "Sign out",
+      "signOutEverywhere": "Sign out everywhere"
+    },
+    "signIn": {
+      "title": "Sign in to see your tickets",
+      "lead": "Enter the email address you write to us from. We will send you a link; there is no password.",
+      "email": "Email address",
+      "placeholder": "you@example.com",
+      "submit": "Email me a sign-in link",
+      "newHere": "New here? {{link}} instead.",
+      "sendMessage": "Send us a message",
+      "invalid": "Enter an email address, like name@example.com.",
+      "tooMany": "Too many requests for a sign-in link. Try again in an hour.",
+      "captchaFailed": "The check did not pass. Try again."
+    },
+    "sent": {
+      "title": "Check your email",
+      "body": "If {{email}} has tickets with us, we sent it a link. It works once, for 15 minutes.",
+      "hint": "Nothing after a few minutes? Check spam, or {{link}}.",
+      "another": "use another address"
+    },
+    "confirm": {
+      "title": "Continue to your tickets",
+      "body": "You are signing in to {{site}} as {{email}}.",
+      "submit": "Continue",
+      "note": "Did not ask for this? Close this page. Nobody is signed in until Continue is pressed."
+    },
+    "expired": {
+      "title": "This link has expired",
+      "body": "Sign-in links last 15 minutes. Ask for a new one.",
+      "newLink": "Email me a new link"
+    },
+    "used": {
+      "title": "This link was already used",
+      "body": "Each link works once. If that was you, you may already be signed in."
+    },
+    "stale": {
+      "title": "This page is out of date",
+      "body": "Open the sign-in page again and try once more.",
+      "action": "Back to sign in"
+    }
   }
 }

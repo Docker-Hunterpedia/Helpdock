@@ -345,5 +345,11 @@
     "heading": "Notification emails reach you here",
     "body": "You asked for this test. Real notification emails look like this, with the settings and unsubscribe links in the footer.",
     "action": "Open notification settings"
+  },
+  "portalSignIn": {
+    "subject": "Your sign-in link for {{site}}",
+    "body": "Someone asked to sign in to {{site}} with {{email}}. If it was you, use this link within 15 minutes:",
+    "action": "Sign in to see your tickets",
+    "ignore": "The link works once. If you did not ask for it, ignore this email; nobody can sign in without it."
   }
 }

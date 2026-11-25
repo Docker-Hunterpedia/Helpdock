@@ -5,6 +5,12 @@ import {
   hcFeedbackFormSchema,
   hcSignOutFormSchema,
   hcSiteQuerySchema,
+  type PortalConfirmForm,
+  type PortalSessionForm,
+  type PortalSignInForm,
+  portalConfirmFormSchema,
+  portalSessionFormSchema,
+  portalSignInFormSchema,
 } from '@helpdock/schemas';
 import { Body, Controller, Get, Inject, Post, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -86,6 +92,92 @@ export class HelpCenterSiteController {
   ): Promise<void> {
     await send(reply, await this.#site.handle(siteRequest(request, 'POST', true, {}, body)));
   }
+
+  // -------------------------------------------------------------- the portal (M21-02)
+  // The forms the customer portal's pages post. Its pages are GETs the catch-all
+  // and `/hc/*` above already hand to the site; a POST needs a static route.
+  // `@Public()`: the sender is signed out or holds the portal's own cookie, which
+  // the portal checks (`portal/portal-site.ts`), not the staff guard.
+
+  @Post('sign-in')
+  @Public()
+  async portalSignIn(
+    @Body(new ZodValidationPipe(portalSignInFormSchema)) body: PortalSignInForm,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await send(reply, await this.#site.handle(siteRequest(request, 'POST', true, {}, body)));
+  }
+
+  @Post('sign-in/confirm')
+  @Public()
+  async portalConfirm(
+    @Body(new ZodValidationPipe(portalConfirmFormSchema)) body: PortalConfirmForm,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await send(reply, await this.#site.handle(siteRequest(request, 'POST', true, {}, body)));
+  }
+
+  @Post('sign-out')
+  @Public()
+  async portalSignOut(
+    @Body(new ZodValidationPipe(portalSessionFormSchema)) body: PortalSessionForm,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await send(reply, await this.#site.handle(siteRequest(request, 'POST', true, {}, body)));
+  }
+
+  @Post('sign-out-everywhere')
+  @Public()
+  async portalSignOutEverywhere(
+    @Body(new ZodValidationPipe(portalSessionFormSchema)) body: PortalSessionForm,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await send(reply, await this.#site.handle(siteRequest(request, 'POST', true, {}, body)));
+  }
+
+  @Post(`${HC_FALLBACK_PREFIX.slice(1)}/:brandId/sign-in`)
+  @Public()
+  async fallbackPortalSignIn(
+    @Body(new ZodValidationPipe(portalSignInFormSchema)) body: PortalSignInForm,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await send(reply, await this.#site.handle(siteRequest(request, 'POST', false, {}, body)));
+  }
+
+  @Post(`${HC_FALLBACK_PREFIX.slice(1)}/:brandId/sign-in/confirm`)
+  @Public()
+  async fallbackPortalConfirm(
+    @Body(new ZodValidationPipe(portalConfirmFormSchema)) body: PortalConfirmForm,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await send(reply, await this.#site.handle(siteRequest(request, 'POST', false, {}, body)));
+  }
+
+  @Post(`${HC_FALLBACK_PREFIX.slice(1)}/:brandId/sign-out`)
+  @Public()
+  async fallbackPortalSignOut(
+    @Body(new ZodValidationPipe(portalSessionFormSchema)) body: PortalSessionForm,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await send(reply, await this.#site.handle(siteRequest(request, 'POST', false, {}, body)));
+  }
+
+  @Post(`${HC_FALLBACK_PREFIX.slice(1)}/:brandId/sign-out-everywhere`)
+  @Public()
+  async fallbackPortalSignOutEverywhere(
+    @Body(new ZodValidationPipe(portalSessionFormSchema)) body: PortalSessionForm,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await send(reply, await this.#site.handle(siteRequest(request, 'POST', false, {}, body)));
+  }
 }
 
 /**
@@ -149,4 +241,6 @@ export const send = async (reply: FastifyReply, response: SiteResponse): Promise
     });
   }
   await reply.code(response.status).headers(response.headers).send(response.body);
+  // After the reply has gone out, so the work behind it (the portal's lookup) cannot be timed.
+  await response.after?.();
 };

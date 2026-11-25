@@ -6,7 +6,7 @@ import type { ContactIdentityKind } from './contact.js';
  *
  * | Identifier | Verified when |
  * |---|---|
- * | Email | an inbound email arrived from it, or a magic link sent to it was clicked |
+ * | Email | an inbound email arrived from it, or a magic link sent to it was clicked, or a customer portal sign-in link sent to it was spent |
  * | Telegram `chat_id` | always (it comes from the Bot API) |
  * | WhatsApp user id, Messenger page-scoped id, Instagram-scoped id | always (a webhook Meta signed) |
  * | Signed `external_id` | always (HMAC) |
@@ -29,6 +29,8 @@ export const identitySourceSchema = z.enum([
   'email.unauthenticated',
   /** A magic link sent to the address was clicked (M4). */
   'email.magic_link',
+  /** A customer portal sign-in link sent to the address was spent (M21-02). */
+  'portal.sign_in',
   /** An address on the `Cc:` line of an inbound email, or added as a CC by an agent. */
   'email.cc',
   /** The chat id of a Telegram update (M6). */
@@ -76,6 +78,7 @@ export const IDENTITY_SOURCE_RULES: Readonly<Record<IdentitySource, SourceRule>>
   // A forged From fails SPF or DKIM; it proves nothing about who sent it.
   'email.unauthenticated': { kinds: ['email'], verified: false },
   'email.magic_link': { kinds: ['email'], verified: true },
+  'portal.sign_in': { kinds: ['email'], verified: true },
   // Somebody else's mail client wrote that address; nothing proves its owner
   // took part.
   'email.cc': { kinds: ['email'], verified: false },

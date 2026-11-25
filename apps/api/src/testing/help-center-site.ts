@@ -168,6 +168,8 @@ export interface MemorySiteOptions {
   customCss?: string;
   /** The brand's typeface pair; `ibm-plex` when omitted. */
   font?: 'ibm-plex' | 'noto-sans' | 'vazirmatn';
+  /** M21-02: the brand has the customer portal on. */
+  portalEnabled?: boolean;
 }
 
 const readable = (version: Version, audience: HcAudience, access: HcAccess): boolean =>
@@ -357,6 +359,7 @@ export const memorySiteContent = (options: MemorySiteOptions = {}) => {
                 customCss: options.customCss ?? '',
                 widgetOrigins: options.widgetOrigins ?? [],
                 primaryDomain: null,
+                portalEnabled: options.portalEnabled ?? false,
               },
         ),
       tree,

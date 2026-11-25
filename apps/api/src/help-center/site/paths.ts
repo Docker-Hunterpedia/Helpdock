@@ -153,6 +153,40 @@ export class SiteLinks {
     return `${this.base}${SIGN_OUT_PATH}`;
   }
 
+  /**
+   * The customer portal's addresses (M21-02). They carry no language segment:
+   * the page's language rides in `?lang=`, and an emailed link carries the
+   * language of the page that asked for it.
+   */
+  portalSignIn(locale: HcLocale, next?: string): string {
+    const params = new URLSearchParams({ lang: locale });
+    if (next !== undefined) {
+      params.set('next', next);
+    }
+    return `${this.base}/sign-in?${params.toString()}`;
+  }
+
+  portalConfirm(): string {
+    return `${this.base}/sign-in/confirm`;
+  }
+
+  portalChallenge(): string {
+    return `${this.base}/sign-in/challenge`;
+  }
+
+  /** With a language, so the page a customer lands on speaks the one they were reading. */
+  portalTickets(locale?: HcLocale): string {
+    return `${this.base}/tickets${locale === undefined ? '' : `?lang=${locale}`}`;
+  }
+
+  portalSignOut(): string {
+    return `${this.base}/sign-out`;
+  }
+
+  portalSignOutEverywhere(): string {
+    return `${this.base}/sign-out-everywhere`;
+  }
+
   /** The web form (M4-09): `/contact` on the host, `/contact/<brandId>` on the fallback. */
   contact(locale: HcLocale, articleId?: string): string {
     const path = this.fallback ? `/contact/${this.#brandId}` : '/contact';

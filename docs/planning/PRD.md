@@ -113,7 +113,7 @@ Update this table in the same PR that changes a milestone's status.
 | 5 1.x | M18 Sign-in options | M0, M4, M9, M11 | 5–7 | in development ([#275](https://github.com/Docker-Hunterpedia/Helpdock/issues/275)–[#287](https://github.com/Docker-Hunterpedia/Helpdock/issues/287)) | 2026-10-20 | |
 | 5 1.x | M19 Customer surfaces polish | M2, M4, M5 (M19-08: M15-11) | 9–10 | planned | | |
 | 5 1.x | M20 Native clients and SDKs | M4, M15-01, M17 | 9–11 | planned | | |
-| 5 1.x | M21 Customer portal | M1, M2, M5, M18-10 | 8 | in progress (M21-01 in review, [#471](https://github.com/Docker-Hunterpedia/Helpdock/issues/471); tracking [#466](https://github.com/Docker-Hunterpedia/Helpdock/issues/466)) | 2026-11-24 | |
+| 5 1.x | M21 Customer portal | M1, M2, M5, M18-10 | 8 | in progress (M21-01 merged; M21-02 in review, [#472](https://github.com/Docker-Hunterpedia/Helpdock/issues/472); tracking [#466](https://github.com/Docker-Hunterpedia/Helpdock/issues/466)) | 2026-11-24 | |
 | | **Total, phase 5 (M12–M19)** | | **102–110** (about 533 person-days; M20 adds 45–57) | | | |
 
 Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. Phase 5 figures are the plans' person-day estimates divided by five; milestones from M0 to M11 were built far faster than estimated, but review, the owner's verification and real-provider runs do not shrink the same way, so they stay the planning number. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.

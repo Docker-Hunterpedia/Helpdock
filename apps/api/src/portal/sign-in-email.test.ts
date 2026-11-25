@@ -21,7 +21,7 @@ describe('renderSignInEmail', () => {
       'The link works once. If you did not ask for it, ignore this email',
     );
     expect(message.html).toContain('dir="ltr"');
-    expect(message.html).toContain(`href="${URL_TO_OPEN.replace('&', '&amp;')}"`);
+    expect(message.html).toContain(`href="${URL_TO_OPEN.replaceAll('&', '&amp;')}"`);
     expect(message.html).toContain('Sign in to see your tickets');
     expect(message.html).toContain(
       '<bdi dir="ltr" style="font-weight:600">mona@acme.example</bdi>',

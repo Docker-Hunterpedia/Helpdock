@@ -21,6 +21,18 @@ export type ProposedMapping = {
   externalValue: string;
   target: Record<string, JsonValue>;
 };
+
+/**
+ * The target of a priority or channel mapping, with the key written out. A
+ * computed `{ [kind]: value }` would let the kind, which arrives in a request,
+ * name the property; Zod and the type narrow it to these two, and spelling
+ * them keeps that true whatever reaches here.
+ */
+export const valueMappingTarget = (
+  kind: 'priority' | 'channel',
+  value: string,
+): Record<string, JsonValue> => (kind === 'priority' ? { priority: value } : { channel: value });
+
 export type ConnectorContext<Credentials> = {
   credentials: Credentials;
   http: ImportHttp;

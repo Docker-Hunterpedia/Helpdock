@@ -8,7 +8,12 @@ import {
   userBrandRoles,
   users,
 } from '@helpdock/db';
-import { freshdeskValueMapping, zendeskValueMapping, zohoValueMapping } from '@helpdock/importers';
+import {
+  freshdeskValueMapping,
+  valueMappingTarget,
+  zendeskValueMapping,
+  zohoValueMapping,
+} from '@helpdock/importers';
 import {
   type CustomFieldType,
   type ImportMapping,
@@ -197,9 +202,9 @@ export async function proposeImportMapping(
       const schema = kind === 'priority' ? ticketPrioritySchema : ticketChannelSchema;
       const direct = schema.safeParse(row.externalValue);
       target = direct.success
-        ? { [kind]: direct.data }
+        ? valueMappingTarget(kind, direct.data)
         : row.externalValue === ''
-          ? { [kind]: kind === 'priority' ? 'medium' : 'manual' }
+          ? valueMappingTarget(kind, kind === 'priority' ? 'medium' : 'manual')
           : scope.source === 'zendesk'
             ? zendeskValueMapping(kind, row.externalValue)?.target
             : scope.source === 'freshdesk'

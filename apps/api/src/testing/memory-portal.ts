@@ -7,7 +7,7 @@ import type {
   PortalStore,
 } from '../portal/portal-site.js';
 import type { LiveSession, TokenState } from '../portal/portal-store.js';
-import { hashToken, isExpired, sessionExpiry, signInExpiry } from '../portal/session-rules.js';
+import { createHash } from 'node:crypto';
 
 /**
  * The portal's store, limiter and CAPTCHA held in memory, for the pages' unit
@@ -17,6 +17,14 @@ import { hashToken, isExpired, sessionExpiry, signInExpiry } from '../portal/ses
  * Postgres: a link for a known address (or any address when new customers may
  * sign in), single use, 15 minutes, a session bound to brand and host.
  */
+
+// Local copies of the pure rules, as plain values: the Playwright server runs this
+// file straight from source, where a `.js` import of a sibling `.ts` does not
+// resolve. `session-rules.test.ts` proves the real constants.
+const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
+const isExpired = (expiresAt: Date, now: Date): boolean => expiresAt.getTime() <= now.getTime();
+const signInExpiry = (now: Date): Date => new Date(now.getTime() + 15 * 60_000);
+const sessionExpiry = (now: Date): Date => new Date(now.getTime() + 30 * 86_400_000);
 
 export interface SentLink {
   readonly to: string;
@@ -28,7 +36,7 @@ interface Link {
   readonly brandId: string;
   readonly email: string;
   readonly hash: string;
-  readonly expiresAt: Date;
+  expiresAt: Date;
   spentAt: Date | null;
 }
 
@@ -121,6 +129,15 @@ export class MemoryPortalStore implements PortalStore {
       address: found.address,
       companyName: this.known.get(found.address)?.companyName ?? null,
     });
+  }
+
+  /** For a browser test: every link emailed to this address is now past its fifteen minutes. */
+  expireLinks(email: string): void {
+    for (const link of this.links) {
+      if (link.email === email) {
+        link.expiresAt = new Date(0);
+      }
+    }
   }
 
   endSession(_brandId: string, sessionId: string): Promise<void> {

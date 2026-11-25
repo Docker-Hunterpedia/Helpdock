@@ -20,3 +20,9 @@ export const HELP_CENTER_FONT_PORTS = {
   'noto-sans': HELP_CENTER_PORT + 200,
   vazirmatn: HELP_CENTER_PORT + 300,
 } as const;
+
+/** The help center with the customer portal on, over in-memory stand-ins (M21-02). */
+export const HELP_CENTER_PORTAL_PORT = HELP_CENTER_PORT + 400;
+export const HELP_CENTER_PORTAL_URL = `http://127.0.0.1:${String(HELP_CENTER_PORTAL_PORT)}`;
+/** The address every portal browser test may sign in with: the memory store knows it. */
+export const PORTAL_COMPANY = 'Acme Trading';

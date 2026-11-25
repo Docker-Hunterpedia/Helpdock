@@ -21,11 +21,25 @@
 import cookie from '@fastify/cookie';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { NoPageCache } from '../dist/help-center/site/page-cache.js';
+import { PortalSite } from '../dist/portal/portal-site.js';
+import { csrfKeyFrom } from '../dist/portal/session-rules.js';
 import { send, siteRequest } from '../dist/help-center/site/site.controller.js';
 import { HelpCenterSite } from '../dist/help-center/site/site.js';
 import { loadFonts } from '../dist/static/fonts.js';
 import { articleId, memorySiteContent } from '../src/testing/help-center-site.ts';
-import { HELP_CENTER_FONT_PORTS, HELP_CENTER_PORT, HELP_CENTER_WALL_PORT } from './fixtures.ts';
+import {
+  MemoryCaptcha,
+  MemoryLimiter,
+  MemoryPortalStore,
+  silentSecurityLog,
+} from '../src/testing/memory-portal.ts';
+import {
+  HELP_CENTER_FONT_PORTS,
+  HELP_CENTER_PORT,
+  HELP_CENTER_PORTAL_PORT,
+  HELP_CENTER_WALL_PORT,
+  PORTAL_COMPANY,
+} from './fixtures.ts';
 import {
   IMPORTED_FILE_BYTES,
   IMPORTED_FILE_DOWNLOAD_PATH,
@@ -47,9 +61,13 @@ const siteOver = (
   access: 'public' | 'internal_only',
   port: number,
   font?: 'noto-sans' | 'vazirmatn',
+  portal?: PortalSite,
 ) =>
   new HelpCenterSite({
-    content: withImportedArticle(memorySiteContent({ access, font }).content),
+    content: withImportedArticle(
+      memorySiteContent({ access, font, portalEnabled: portal !== undefined }).content,
+    ),
+    ...(portal === undefined ? {} : { portal }),
     hosts: { brandOf: async () => null },
     search: {
       search: async ({ q }: { q: string }) =>
@@ -84,6 +102,27 @@ const siteOver = (
   } as never);
 
 const fonts = loadFonts();
+
+/**
+ * The portal's stand-ins (M21-02): a store that knows one customer and lets any
+ * other address in as a new one, so every browser test can use an address of its
+ * own; a per-address limit and no per-IP limit, since every test comes from one
+ * IP; and a few control routes to read the emailed link and age it.
+ */
+const portalStore = new MemoryPortalStore();
+portalStore.newCustomers = true;
+portalStore.known.set('mona@acme.example', { contactId: 'contact-mona', companyName: PORTAL_COMPANY });
+const portalLimiter = new MemoryLimiter();
+const portalSite = new PortalSite({
+  store: portalStore,
+  captcha: new MemoryCaptcha(),
+  limiter: {
+    consume: (rule, subject) =>
+      rule.bucket === 'portal-link-email' ? portalLimiter.consume(rule, subject) : Promise.resolve(true),
+  },
+  csrfKey: csrfKeyFrom(Buffer.alloc(32, 9)),
+  log: silentSecurityLog(),
+});
 
 /** One Fastify server over `site`: its pages, its two forms and the fonts. */
 const serve = async (site: HelpCenterSite, port: number): Promise<void> => {
@@ -127,6 +166,18 @@ const serve = async (site: HelpCenterSite, port: number): Promise<void> => {
     );
   };
 
+  if (port === HELP_CENTER_PORTAL_PORT) {
+    server.get('/__e2e/link', async (request, reply) => {
+      const email = (request.query as { email?: string }).email ?? '';
+      const link = [...portalStore.sent].reverse().find((sent) => sent.to === email);
+      return reply.header('cache-control', 'no-store').send({ url: link?.url ?? null });
+    });
+    server.post('/__e2e/expire', async (request, reply) => {
+      portalStore.expireLinks((request.query as { email?: string }).email ?? '');
+      return reply.send({ ok: true });
+    });
+  }
+
   server.get('/hc/*', (request, reply) => page(request, reply, 'GET'));
   server.post('/hc/*', (request, reply) => page(request, reply, 'POST'));
 
@@ -140,4 +191,8 @@ for (const font of ['noto-sans', 'vazirmatn'] as const) {
 }
 // The internal-only twin first: Playwright starts the specs once the public one answers.
 await serve(siteOver('internal_only', HELP_CENTER_WALL_PORT), HELP_CENTER_WALL_PORT);
+await serve(
+  siteOver('public', HELP_CENTER_PORTAL_PORT, undefined, portalSite),
+  HELP_CENTER_PORTAL_PORT,
+);
 await serve(siteOver('public', HELP_CENTER_PORT), HELP_CENTER_PORT);

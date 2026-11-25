@@ -11,7 +11,7 @@ import {
   withTenant,
 } from '@helpdock/db';
 import { type PortalSettings, parseBrandSettings } from '@helpdock/schemas';
-import { and, eq, gt, isNull, lt } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { CustomerScope } from './customer-context.js';
 import { hashToken, isExpired, sameHash, sessionExpiry, shouldTouch } from './session-rules.js';
 
@@ -369,21 +369,4 @@ export const deleteContactSessions = async (
     .where(and(eq(customerSessions.brandId, brandId), eq(customerSessions.contactId, contactId)))
     .returning({ id: customerSessions.id });
   return gone.length;
-};
-
-/** Removes expired links and sessions of a brand; returns how many of each. */
-export const purgeExpired = async (
-  tx: DbTransaction,
-  brandId: string,
-  now: Date,
-): Promise<{ readonly tokens: number; readonly sessions: number }> => {
-  const tokens = await tx
-    .delete(customerSignInTokens)
-    .where(and(eq(customerSignInTokens.brandId, brandId), lt(customerSignInTokens.expiresAt, now)))
-    .returning({ id: customerSignInTokens.id });
-  const sessions = await tx
-    .delete(customerSessions)
-    .where(and(eq(customerSessions.brandId, brandId), lt(customerSessions.expiresAt, now)))
-    .returning({ id: customerSessions.id });
-  return { tokens: tokens.length, sessions: sessions.length };
 };

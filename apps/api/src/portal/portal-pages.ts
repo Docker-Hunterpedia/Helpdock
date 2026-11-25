@@ -167,6 +167,7 @@ export const PORTAL_CSS = `
 .hd-portal-lead { margin: 0; font-size: 16px; line-height: 24px; color: var(--hd-text-secondary); }
 .hd-portal-address { font-weight: 600; color: var(--hd-text-primary); overflow-wrap: anywhere; }
 .hd-portal-note { margin: 0; font-size: 14px; line-height: 20px; }
+.hd-portal-note a, .hd-portal-lead a { text-decoration: underline; }
 .hd-portal-form { inline-size: 100%; display: flex; flex-direction: column; gap: 16px; margin: 0; }
 .hd-portal-wide { inline-size: 100%; }
 .hd-portal-actions { display: flex; flex-wrap: wrap; gap: 12px; }

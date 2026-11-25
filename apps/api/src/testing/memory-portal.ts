@@ -48,6 +48,7 @@ interface Session {
   readonly hash: string;
   readonly host: string;
   expiresAt: Date;
+  lastSeenAt: Date;
 }
 
 export class MemoryPortalStore implements PortalStore {
@@ -108,6 +109,7 @@ export class MemoryPortalStore implements PortalStore {
       hash: input.sessionTokenHash,
       host: input.host,
       expiresAt: sessionExpiry(input.now),
+      lastSeenAt: input.now,
     });
     return { kind: 'signed-in', contactId };
   }
@@ -122,12 +124,19 @@ export class MemoryPortalStore implements PortalStore {
     ) {
       return Promise.resolve(null);
     }
+    // As the real store: the expiry slides, and `lastSeenAt` is written, at most every 15 minutes.
+    const touched = input.now.getTime() - found.lastSeenAt.getTime() >= 15 * 60_000;
+    if (touched) {
+      found.lastSeenAt = input.now;
+      found.expiresAt = sessionExpiry(input.now);
+    }
     return Promise.resolve({
       id: found.id,
       brandId: found.brandId,
       contactId: found.contactId,
       address: found.address,
       companyName: this.known.get(found.address)?.companyName ?? null,
+      touched,
     });
   }
 

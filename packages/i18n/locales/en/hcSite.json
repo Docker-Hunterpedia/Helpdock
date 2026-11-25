@@ -156,9 +156,8 @@
       "email": "Email address",
       "placeholder": "you@example.com",
       "submit": "Email me a sign-in link",
-      "newHere": "New here?",
+      "newHere": "New here? {{link}} instead.",
       "sendMessage": "Send us a message",
-      "instead": "instead.",
       "invalid": "Enter an email address, like name@example.com.",
       "tooMany": "Too many requests for a sign-in link. Try again in an hour.",
       "captchaFailed": "The check did not pass. Try again."

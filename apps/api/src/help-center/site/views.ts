@@ -204,7 +204,7 @@ const chrome = (context: PageContext, options: ChromeOptions): ChromeView => {
     head: options.head,
     portal: config.portalEnabled
       ? {
-          ticketsHref: links.portalTickets(),
+          ticketsHref: links.portalTickets(locale),
           signInHref: links.portalSignIn(locale),
           session: context.portalSession ?? null,
         }

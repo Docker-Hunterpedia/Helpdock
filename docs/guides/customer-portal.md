@@ -30,7 +30,7 @@ The help center caches public pages for up to ten minutes. After turning the por
 2. The page always answers **Check your email**, whether or not the address belongs to a customer. Only a malformed address gets an error. The lookup and the email are queued after the answer is sent, so the response time shows nothing either.
 3. If a contact of the brand has that address as an email identity, verified or not, one email is sent. A contact that was merged into another or erased never gets one. With `newCustomers` on, any other address gets one too.
 4. The link opens **Continue to your tickets**, which names the brand and the address and has one button. Opening it changes nothing, so a mail scanner or a link preview that follows the link does not use it up.
-5. **Continue** spends the link (a `POST`), marks that email identity verified, starts the session and lands on **My tickets**, or on the page the customer was heading for.
+5. **Continue** spends the link (a `POST`), marks that email identity verified (source `portal.sign_in`; a new customer's contact is created through the same code the web form uses), starts the session and lands on **My tickets**, or on the page the customer was heading for.
 
 A link works once, for 15 minutes, for one brand and one address. Asking again does not cancel an earlier link, so nobody can lock a customer out by requesting links for them. An expired link and a used link each have their own page with a way to ask for a new one; a link for another brand's help center is shown as expired.
 
@@ -48,9 +48,34 @@ Over a limit the form shows the warning, disables its button and sends nothing. 
 
 `Email/Portal-SignIn`: the brand's name, one sentence naming the address and the 15 minutes, one button, and one line saying the link works once and what to do if nobody asked for it. It is sent in the language of the page the link was requested from, from the brand's outgoing sender (or the install's), through the outbox, and carries nothing about any ticket.
 
+## What to know before turning it on
+
+These behaviours are accepted, by design:
+
+- **Whoever presses Continue is signed in as the address the page names.** A link is a bearer credential for 15 minutes. If someone opens a link another person requested, and presses Continue, they are signed in as that address. The page names the address and says what to do if nobody asked, and a mail scanner that only opens the link signs nobody in.
+- **Any email identity of a contact lets the owner of that mailbox sign in as that contact, verified or not.** A ticket someone opened by typing another person's address on the web form or the widget is therefore readable by the owner of that mailbox, as is every other ticket of that contact. The link itself goes only to the mailbox.
+- **Do not use the portal over plain http.** On an install whose `APP_URL` is `http://`, the cookies lose `Secure` and the `__Host-` prefix (a prefixed cookie would be dropped), so they can be read or planted on the network. Use https; plain http is for local development only.
+- **Anyone can use up an address's 5 requests an hour.** Earlier links stay valid for their 15 minutes, so the owner is not locked out of a link they already have, but cannot ask for a new one until the hour passes.
+
+### Reverse proxy and access logs
+
+The link carries the token in the query string of `/sign-in/confirm?token=…`. Helpdock does not log it, but a reverse proxy in front of it (Caddy, nginx, a load balancer, a CDN) usually logs the full request line. For a link not yet spent, that log holds a working credential for up to 15 minutes (it works once, and only until Continue is pressed). Exclude the query for that path, or keep those logs as protected as the mailbox. In Caddy:
+
+```caddyfile
+log {
+  format filter {
+    request>uri query {
+      delete token
+    }
+  }
+}
+```
+
+and in nginx, log `$uri` rather than `$request_uri` for the site that serves the help center.
+
 ## Sessions
 
-A session lasts 30 days from its last use. It is bound to the brand and to the help center host it was issued on, so a customer signs in once per brand and per host. The cookie is an opaque 256-bit token; only its SHA-256 is stored.
+A session lasts 30 days from its last use: the server moves the expiry forward at most every 15 minutes and sends the cookie again with a fresh 30-day lifetime when it does, so a customer who visits at least once a month stays signed in. It is bound to the brand and to the help center host it was issued on, so a customer signs in once per brand and per host. The cookie is an opaque 256-bit token; only its SHA-256 is stored.
 
 | | Brand's own host | `/hc/<brandId>` on the install's host |
 |---|---|---|

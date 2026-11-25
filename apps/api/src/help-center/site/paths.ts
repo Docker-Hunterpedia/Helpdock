@@ -174,8 +174,9 @@ export class SiteLinks {
     return `${this.base}/sign-in/challenge`;
   }
 
-  portalTickets(): string {
-    return `${this.base}/tickets`;
+  /** With a language, so the page a customer lands on speaks the one they were reading. */
+  portalTickets(locale?: HcLocale): string {
+    return `${this.base}/tickets${locale === undefined ? '' : `?lang=${locale}`}`;
   }
 
   portalSignOut(): string {

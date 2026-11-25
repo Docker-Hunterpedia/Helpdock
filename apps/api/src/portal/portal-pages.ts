@@ -95,7 +95,7 @@ ${fieldError}</div>
 ${view.pow === null ? '' : powStrip(view.pow)}
 <button class="hd-button hd-button-lg hd-portal-wide" type="submit"${error === 'tooMany' ? ' disabled' : ''}>${esc(t('portal.signIn.submit'))}</button>
 </form>
-<p class="hd-caption hd-portal-note">${esc(t('portal.signIn.newHere'))} <a href="${esc(view.contactHref)}">${esc(t('portal.signIn.sendMessage'))}</a> ${esc(t('portal.signIn.instead'))}</p>`);
+<p class="hd-caption hd-portal-note">${t('portal.signIn.newHere', { link: `<a href="${esc(view.contactHref)}">${esc(t('portal.signIn.sendMessage'))}</a>` })}</p>`);
 };
 
 const bdi = (value: string): string =>

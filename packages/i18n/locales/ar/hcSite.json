@@ -176,9 +176,8 @@
       "email": "البريد الإلكتروني",
       "placeholder": "you@example.com",
       "submit": "أرسل إليّ رابط الدخول",
-      "newHere": "جديد هنا؟",
+      "newHere": "جديد هنا؟ {{link}}.",
       "sendMessage": "أرسل إلينا رسالة",
-      "instead": ".",
       "invalid": "أدخل عنوان بريد إلكتروني صحيحًا، مثل name@example.com.",
       "tooMany": "طلبات كثيرة لرابط الدخول. حاول مجددًا بعد ساعة.",
       "captchaFailed": "لم ينجح التحقق. حاول مرة أخرى."

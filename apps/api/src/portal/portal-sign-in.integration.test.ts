@@ -408,7 +408,7 @@ describe.skipIf(!hasDocker)('customer sign-in (M21-02)', () => {
         jar(page),
       );
       expect(done.status).toBe(303);
-      expect(done.headers.location).toBe('/tickets');
+      expect(done.headers.location).toBe('/tickets?lang=en');
       const cookie = done.cookies.find((candidate) => candidate.name === '__Host-hd_cs');
       expect(cookie).toMatchObject({ path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
       expect(cookie).not.toHaveProperty('domain');
@@ -568,6 +568,71 @@ describe.skipIf(!hasDocker)('customer sign-in (M21-02)', () => {
       } finally {
         await setPortal(brandA(), { enabled: true, newCustomers: false });
       }
+    });
+
+    it('signs in as the contact an inbound mail created for the address between the request and Continue', async () => {
+      const stranger = 'raced@elsewhere.example';
+      await setPortal(brandA(), { enabled: true, newCustomers: true });
+      try {
+        await ask(HOST_A, stranger);
+        const url = await linkFor(brandA(), stranger);
+        const inbound = await addContact(brandA(), stranger, {}, true);
+
+        const result = await press(HOST_A, url);
+
+        expect(result.done.status).toBe(303);
+        const holders = await rows(brandA(), (tx) =>
+          tx.select().from(contactIdentities).where(eq(contactIdentities.value, stranger)),
+        );
+        expect(holders).toHaveLength(1);
+        expect(holders[0]).toMatchObject({ contactId: inbound.id, verified: true });
+        const made = await rows(brandA(), (tx) =>
+          tx.select().from(contacts).where(eq(contacts.name, 'raced')),
+        );
+        expect(made.map((contact) => contact.id)).toEqual([inbound.id]);
+        const sessions = (await sessionsOf(brandA())).filter((row) => row.contactId === inbound.id);
+        expect(sessions).toHaveLength(1);
+        const token = (await tokensOf(brandA())).find((row) => row.email === stranger);
+        expect(token?.spentAt).not.toBeNull();
+      } finally {
+        await setPortal(brandA(), { enabled: true, newCustomers: false });
+      }
+    });
+
+    it('verifies an address a contact only typed, on that contact, without making a second one', async () => {
+      const email = 'typed@acme.example';
+      const typed = await addContact(brandA(), email, {}, false);
+      await ask(HOST_A, email);
+      await press(HOST_A, await linkFor(brandA(), email));
+
+      const [identity] = await rows(brandA(), (tx) =>
+        tx.select().from(contactIdentities).where(eq(contactIdentities.value, email)),
+      );
+      expect(identity).toMatchObject({ contactId: typed.id, verified: true });
+    });
+
+    it('leaves the link unspent and makes no contact when nobody may be signed in at Continue', async () => {
+      const stranger = 'late.switch@elsewhere.example';
+      await setPortal(brandA(), { enabled: true, newCustomers: true });
+      await ask(HOST_A, stranger);
+      const url = await linkFor(brandA(), stranger);
+      await setPortal(brandA(), { enabled: true, newCustomers: false });
+
+      const result = await press(HOST_A, url);
+
+      expect(result.done.status).toBe(410);
+      expect(result.done.body).toContain('This link has expired');
+      expect((await tokensOf(brandA())).find((row) => row.email === stranger)?.spentAt).toBeNull();
+      expect(
+        await rows(brandA(), (tx) =>
+          tx.select().from(contactIdentities).where(eq(contactIdentities.value, stranger)),
+        ),
+      ).toHaveLength(0);
+      expect(
+        await rows(brandA(), (tx) =>
+          tx.select().from(contacts).where(eq(contacts.name, 'late.switch')),
+        ),
+      ).toHaveLength(0);
     });
 
     it('never sends to a contact that was merged away or anonymised, even for new customers', async () => {
@@ -915,7 +980,7 @@ describe.skipIf(!hasDocker)('customer sign-in (M21-02)', () => {
       await setPortal(brandA(), { enabled: true });
       const publicPage = await get(HOST_A, '/en');
       expect(publicPage.headers['cache-control']).toBe(PUBLIC_CACHE_CONTROL);
-      expect(publicPage.body).toContain('href="/tickets"');
+      expect(publicPage.body).toContain('href="/tickets?lang=en"');
       const keys = async () => (await runtime.redis.keys(`hc:page:${brandA()}:*`)).length;
       const stored = await keys();
       expect(stored).toBeGreaterThan(0);

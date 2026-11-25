@@ -10,6 +10,7 @@ describe('isVerifiedIdentity (DOMAIN-RULES §4.4)', () => {
   it.each([
     ['email', 'email.inbound', true],
     ['email', 'email.magic_link', true],
+    ['email', 'portal.sign_in', true],
     ['telegram', 'telegram.bot', true],
     ['whatsapp', 'whatsapp.cloud', true],
     ['phone', 'whatsapp.cloud', true],

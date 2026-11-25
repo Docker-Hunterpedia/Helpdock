@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { normaliseHost } from '../domains/brand-host.js';
 import { NoPageCache } from '../help-center/site/page-cache.js';
+import { send } from '../help-center/site/site.controller.js';
 import {
   HelpCenterSite,
   PRIVATE_CACHE_CONTROL,
@@ -18,6 +20,7 @@ import { PortalSite, userAgentFamily } from './portal-site.js';
 import { csrfKeyFrom, SIGN_IN_TOKEN_TTL_MS } from './session-rules.js';
 
 const HOST = 'help.example.com';
+const OTHER_HOST = 'support.example.com';
 const BASE = `/hc/${HC_BRAND}`;
 const KNOWN = 'mona@acme.example';
 
@@ -37,7 +40,10 @@ const setup = (options: { portal?: boolean; appUrl?: string } = {}) => {
   });
   const site = new HelpCenterSite({
     content: memorySiteContent({ portalEnabled: options.portal ?? true }).content,
-    hosts: { brandOf: async (host) => (host === HOST ? HC_BRAND : null) },
+    hosts: {
+      brandOf: async (host) =>
+        [HOST, OTHER_HOST].includes(normaliseHost(host) ?? '') ? HC_BRAND : null,
+    },
     search: { search: async () => ({ hits: [], total: 0 }) },
     feedback: {
       recordView: async () => undefined,
@@ -157,7 +163,7 @@ describe('the brand gate', () => {
 
     expect(visitor.status).toBe(200);
     expect(visitor.headers['cache-control']).toBe(PUBLIC_CACHE_CONTROL);
-    expect(visitor.body).toContain('href="/tickets"');
+    expect(visitor.body).toContain('href="/tickets?lang=en"');
     expect(visitor.body).toContain('href="/sign-in?lang=en"');
     // The same bytes whoever asks: the page is never varied by a session.
     expect(sameShape(withCookie.body)).toBe(sameShape(visitor.body));
@@ -378,7 +384,7 @@ describe('the Continue page and the link', () => {
     const { response, cookies } = await signIn(s);
 
     expect(response.status).toBe(303);
-    expect(response.headers.location).toBe('/tickets');
+    expect(response.headers.location).toBe('/tickets?lang=en');
     expect(response.cookies.find((cookie) => cookie.name === '__Host-hd_cs')).toEqual({
       name: '__Host-hd_cs',
       value: expect.stringMatching(/^[\w-]{43}$/),
@@ -407,7 +413,7 @@ describe('the Continue page and the link', () => {
         { cookies: cookiesOf(page) },
       ),
     );
-    expect(landed.headers.location).toBe('/tickets/abc-123');
+    expect(landed.headers.location).toBe('/tickets/abc-123?lang=en');
 
     const other = setup();
     await requestLink(other, KNOWN);
@@ -420,7 +426,7 @@ describe('the Continue page and the link', () => {
         { cookies: cookiesOf(p2) },
       ),
     );
-    expect(bad.headers.location).toBe('/tickets');
+    expect(bad.headers.location).toBe('/tickets?lang=en');
   });
 
   it('says a second press is already used, and a link nobody sent is expired', async () => {
@@ -611,7 +617,7 @@ describe('where it is served', () => {
         cookies: cookiesOf(page),
       }),
     );
-    expect(done.headers.location).toBe(`${BASE}/tickets`);
+    expect(done.headers.location).toBe(`${BASE}/tickets?lang=en`);
     expect(done.cookies.find((cookie) => cookie.name === `__Host-hd_cs_${HC_BRAND}`)).toMatchObject(
       {
         path: '/',
@@ -636,5 +642,178 @@ describe('userAgentFamily', () => {
     ).toBe('Firefox on macOS');
     expect(userAgentFamily(undefined)).toBeNull();
     expect(userAgentFamily('curl/8')).toBeNull();
+  });
+});
+
+describe('the cookie slides with the session', () => {
+  it('re-sends the session cookie with a fresh Max-Age on the response that follows a touch, and only then', async () => {
+    const s = setup();
+    const { cookies } = await signIn(s);
+
+    const soon = await s.site.handle(onHost('/tickets', { cookies }));
+    expect(soon.status).toBe(200);
+    expect(soon.cookies).toEqual([]);
+
+    s.clock.now = new Date(s.clock.now.getTime() + 20 * 60_000);
+    const later = await s.site.handle(onHost('/tickets', { cookies }));
+    expect(later.cookies).toEqual([
+      {
+        name: '__Host-hd_cs',
+        value: cookies['__Host-hd_cs'],
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60,
+        secure: true,
+      },
+    ]);
+
+    const right = await s.site.handle(onHost('/tickets', { cookies }));
+    expect(right.cookies).toEqual([]);
+  });
+});
+
+describe('the emailed link’s origin', () => {
+  it('is the verified domain without the port the browser sent', async () => {
+    const s = setup();
+    const opened = await s.site.handle(onHost('/sign-in', { host: `${HOST}:8443` }));
+    const response = await s.site.handle(
+      form(
+        '/sign-in',
+        { email: KNOWN, csrf: csrfOf(opened) },
+        {
+          host: `${HOST}:8443`,
+          cookies: cookiesOf(opened),
+          headers: { origin: `https://${HOST}:8443` },
+        },
+      ),
+    );
+    await response.after?.();
+
+    expect(s.store.sent[0]?.url).toMatch(/^https:\/\/help\.example\.com\/sign-in\/confirm\?token=/);
+  });
+});
+
+describe('same-origin and host binding', () => {
+  it.each(['/sign-in', '/sign-in/confirm', '/sign-out', '/sign-out-everywhere'])(
+    'answers a cross-origin POST to %s with 403 and does nothing',
+    async (path) => {
+      const s = setup();
+      const { cookies } = await signIn(s);
+      const sessions = s.store.sessions.length;
+      const response = await s.site.handle(
+        form(
+          path,
+          { email: KNOWN, token: 'a'.repeat(43), csrf: 'x' },
+          {
+            cookies,
+            headers: { origin: 'https://evil.example' },
+          },
+        ),
+      );
+      await response.after?.();
+
+      expect(response.status).toBe(403);
+      expect(s.store.sessions).toHaveLength(sessions);
+      expect(s.store.sent).toHaveLength(1);
+    },
+  );
+
+  it('refuses a session presented on another host of the same brand', async () => {
+    const s = setup();
+    const { cookies } = await signIn(s);
+
+    expect((await s.site.handle(onHost('/tickets', { cookies }))).status).toBe(200);
+    const other = await s.site.handle(onHost('/tickets', { cookies, host: OTHER_HOST }));
+    expect(other.status).toBe(303);
+  });
+});
+
+describe('the cookies as they are set', () => {
+  /** What `send` hands Fastify's `setCookie`. */
+  const setBy = async (response: SiteResponse) => {
+    const set: { name: string; value: string; options: Record<string, unknown> }[] = [];
+    const reply = {
+      setCookie: (name: string, value: string, options: Record<string, unknown>) =>
+        void set.push({ name, value, options }),
+      code: () => reply,
+      headers: () => reply,
+      send: async () => undefined,
+    };
+    await send(reply as never, response);
+    return set;
+  };
+
+  const everyCookie = async (
+    s: Setup,
+    request: (path: string, extra?: Partial<SiteRequest>) => SiteRequest,
+    base = '',
+  ) => {
+    const opened = await s.site.handle(request(`${base}/sign-in`));
+    const posted = await s.site.handle(
+      request(`${base}/sign-in`, {
+        method: 'POST',
+        headers: { origin: request('/x').byHost ? `https://${HOST}` : 'https://desk.example.com' },
+        body: { email: KNOWN, csrf: csrfOf(opened) },
+        cookies: cookiesOf(opened),
+      }),
+    );
+    await posted.after?.();
+    const token = tokenOf(s.store.sent[0]?.url ?? '');
+    const page = await s.site.handle(request(`${base}/sign-in/confirm`, { query: { token } }));
+    const done = await s.site.handle(
+      request(`${base}/sign-in/confirm`, {
+        method: 'POST',
+        headers: { origin: request('/x').byHost ? `https://${HOST}` : 'https://desk.example.com' },
+        body: { token, csrf: csrfOf(page) },
+        cookies: cookiesOf(page),
+      }),
+    );
+    return [...(await setBy(opened)), ...(await setBy(done))];
+  };
+
+  const common = { httpOnly: true, sameSite: 'lax', path: '/' };
+
+  it('are HttpOnly, SameSite=Lax, Secure, __Host- prefixed, Path=/ and have no Domain on a brand host', async () => {
+    const set = await everyCookie(setup(), onHost);
+
+    expect(set.map((cookie) => cookie.name).sort()).toEqual([
+      '__Host-hd_cn',
+      '__Host-hd_cn',
+      '__Host-hd_cs',
+    ]);
+    for (const cookie of set) {
+      expect(cookie.options).toMatchObject({ ...common, secure: true });
+      expect(cookie.options).not.toHaveProperty('domain');
+      expect(cookie.name.startsWith('__Host-')).toBe(true);
+    }
+  });
+
+  it('carry the brand id under /hc/<brandId>, with the same attributes', async () => {
+    const fallback = (path: string, extra: Partial<SiteRequest> = {}): SiteRequest =>
+      onHost(path, { host: 'desk.example.com', byHost: false, ...extra });
+    const set = await everyCookie(setup(), fallback, BASE);
+
+    expect(set.map((cookie) => cookie.name)).toContain(`__Host-hd_cs_${HC_BRAND}`);
+    for (const cookie of set) {
+      expect(cookie.name).toMatch(new RegExp(`^__Host-hd_c[sn]_${HC_BRAND}$`));
+      expect(cookie.options).toMatchObject({ ...common, secure: true });
+      expect(cookie.options).not.toHaveProperty('domain');
+    }
+  });
+
+  it('lose Secure and the prefix on a plain-http install, and keep the rest', async () => {
+    const set = await everyCookie(setup({ appUrl: 'http://localhost:8080' }), (path, extra = {}) =>
+      onHost(path, {
+        ...extra,
+        headers: {
+          ...extra.headers,
+          origin: extra.method === 'POST' ? `http://${HOST}` : undefined,
+        },
+      }),
+    );
+
+    for (const cookie of set) {
+      expect(cookie.name).toMatch(/^hd_c[sn]$/);
+      expect(cookie.options).toMatchObject({ ...common, secure: false });
+    }
   });
 });

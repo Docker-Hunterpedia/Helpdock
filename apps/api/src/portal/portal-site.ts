@@ -124,7 +124,6 @@ export interface PortalStore {
     readonly sessionTokenHash: string;
     readonly host: string;
     readonly userAgentFamily: string | null;
-    readonly locale: HcLocale;
     readonly now: Date;
   }): Promise<ConfirmOutcome>;
   /** The session the cookie names, if it is still good for this brand and host. */
@@ -574,7 +573,7 @@ export class PortalSite {
         t: translator(locale),
         kind,
         signInHref: host.links.portalSignIn(locale),
-        ticketsHref: host.links.portalTickets(),
+        ticketsHref: host.links.portalTickets(locale),
       }),
     });
   }
@@ -651,7 +650,6 @@ export class PortalSite {
       sessionTokenHash: hashToken(sessionToken),
       host: host.request.host,
       userAgentFamily: userAgentFamily(host.request.headers.userAgent),
-      locale,
       now,
     });
     if (outcome.kind !== 'signed-in') {
@@ -661,10 +659,13 @@ export class PortalSite {
       { securityEvent: 'portal.sign_in', brandId: host.brandId, contactId: outcome.contactId },
       'customer portal security event',
     );
-    return host.redirect(`${host.links.base}${safePortalNext(form.next) ?? '/tickets'}`, [
-      this.#cookie(host, names.session, sessionToken, Math.floor(SESSION_TTL_MS / 1000)),
-      this.#cookie(host, names.nonce, '', 0),
-    ]);
+    return host.redirect(
+      `${host.links.base}${safePortalNext(form.next) ?? '/tickets'}?lang=${locale}`,
+      [
+        this.#cookie(host, names.session, sessionToken, Math.floor(SESSION_TTL_MS / 1000)),
+        this.#cookie(host, names.nonce, '', 0),
+      ],
+    );
   }
 
   // ---------------------------------------------------------------- signed in
@@ -678,6 +679,18 @@ export class PortalSite {
     return this.#page(host, locale, {
       titleKey: 'portal.nav.tickets',
       main: ticketsMain({ t: translator(locale) }),
+      // The row's expiry just moved, so the browser's copy moves with it: the
+      // cookie slides only when the store touched the session.
+      cookies: live.session.touched
+        ? [
+            this.#cookie(
+              host,
+              this.#names(host).session,
+              live.token,
+              Math.floor(SESSION_TTL_MS / 1000),
+            ),
+          ]
+        : [],
       session: live.session,
       csrf: csrfToken(this.#deps.csrfKey, live.token),
     });

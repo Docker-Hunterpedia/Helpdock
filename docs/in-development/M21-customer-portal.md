@@ -363,6 +363,7 @@ plan ([decisions-1-x.md](../planning/decisions-1-x.md#m21-customer-portal)).
 
 ## Notes for later deliverables
 
+- **Mask the CSRF token per response (M21-03).** The portal's CSRF token is a fixed HMAC of the session token, the same on every page of a session. Once pages carry that session-bound token next to reflected input (a search box, a reply draft), a compression side channel such as BREACH could recover it from response sizes. Mask it per response (XOR with a random pad sent alongside) before M21-03 renders any such page. The sign-in pages are not affected: their token is bound to a nonce and sits beside no secret.
 - **Column deny-list for portal DTOs.** A row policy cannot hide a column, so portal queries project and output schemas omit:
   - `tickets`: `custom`, `search`, `priority`, `team_id`, `assignee_id` beyond what §2.10 shows, every `sla_*`, `first_response_due_at`, `resolution_due_at`, `merged_*`, `pre_merge_*`, `merge_message_id`, `split_from_id`, `parent_id`, `visitor_id`, `visitor_client_id`, every `ai_*`, every `import_*`, every `snooze*`, `reply_mailbox_id`, `arrival_*`, `deleted_at`, `account_id`, every `portal_*`, `department_id`.
   - `ticket_messages`: `ai_meta`, `email`, `external_message_id`, `client_id`, `import_details`, `import_source_account_key`, `copied_from_message_id`, `reply_to_message_id`, every `portal_*`, and the raw `author_id`.

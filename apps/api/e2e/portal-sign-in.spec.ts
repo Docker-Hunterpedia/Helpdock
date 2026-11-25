@@ -87,7 +87,7 @@ test('signs in end to end: the form, the email, Continue, the header menu and Si
   expect(await violations(page)).toEqual([]);
 
   await page.getByRole('button', { name: t('portal.confirm.submit') }).click();
-  await expect(page).toHaveURL(new RegExp(`${BASE}/tickets$`));
+  await expect(page).toHaveURL(new RegExp(`${BASE}/tickets\\?lang=${pageLocale}$`));
   await expect(
     page.getByRole('heading', { level: 1, name: t('portal.nav.tickets') }),
   ).toBeVisible();
@@ -178,7 +178,7 @@ test('a used link says so, and Continue cannot be pressed twice', async ({ page,
   const link = await emailedLink(page, email);
   await page.goto(link);
   await page.getByRole('button', { name: t('portal.confirm.submit') }).click();
-  await expect(page).toHaveURL(new RegExp(`${BASE}/tickets$`));
+  await expect(page).toHaveURL(new RegExp(`${BASE}/tickets\\?lang=${pageLocale}$`));
 
   await page.goto(link);
   await expect(page.getByRole('heading', { level: 1, name: t('portal.used.title') })).toBeVisible();

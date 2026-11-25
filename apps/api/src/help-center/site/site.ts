@@ -8,6 +8,7 @@ import type {
 } from '@helpdock/schemas';
 import { hcFeedbackFormSchema, localeSchema } from '@helpdock/schemas';
 import { z } from 'zod';
+import { normaliseHost } from '../../domains/brand-host.js';
 import type {
   PortalCookie,
   PortalHost,
@@ -186,6 +187,11 @@ interface Where extends Target {
   readonly links: SiteLinks;
   /** See `PageContext.seo`. */
   readonly seo: SiteLinks;
+  /**
+   * Where the browser says the page is (`Host`, port included): only for the
+   * same-origin check of a POST. Links are built from the verified domain.
+   */
+  readonly requestOrigin: string;
 }
 
 const nonceOf = (): string => randomBytes(16).toString('base64');
@@ -217,7 +223,12 @@ export class HelpCenterSite {
       return plain(404, 'Not found');
     }
     const links = this.#linksFor(target.brandId, config, request);
-    const where: Where = { ...target, links, seo: this.#seoFor(target.brandId, config, links) };
+    const where: Where = {
+      ...target,
+      links,
+      seo: this.#seoFor(target.brandId, config, links),
+      requestOrigin: this.#requestOrigin(request),
+    };
 
     const portal = await this.#portal(request, where, config);
     if (portal !== null) {
@@ -274,7 +285,7 @@ export class HelpCenterSite {
     const path = where.rest.replace(/\/+$/, '') || '/';
     if (request.method === 'POST') {
       const origin = request.headers.origin;
-      if (origin !== undefined && origin !== 'null' && origin !== where.links.origin) {
+      if (origin !== undefined && origin !== 'null' && origin !== where.requestOrigin) {
         return plain(403, 'Forbidden');
       }
     }
@@ -466,12 +477,21 @@ export class HelpCenterSite {
     return { brandId, rest: match?.[2] ?? '/' };
   }
 
+  /** The origin the browser used, from the raw `Host` on a brand's host and the install's origin otherwise. */
+  #requestOrigin(request: SiteRequest): string {
+    return request.byHost
+      ? `${this.#secure ? 'https:' : 'http:'}//${request.host ?? ''}`
+      : this.#appOrigin;
+  }
+
   #linksFor(brandId: string, config: SiteConfig, request: SiteRequest): SiteLinks {
     if (request.byHost) {
       const scheme = this.#secure ? 'https:' : 'http:';
       return new SiteLinks({
         base: '',
-        origin: `${scheme}//${request.host ?? config.primaryDomain ?? ''}`,
+        // The verified domain the resolver matched, never the header as sent: a port
+        // or a stray label in `Host` must not reach an emailed link or a canonical URL.
+        origin: `${scheme}//${normaliseHost(request.host) ?? config.primaryDomain ?? ''}`,
         brandId,
       });
     }
@@ -664,7 +684,7 @@ export class HelpCenterSite {
 
   async #post(request: SiteRequest, where: Where, config: SiteConfig): Promise<SiteResponse> {
     const origin = request.headers.origin;
-    if (origin !== undefined && origin !== 'null' && origin !== where.links.origin) {
+    if (origin !== undefined && origin !== 'null' && origin !== where.requestOrigin) {
       return plain(403, 'Forbidden');
     }
     const path = where.rest.replace(/\/+$/, '');

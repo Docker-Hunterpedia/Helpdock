@@ -7,20 +7,22 @@ import {
   deleteContactSessions,
   deleteSession,
   emailIsHeld,
-  ensureContact,
   findEmailOwner,
   insertSession,
   insertSignInToken,
   type LiveSession,
-  markIdentityVerified,
   readPortalSettings,
   readSignInToken,
   resolveSession,
+  resolveSigner,
   spendSignInToken,
   type TokenState,
 } from './portal-store.js';
 import { signInExpiry } from './session-rules.js';
 import { queueSignInEmail } from './sign-in-email.js';
+
+/** Raised inside the confirm transaction to roll it back when no contact may be signed in. */
+class NoSigner extends Error {}
 
 /**
  * The portal's store over Postgres (M21-02). Every call runs on the explicit
@@ -73,8 +75,23 @@ export class DbPortalStore implements PortalStore {
     return asSystem(this.#db, brandId, (tx) => readSignInToken(tx, brandId, token, now));
   }
 
-  confirm(input: Parameters<PortalStore['confirm']>[0]): Promise<ConfirmOutcome> {
+  async confirm(input: Parameters<PortalStore['confirm']>[0]): Promise<ConfirmOutcome> {
     const { brandId, now } = input;
+    try {
+      return await this.#confirm(brandId, now, input);
+    } catch (error) {
+      if (error instanceof NoSigner) {
+        return { kind: 'expired' };
+      }
+      throw error;
+    }
+  }
+
+  #confirm(
+    brandId: string,
+    now: Date,
+    input: Parameters<PortalStore['confirm']>[0],
+  ): Promise<ConfirmOutcome> {
     return asSystem(this.#db, brandId, async (tx): Promise<ConfirmOutcome> => {
       const portal = await readPortalSettings(tx, brandId);
       if (portal === null) {
@@ -88,15 +105,13 @@ export class DbPortalStore implements PortalStore {
       if (!(await spendSignInToken(tx, link.id, now))) {
         return { kind: 'used' };
       }
-      const owner = await ensureContact(tx, brandId, link.email, {
-        create: portal.newCustomers,
-        locale: input.locale,
-      });
+      const owner = await resolveSigner(tx, brandId, link.email, { create: portal.newCustomers });
       if (owner === null) {
-        // The contact was merged away or erased since the link was sent.
-        return { kind: 'expired' };
+        // Nobody may be signed in as this address any more (merged away, erased, or
+        // new customers switched off). The spend is rolled back with everything
+        // else: a link is never left spent without a session.
+        throw new NoSigner();
       }
-      await markIdentityVerified(tx, owner.identityId, now);
       await insertSession(tx, {
         brandId,
         contactId: owner.contactId,

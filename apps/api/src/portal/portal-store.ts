@@ -12,6 +12,8 @@ import {
 } from '@helpdock/db';
 import { type PortalSettings, parseBrandSettings } from '@helpdock/schemas';
 import { and, eq, gt, isNull } from 'drizzle-orm';
+import { attachVerifiedIdentity, findOrCreateContactByIdentity } from '../contacts/identity.js';
+import { isUniqueViolation } from '../http/unique-violation.js';
 import type { CustomerScope } from './customer-context.js';
 import { hashToken, isExpired, sameHash, sessionExpiry, shouldTouch } from './session-rules.js';
 
@@ -171,41 +173,56 @@ export const spendSignInToken = async (
   return spent.length === 1;
 };
 
-/** The contact of an address, created (with a verified email identity) when the brand allows it. */
-export const ensureContact = async (
+const portalClaim = (email: string) =>
+  ({ kind: 'email', value: email, source: 'portal.sign_in' }) as const;
+
+/**
+ * Who the spent link signs in, through the contact seam (`contacts/identity.ts`).
+ * A live holder of the address, verified or not, is the contact; the seam marks
+ * the identity verified (`portal.sign_in` is a verified source). With no holder
+ * and `create` set, the seam creates the contact with the address as a verified
+ * identity. An address held by a merged or erased contact is nobody's to sign
+ * in, so it is refused rather than given a second contact.
+ *
+ * A contact made by somebody else between the check and the insert (an inbound
+ * mail, say) raises the unique index; the attempt runs in a savepoint, so the
+ * caller's transaction stays usable and the holder is read again and used.
+ */
+export const resolveSigner = async (
   tx: DbTransaction,
   brandId: string,
   email: string,
-  options: { readonly create: boolean; readonly locale: 'en' | 'ar' },
+  options: { readonly create: boolean },
 ): Promise<EmailOwner | null> => {
-  const existing = await findEmailOwner(tx, brandId, email);
-  if (existing !== null || !options.create) {
-    return existing;
+  const attach = async (contactId: string): Promise<EmailOwner> => {
+    const { identity } = await attachVerifiedIdentity(tx, brandId, contactId, portalClaim(email));
+    return { contactId, identityId: identity.id };
+  };
+
+  const holder = await findEmailOwner(tx, brandId, email);
+  if (holder !== null) {
+    return attach(holder.contactId);
   }
-  const [contact] = await tx
-    .insert(contacts)
-    .values({ brandId, name: email.split('@')[0] ?? email, locale: options.locale })
-    .returning({ id: contacts.id });
-  if (contact === undefined) {
+  if (!options.create || (await emailIsHeld(tx, brandId, email))) {
     return null;
   }
-  const [identity] = await tx
-    .insert(contactIdentities)
-    .values({
-      brandId,
-      contactId: contact.id,
-      kind: 'email',
-      value: email,
-      verified: true,
-      verifiedAt: new Date(),
-      source: 'portal.sign_in',
-    })
-    .onConflictDoNothing()
-    .returning({ id: contactIdentities.id });
-  // Somebody made the same contact in between: use theirs.
-  return identity === undefined
-    ? findEmailOwner(tx, brandId, email)
-    : { contactId: contact.id, identityId: identity.id };
+  try {
+    const created = await tx.transaction((savepoint) =>
+      findOrCreateContactByIdentity(savepoint, brandId, portalClaim(email), {
+        name: email.split('@')[0] ?? email,
+      }),
+    );
+    if (created.identity === null) {
+      throw new Error('A portal sign-in claim is verified, so its identity is always recorded');
+    }
+    return { contactId: created.contact.id, identityId: created.identity.id };
+  } catch (error) {
+    if (!isUniqueViolation(error)) {
+      throw error;
+    }
+    const raced = await findEmailOwner(tx, brandId, email);
+    return raced === null ? null : attach(raced.contactId);
+  }
 };
 
 /** The identity of this contact holding exactly `email`, if it is still there. */
@@ -228,17 +245,6 @@ export const findIdentityOf = async (
     )
     .limit(1);
   return row?.id ?? null;
-};
-
-export const markIdentityVerified = async (
-  tx: DbTransaction,
-  identityId: string,
-  now: Date,
-): Promise<void> => {
-  await tx
-    .update(contactIdentities)
-    .set({ verified: true, verifiedAt: now })
-    .where(and(eq(contactIdentities.id, identityId), eq(contactIdentities.verified, false)));
 };
 
 export const insertSession = async (
@@ -270,6 +276,8 @@ export interface LiveSession {
   readonly id: string;
   /** What the customer may see, read from the database on this request (`loadCustomerScope`). Set by the guard. */
   readonly scope?: CustomerScope;
+  /** The expiry was pushed forward by this request, so the cookie's lifetime must be too. */
+  readonly touched: boolean;
   readonly brandId: string;
   readonly contactId: string;
   readonly address: string;
@@ -331,7 +339,8 @@ export const resolveSession = async (
     await tx.delete(customerSessions).where(eq(customerSessions.id, row.id));
     return null;
   }
-  if (shouldTouch(row.lastSeenAt, input.now)) {
+  const touched = shouldTouch(row.lastSeenAt, input.now);
+  if (touched) {
     await tx
       .update(customerSessions)
       .set({ lastSeenAt: input.now, expiresAt: sessionExpiry(input.now) })
@@ -351,6 +360,7 @@ export const resolveSession = async (
     contactId: row.contactId,
     address: row.address,
     companyName: account?.name ?? null,
+    touched,
   };
 };
 

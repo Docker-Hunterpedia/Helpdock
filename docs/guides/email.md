@@ -65,10 +65,25 @@ Answers: `200 {"outcome":"accepted"}` for a new message, `duplicate` for one alr
    email take precedence over imported history.
 5. **The body** is sanitised (no scripts, forms or styles), the quoted history is folded behind "Show quoted text", inline images become the message's attachments, and other attachments go through the media pipeline like any upload.
 6. **Remote images** are never in the stored body. With **Block until an agent loads them** the email card shows how many and from where; **Load images** fetches them through Helpdock's proxy. With **Load through the Helpdock image proxy** they load at once. Either way the server fetches them, re-encodes them, and the sender never sees an agent's address or browser.
-7. **SPF or DKIM failures** reported by your receiving server open the ticket in Spam when the mailbox's switch is on.
+7. **SPF or DKIM failures** reported by your receiving server open the ticket in Spam when the mailbox's switch is on. See Sender checks below.
 8. **Auto-replies.** A message that opened a ticket may get the brand's acknowledgment or out-of-hours reply ([Outbound email](outbound-email.md#auto-replies-m2-06)). Mail from a machine (even an allow-listed one) and mail filed as spam never does.
 
-Everyone on the `To` and `Cc` lines, except the brand's own mailboxes, becomes a CC participant of the ticket.
+Everyone on the `To` and `Cc` lines, except the brand's own mailboxes and the sender, becomes a CC participant of the ticket, unless the message is reported as not matching its From address (see below).
+
+### Sender checks
+
+Helpdock acts on what the receiving mail server reported. Mail reported as failing SPF or DKIM, as failing DMARC, or as passing only for some other domain than its From address adds no `To` or `Cc` participants and does not verify its sender's address. It still joins the ticket it replies to, with the "authentication failed" warning when SPF or DKIM failed, so forwarded mail is not lost, and its sender is found by address: an existing contact keeps their ticket, and a new address gets one unverified contact that the first sound message verifies.
+
+Mail with no report is treated as before. The report is the `Authentication-Results` header. Only the topmost one, which your receiving server wrote, can count in the message's favour (a DKIM or SPF pass for the From domain or a parent of it, or `dmarc=pass`), because a sender can add headers of its own below it; a failure in any of them counts against the message. A pass on a subdomain of the From domain counts only with `dmarc=pass`, and no public-suffix list is used, so a From address directly on a domain that hands out subdomains or on a two-label suffix, on a server that reports no DMARC result, can be matched by a pass for the shared parent. Legitimate mail can be treated as not matching when your server reports no DMARC result: mail signed by a subdomain of the From domain or by a sending service's own domain, and forwarded mail whose sender has no DKIM signature. The customer then loses the `To` and `Cc` addresses of that one message (they are not added to the ticket) and that message does not verify the address; the ticket, threading, their contact and your replies to them all still work. An unclosed quote or parenthesis in the topmost header is treated the same way. Which inbound methods carry it:
+
+| Method | Carries it |
+|---|---|
+| IMAP | Only if your mail server adds one. Gmail, Microsoft 365 and most hosted mailboxes do; a self-hosted server without an SPF/DKIM/DMARC filter does not. |
+| Raw MIME from a provider (Postmark raw, SendGrid raw, Mailgun `body-mime`, generic `{ "raw": ... }`) | The headers of the message as your server received it, so the same as IMAP. |
+| Provider webhooks without the raw message | Only the headers the provider copies in. Helpdock does not read the providers' own result fields. |
+| Generic JSON with `headers` | Whatever the caller sends. |
+
+Where there is no report, this change gives no protection. A relay you do not control can also write its own `Authentication-Results`, so treat the check as best effort.
 
 ## A reply aimed at one email
 

@@ -17,7 +17,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { AssignmentRepository } from '../../assignment/assignment.repository.js';
 import { requestAutoAssign } from '../../assignment/assignment-events.js';
 import { routesAutomatically } from '../../assignment/ticket-assignment.js';
-import { findOrCreateByAddress, findOrCreateContactByIdentity } from '../../contacts/identity.js';
+import { findOrCreateByAddress } from '../../contacts/identity.js';
 import type { TicketParticipantsService } from '../../participants/ticket-participants.service.js';
 import type { TicketLifecycleRepository } from '../../tickets/lifecycle/lifecycle.repository.js';
 import type {
@@ -34,6 +34,7 @@ import { type ActivityActor, writeTicketActivity } from '../../tickets/ticket-ac
 import { enqueueTicketEvent, TICKET_EVENTS } from '../../tickets/ticket-events.js';
 import type { TicketRepository } from '../../tickets/tickets.repository.js';
 import { referencedTickets } from './referenced-tickets.js';
+import { resolveSenderContact } from './sender-contact.js';
 
 /**
  * M2-01's `ConversationRouter` (ARCHITECTURE §8) with M2-04's threading rule
@@ -41,7 +42,7 @@ import { referencedTickets } from './referenced-tickets.js';
  * ticket or a new ticket, and the rule that decides which is one function.
  *
  * ```
- * find the contact by identity          (§4.4: an inbound From is verified)
+ * find the contact by identity          (§4.4: an inbound From is verified, unless the server reported it misaligned)
  * find a ticket by thread hint           In-Reply-To / References, or [PREFIX-N]
  *   └ follow a merge to its primary      (§2.4: messages are not moved)
  * sender is a participant of it?         (§2.5: contact, CCs, staff)
@@ -161,12 +162,7 @@ export class ConversationRouter {
   ): Promise<RouteOutcome> {
     const { tx, brandId } = context;
     const actor = actorFor(context);
-    const { contact } = await findOrCreateContactByIdentity(
-      tx,
-      brandId,
-      { kind: 'email', value: message.from.value, source: 'email.inbound' },
-      message.from.name === null ? {} : { name: message.from.name },
-    );
+    const contactId = await resolveSenderContact(tx, brandId, message);
 
     const candidate = await this.#threadCandidate(tx, brandId, message);
     const sender = message.from.value.toLowerCase();
@@ -174,7 +170,7 @@ export class ConversationRouter {
     let outcome: RouteOutcome;
     let target: TicketRow;
     if (candidate !== undefined && (await isParticipant(tx, candidate.ticket, sender))) {
-      const replied = await this.#reply(context, actor, candidate, message, contact.id, sink);
+      const replied = await this.#reply(context, actor, candidate, message, contactId, sink);
       outcome = { kind: 'replied', ticketId: replied.ticket.id, messageId: replied.messageId };
       target = replied.ticket;
     } else {
@@ -182,7 +178,7 @@ export class ConversationRouter {
         context,
         actor,
         message,
-        contact.id,
+        contactId,
         candidate?.ticket,
         sink,
       );
@@ -196,7 +192,12 @@ export class ConversationRouter {
       target = created.ticket;
     }
 
-    await this.#copyIn(context, target, message, contact.id);
+    // A forged From of a participant plus the forger's own address in To or Cc would
+    // otherwise subscribe that address to the thread, so mail the receiving server
+    // reported as not matching its From adds no recipients (§2.5, §4.3).
+    if (message.email.senderCheck !== 'misaligned') {
+      await this.#copyIn(context, target, message, contactId);
+    }
 
     return outcome;
   }

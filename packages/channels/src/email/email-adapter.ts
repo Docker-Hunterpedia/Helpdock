@@ -11,6 +11,8 @@ import {
   type AutomatedReason,
   authenticationFailed,
   automatedReason,
+  type SenderCheck,
+  senderCheck,
   threadHintsOf,
 } from './inbound/classify.js';
 import type { InboundEnvelope, MailAddress } from './inbound/inbound-email.js';
@@ -36,6 +38,8 @@ export interface EmailFacts {
   readonly authFailed: boolean;
   /** The `References` ids as they arrived, oldest first (M14-31 files a targeted reply under them). */
   readonly references?: readonly string[] | undefined;
+  /** Whether the receiving server's report matches the From address; decides Cc copy-in and verification. */
+  readonly senderCheck: SenderCheck;
   readonly recipients: readonly string[];
   /** Delivered-To, falling back to X-Original-To, for forwarded or Bcc mail. */
   readonly deliveryAddress?: string | undefined;
@@ -102,6 +106,7 @@ export const toEmailInboundMessage = (
       automated: automatedReason(email),
       authFailed: authenticationFailed(email),
       references: email.references,
+      senderCheck: senderCheck(email),
       recipients: envelope.recipients,
       deliveryAddress:
         email.headers.get('delivered-to')?.[0] ?? email.headers.get('x-original-to')?.[0],

@@ -202,7 +202,7 @@ match. Actual status transitions keep the database trigger's arrival baseline.
 
 ### 2.5 Participants
 
-A ticket's participants are: the contact, CC addresses added by agents or present on inbound email, and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
+A ticket's participants are: the contact, CC addresses added by agents or present on inbound email that the receiving server did not report as not matching its From address (§4.3), and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. A CC taken from inbound mail is a participant for email only and never gives portal access (see below), and a message the receiving server reported as not matching its From address adds no CC at all (§4.3). Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
 
 Imported CCs can reference a same-brand contact without a source email; their
 address remains null and their provenance is `import`. Never invent an address.
@@ -401,6 +401,10 @@ An inbound email is attached to an existing ticket only if **both** hold:
 
 If the hint matches but the sender is not a participant, a new ticket is created in the same department with a system note "Referenced HD-1042 but sender is not a participant", and the agent may merge manually. A subject token with no other hint is treated the same way. This prevents anyone who learns a ticket number from injecting into or reading that thread.
 
+**Sender check.** Helpdock acts on what the receiving mail server reported in `Authentication-Results` (and `Received-SPF` for failures), and reads it as one of three results (`senderCheck`, `classify.ts`): `misaligned` when the report goes against the `From` address (`dmarc=fail`, an SPF or DKIM failure with no aligned DKIM pass, or SPF and DKIM passes that all belong to another domain), `aligned` when it supports it (`dmarc=pass`, or a DKIM or SPF pass for the From domain or a parent of it), and `unknown` when there is no usable report. Anything that can make the result `aligned` is read only from the topmost `Authentication-Results` header, the one the last receiving hop wrote, because a sender can add headers of its own below it; evidence against the message is read from every header. A pass on a subdomain of the From domain supports it only together with `dmarc=pass`, and the parent needs at least two labels (there is no public-suffix list). Comments and quoted strings in the header are ignored when its properties are read. The report is whatever the receiving server wrote, so this is a best-effort check, and mail with no report is treated as before.
+
+A `misaligned` message still threads by the same two conditions, so forwarded mail is not lost, and it does what any customer reply does, and nothing more. It adds no `To` or `Cc` address as a participant (§2.5). Its sender is found by address, as a copied-in address is: the contact that holds it, verified or not, or one unverified contact for it (source `email.unauthenticated`); nothing is verified, moved or merged, and an identity that is already verified stays verified (§4.4). Its "authentication failed" warning, and filing a new ticket under Spam, keep following `authFailed` alone (an SPF or DKIM failure, M2-07). Every inbound method goes through the one router, so this holds for IMAP, provider webhooks, raw MIME and generic JSON alike.
+
 Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`, `mailer-daemon@`) never create tickets unless the brand allow-lists them; they are logged.
 
 **A reply aimed at one email (M14-31).** A staff public reply may name the customer email it answers (`replyToMessageId`). The target must be a public, inbound, email-channel message of the same ticket that the caller can read: another kind or ticket is a 400 on `body.replyToMessageId` (`reply-to.not-a-customer-email`; any target on a note is `reply-to.not-allowed`), and a message that is gone, that the policies hide, or whose sender's contact was erased (§11) is a 409 (`reply-to.gone`) with nothing sent. A retry of a reply already stored (same `clientId`) returns it, even when its target is gone by then. The link is stored on the reply (`ON DELETE SET NULL`), so a purged target costs the reply only its "In reply to" line. At delivery, not at write time:
@@ -415,7 +419,7 @@ Auto-generated addresses (`Auto-Submitted`, `Precedence: bulk/list`, `noreply@`,
 
 | Identifier | Verified when | Auto-merge |
 |---|---|---|
-| Email | An inbound email arrived from it, or a magic link sent to it was clicked | Yes |
+| Email | An inbound email arrived from it that the receiving server did not report as not matching its From address (§4.3), or a magic link sent to it was clicked | Yes |
 | Telegram `chat_id` | Always (comes from the Bot API) | Yes |
 | WhatsApp business-scoped user id | Always (comes in a webhook Meta signed) | Yes |
 | Messenger page-scoped id | Always (signed webhook) | Yes |

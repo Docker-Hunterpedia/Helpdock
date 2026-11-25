@@ -1,4 +1,4 @@
-import type { ProposedMapping } from '../connector.js';
+import { type ProposedMapping, valueMappingTarget } from '../connector.js';
 
 const priorities = new Map([
   ['low', 'low'],
@@ -22,5 +22,5 @@ export function zohoValueMapping(
   externalValue: string,
 ): ProposedMapping | null {
   const mapped = (kind === 'priority' ? priorities : channels).get(externalValue.toLowerCase());
-  return mapped ? { kind, externalValue, target: { [kind]: mapped } } : null;
+  return mapped ? { kind, externalValue, target: valueMappingTarget(kind, mapped) } : null;
 }

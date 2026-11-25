@@ -1,4 +1,4 @@
-import type { ProposedMapping } from '../connector.js';
+import { type ProposedMapping, valueMappingTarget } from '../connector.js';
 
 const priorities = new Map([
   ['1', 'low'],
@@ -24,5 +24,5 @@ export function freshdeskValueMapping(
   externalValue: string,
 ): ProposedMapping | null {
   const target = (kind === 'priority' ? priorities : channels).get(externalValue);
-  return target ? { kind, externalValue, target: { [kind]: target } } : null;
+  return target ? { kind, externalValue, target: valueMappingTarget(kind, target) } : null;
 }

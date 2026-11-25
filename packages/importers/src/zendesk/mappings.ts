@@ -1,4 +1,4 @@
-import type { ProposedMapping } from '../connector.js';
+import { type ProposedMapping, valueMappingTarget } from '../connector.js';
 
 const PRIORITIES = new Map([
   ['low', 'low'],
@@ -18,5 +18,5 @@ export function zendeskValueMapping(
   externalValue: string,
 ): ProposedMapping | null {
   const target = (kind === 'priority' ? PRIORITIES : CHANNELS).get(externalValue);
-  return target ? { kind, externalValue, target: { [kind]: target } } : null;
+  return target ? { kind, externalValue, target: valueMappingTarget(kind, target) } : null;
 }

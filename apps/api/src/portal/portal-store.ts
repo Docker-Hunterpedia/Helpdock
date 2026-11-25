@@ -11,7 +11,7 @@ import {
   withTenant,
 } from '@helpdock/db';
 import { type PortalSettings, parseBrandSettings } from '@helpdock/schemas';
-import { and, eq, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt } from 'drizzle-orm';
 import type { CustomerScope } from './customer-context.js';
 import { hashToken, isExpired, sameHash, sessionExpiry, shouldTouch } from './session-rules.js';
 
@@ -164,7 +164,7 @@ export const spendSignInToken = async (
       and(
         eq(customerSignInTokens.id, id),
         isNull(customerSignInTokens.spentAt),
-        sql`${customerSignInTokens.expiresAt} > ${now}`,
+        gt(customerSignInTokens.expiresAt, now),
       ),
     )
     .returning({ id: customerSignInTokens.id });

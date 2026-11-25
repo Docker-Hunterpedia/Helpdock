@@ -1,12 +1,23 @@
 import { screen } from '@testing-library/react';
+import { Suspense } from 'react';
 import { Route, Routes, useLocation } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
 import { HttpAuthApi } from '../auth/http-api.js';
+import { forgetInviteReturn, rememberInviteReturn } from '../auth/invite-return.js';
 import { MockAuthApi } from '../auth/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 import { AuthComplete } from './auth-complete.tsx';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  forgetInviteReturn();
+});
+
+/** Shows what the invite screen would be handed back. */
+function InviteProbe() {
+  const state = useLocation().state as { name?: string; mismatch?: { account?: string } } | null;
+  return <p>{`invite:${String(state?.name)}:${String(state?.mismatch?.account)}`}</p>;
+}
 
 /** Shows what the code screen would be handed. */
 function TotpProbe() {
@@ -117,6 +128,69 @@ it('falls back to the sentence when the callback names no provider', async () =>
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'This account is not connected here yet. Sign in another way once, then connect it from your security page.',
   );
+});
+
+it('goes back to the invite screen with the typed name after a provider mismatch', async () => {
+  rememberInviteReturn({ path: '/invite/abc', name: 'Karim Aziz' });
+  renderApp(
+    <Routes>
+      <Route path="/oauth/callback" element={<AuthComplete />} />
+      <Route path="/invite/:token" element={<InviteProbe />} />
+    </Routes>,
+    {
+      initialEntries: [
+        '/oauth/callback?error=oauth-invite-mismatch&provider=github#account=other%40example.com',
+      ],
+    },
+  );
+
+  expect(await screen.findByText('invite:Karim Aziz:other@example.com')).toBeInTheDocument();
+  // Forgotten once used: a later callback in this tab must not reuse it.
+  expect(sessionStorage.getItem('hd.inviteReturn')).toBeNull();
+});
+
+// Regression: the way back used to be read and forgotten while rendering. A
+// render that suspended (a language catalog still loading) was discarded and
+// run again with nothing to read, so the person landed on the "lost" sentence
+// and the invite accessibility test timed out in CI.
+it('still finds the way back when its first render is discarded by a suspended sibling', async () => {
+  rememberInviteReturn({ path: '/invite/abc', name: 'Karim Aziz' });
+  let loaded = false;
+  let release: () => void = () => undefined;
+  const loading = new Promise<void>((resolve) => {
+    release = () => {
+      loaded = true;
+      resolve();
+    };
+  });
+  function LoadsLate() {
+    if (!loaded) {
+      // What a lazily loaded catalog does: suspend the boundary until it is in.
+      throw loading;
+    }
+    return null;
+  }
+
+  renderApp(
+    <Routes>
+      <Route
+        path="/oauth/callback"
+        element={
+          <Suspense fallback={<p>loading</p>}>
+            <AuthComplete />
+            <LoadsLate />
+          </Suspense>
+        }
+      />
+      <Route path="/invite/:token" element={<InviteProbe />} />
+    </Routes>,
+    { initialEntries: ['/oauth/callback?error=oauth-invite-mismatch&provider=github'] },
+  );
+
+  expect(await screen.findByText('loading')).toBeInTheDocument();
+  release();
+
+  expect(await screen.findByText(/^invite:Karim Aziz:/)).toBeInTheDocument();
 });
 
 it('says what happened when this tab no longer knows which invitation it came from', async () => {

@@ -1,11 +1,11 @@
 import { oauthProviderSchema, type SecondFactorOptions } from '@helpdock/schemas';
 import { Box, CircularProgress, Link, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Navigate, Link as RouterLink, useLocation, useSearchParams } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { ROUTES, safeReturnTo } from '../app/route-paths.js';
-import { takeInviteReturn } from '../auth/invite-return.js';
+import { forgetInviteReturn, readInviteReturn } from '../auth/invite-return.js';
 import { oauthErrorKey } from '../auth/oauth-error.js';
 import { PROVIDER_NAME_KEYS } from '../auth/provider-names.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
@@ -70,8 +70,15 @@ export function AuthComplete(): ReactNode {
 
   const exchangedCode = useRef<string | null>(null);
   const location = useLocation();
-  // Read once: the invite screen it points back to is this tab's to return to.
-  const inviteReturn = useRef(failure === INVITE_MISMATCH ? takeInviteReturn() : null);
+  // The invite screen this tab returns to. Read without forgetting, because a
+  // render that suspends is discarded and run again; forgotten once this screen
+  // has committed, so a later callback cannot reuse it.
+  const [inviteReturn] = useState(() => (failure === INVITE_MISMATCH ? readInviteReturn() : null));
+  useEffect(() => {
+    if (failure === INVITE_MISMATCH) {
+      forgetInviteReturn();
+    }
+  }, [failure]);
   const { mutate } = exchange;
   useEffect(() => {
     if (code !== null && exchangedCode.current !== code) {
@@ -114,13 +121,13 @@ export function AuthComplete(): ReactNode {
     return <OauthRefusal code={failure} provider={provider.data} />;
   }
 
-  if (failure === INVITE_MISMATCH && provider.success && inviteReturn.current !== null) {
+  if (failure === INVITE_MISMATCH && provider.success && inviteReturn !== null) {
     return (
       <Navigate
-        to={inviteReturn.current.path}
+        to={inviteReturn.path}
         replace
         state={{
-          name: inviteReturn.current.name,
+          name: inviteReturn.name,
           mismatch: { provider: provider.data, account: accountFromFragment(location.hash) },
         }}
       />

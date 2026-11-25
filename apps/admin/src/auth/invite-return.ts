@@ -26,11 +26,15 @@ export function rememberInviteReturn(value: InviteReturn): void {
   }
 }
 
-/** Reads and forgets it, so a later unrelated callback cannot reuse it. */
-export function takeInviteReturn(): InviteReturn | null {
+/**
+ * Reads it and leaves it there. Safe to call while rendering: React may render
+ * a screen more than once before it commits (a suspended render is thrown away
+ * and started again), and a read that also forgot would hand the second render
+ * nothing. {@link forgetInviteReturn} does the forgetting, once the screen is up.
+ */
+export function readInviteReturn(): InviteReturn | null {
   try {
     const raw = sessionStorage.getItem(KEY);
-    sessionStorage.removeItem(KEY);
     if (raw === null) {
       return null;
     }
@@ -38,6 +42,15 @@ export function takeInviteReturn(): InviteReturn | null {
     return isInviteReturn(parsed) ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+/** Forgets it, so a later unrelated callback cannot reuse it. */
+export function forgetInviteReturn(): void {
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {
+    // Storage refused: there was nothing to forget.
   }
 }
 

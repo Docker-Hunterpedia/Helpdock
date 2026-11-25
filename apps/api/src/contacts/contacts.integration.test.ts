@@ -743,8 +743,11 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
         tx.select().from(contactIdentities).where(eq(contactIdentities.contactId, contact.id)),
       );
       for (const identity of stored) {
-        expect(identity.value).not.toContain('@');
-        expect(identity.value).not.toContain('4930');
+        // The whole stored value is a kind and a hex digest. Looking for a few
+        // digits of the phone number inside it failed whenever the digest
+        // happened to contain them.
+        expect(identity.value).toMatch(/^erased:(email|phone):[0-9a-f]+$/);
+        expect(identity.value).not.toContain('4930999888777');
       }
 
       const [audit] = await withSystem(runtime.db, seeded.brandId, (tx) =>

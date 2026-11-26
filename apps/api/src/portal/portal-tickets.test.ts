@@ -26,7 +26,6 @@ import { csrfKeyFrom, SESSION_TTL_MS } from './session-rules.js';
  */
 
 const HOST = 'help.example.com';
-const BRAND = 'Helpdock';
 const KNOWN = 'mona@acme.example';
 const NOW = new Date('2026-11-26T12:00:00Z');
 const ACME = 'account-acme';

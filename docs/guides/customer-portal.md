@@ -1,6 +1,6 @@
 # Customer portal
 
-The customer portal lets a customer sign in to a brand's help center and, in later releases, read and answer their tickets there. This guide covers what exists after **M21-02**: signing in and out. The ticket list and ticket pages arrive with M21-03 and M21-04, and the admin screens with M21-06. The plan is [M21 Customer portal](../in-development/M21-customer-portal.md); the decision is [ADR 0059](../decisions/0059-customer-sessions-by-emailed-link.md).
+The customer portal lets a customer sign in to a brand's help center and read their tickets there; answering them and opening new ones follow in later releases. This guide covers what exists after **M21-03**: signing in and out, the ticket list and the ticket page (read only). Replying and new tickets arrive with M21-04, and the admin screens with M21-06. The plan is [M21 Customer portal](../in-development/M21-customer-portal.md); the decision is [ADR 0059](../decisions/0059-customer-sessions-by-emailed-link.md).
 
 ## What it is
 
@@ -20,7 +20,7 @@ The portal is off for every brand. Until the admin page arrives (M21-06) it is a
 |---|---|
 | `enabled` | The portal exists for this brand. With it off, every portal address answers the help center's own 404 and the header shows nothing new. |
 | `newCustomers` | An address with no contact may sign in too, and the first Continue creates the contact with that address as a verified email identity. Off by default: the [web form](web-form.md) stays the way in for strangers. |
-| `departmentIds` | The departments whose tickets the portal will show (used from M21-03). |
+| `departmentIds` | The departments whose tickets the portal shows: `"all"` or a list of department ids. A ticket in any other department is not listed and its address answers 404. |
 
 The help center caches public pages for up to ten minutes. After turning the portal on or off by hand the header links appear or disappear when that cache turns over; the addresses themselves follow the setting at once.
 
@@ -94,6 +94,45 @@ Every page of the portal is private (`Cache-Control: private, no-store`), is not
 
 Sign-ins, sign-outs and refused links are security events in the application log, without the address. They are not audit-log rows.
 
+## My tickets
+
+After signing in, **My tickets** (`/tickets`, below `/hc/<brandId>` while the brand has no domain) lists the customer's tickets. It is made for the board `HelpCenter/Portal-Tickets`.
+
+### What a customer sees in the list
+
+- **Mine:** tickets the customer opened, on every channel (email, web form, widget, Telegram, WhatsApp, Messenger, Instagram), and tickets a **staff member added them to as a CC** while the address is a verified identity of theirs. A person who was copied only on an inbound email does not get the ticket in their portal.
+- **Open and Solved.** Open is the default. A ticket is Solved once its status is closed.
+- **One of four words**, whatever the brand called its statuses: **Open**; **Waiting for you** (the status is one where the ball is with the customer); **Waiting for us** (on hold, escalated, or snoozed); **Solved**.
+- Each row: the subject, the reference (`HD-1042`), when it last changed ("2 hours ago", "yesterday", a date once it is a month old), and **Only you** on the customer's own ticket that is private. Newest change first, 20 to a page; **Show more** is a plain link, so the page works without JavaScript.
+- **Search** matches the subject (anywhere in it) and the reference or its number (`HD-1042`, `hd-1042`, `1042`), only among the tickets the customer may see. It is a case-insensitive "contains" on the subject, so on a very large company it reads the company's tickets rather than an index of words.
+- **Empty states** say where tickets come from. There is no "New ticket" button yet (M21-04).
+
+### The company view
+
+Only when the customer's company is set (by staff, for now in the database; the admin screen is M21-06) to show **All members**, or **Managers** and the customer is a manager, the list has a **Mine / *Company name*** switch with counts. **Company** lists every ticket of the company that is not private, each row saying who opened it ("Opened by you", "Opened by Omar Saleh"). A person's name is shown, never an address. Two notices, which cannot be dismissed, say what the company can see:
+
+- a member of an **All members** company is told, on Mine, that the people at the company can see the tickets they open;
+- a manager is told, on Company, that they see every ticket because they are a company manager.
+
+A ticket staff marked **private** shows only to its requester and to staff-added CCs, whatever the setting. A customer whose company shows only their own tickets has no switch, and `?scope=company` is ignored.
+
+### The ticket page
+
+`/tickets/HD-1042`: the subject, the reference, the status, who opened it ("Opened by you · 10 Nov 2026 · by email"), then **every public message** and every assistant message, oldest first, each in an article named by its sender and time. Times are in the brand's time zone, never the viewer's. A message shows who wrote it: **You**; a coworker by name with a **Coworker** tag; staff by their public name ("Lina from *Brand*", DOMAIN-RULES §2.10, with a **Support** tag), never their full name, address or job title; the assistant and automatic messages as the brand's name. Message text is shown as plain text in paragraphs; formatting an agent used is not drawn. Attachments are links to `/tickets/HD-1042/attachments/<id>`, which check the ticket, then redirect to a short-lived download address (five minutes). A copied link stops working.
+
+If tickets were merged into this one, their public messages appear in the thread in time order. The merged ticket's own reference sends the customer to this one, but only if they can see it.
+
+A solved or closed ticket shows its status and nothing more here yet: replying, reopening and the rating are M21-04.
+
+### What is never shown
+
+Internal notes, system lines, activity, tags, priority, SLA, who the ticket is assigned to, custom fields, the assistant's sources and costs, email headers, other people's addresses, and tickets that are deleted, spam, merged away, in a department the portal does not show, or another company's. A ticket the customer may not see, one that does not exist, and a malformed reference all answer the **same** page: the help center's "We can't find that page", with status 404, never "forbidden". A file of a note, a file still uploading, and another customer's file answer 404 the same way.
+
+### Limits to know
+
+- A thread shows its first 500 messages.
+- A help center served on a brand's own domain over plain http on a non-standard port (local development) gets absolute links, such as the one in the sign-in email, without the port, because the portal builds them from the verified domain and never from the `Host` header as sent. The pages themselves, and the install's `/hc/<brandId>` path, are fine. Use https, or the `/hc/<brandId>` path, when developing.
+
 ## For customers
 
 Your own help center page can say:
@@ -102,4 +141,4 @@ Your own help center page can say:
 
 ## Not yet
 
-The ticket list, ticket pages, replying, the company view, the admin screen and the sweep of expired sessions and links (M21-03 to M21-08).
+Replying, attachments from the customer, new tickets, marking solved and the rating (M21-04), the company view's reply on a coworker's ticket (M21-05), the admin screen (M21-06), "View this ticket" in emails (M21-07) and the sweep of expired sessions and links (M21-08).

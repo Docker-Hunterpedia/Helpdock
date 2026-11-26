@@ -405,7 +405,13 @@ const mergedThread = (
     const secondaries = tx
       .select({ id: tickets.id })
       .from(tickets)
-      .where(and(eq(tickets.brandId, brandId), eq(tickets.mergedIntoId, primaryId)));
+      .where(
+        and(
+          eq(tickets.brandId, brandId),
+          eq(tickets.mergedIntoId, primaryId),
+          isNull(tickets.deletedAt),
+        ),
+      );
     const messages = await tx
       .select({
         id: ticketMessages.id,
@@ -768,6 +774,7 @@ export const attachmentUrl = async (
           eq(attachments.status, 'ready'),
           inArray(ticketMessages.kind, ['public', 'ai']),
           eq(tickets.mergedIntoId, ticketId),
+          isNull(tickets.deletedAt),
         ),
       )
       .limit(1);

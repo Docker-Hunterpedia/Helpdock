@@ -1,5 +1,0 @@
----
-'@helpdock/api': minor
----
-
-Customers can read their tickets in the portal (M21-03). A signed-in customer's **My tickets** lists the tickets they requested or were copied on by staff, on every channel, newest change first, with Open and Solved, a search over subject and reference, 20 rows a page with a "Show more" link, and one of four statuses (Open, Waiting for you, Waiting for us, Solved). Where the customer's company shows every ticket to its members, a Mine and Company switch and a notice appear. A ticket's page shows who opened it, when and by which channel, every public and assistant message oldest first (including messages of tickets merged into it) with who wrote them, and its attachments through short-lived authorised links. A ticket that is not the customer's answers the help center's 404. The portal's signed-in pages now share one place that renews the session cookie, mask the CSRF token per response, and a contact created by a sign-in keeps the language of the page. Read-only: replying and opening tickets are M21-04.

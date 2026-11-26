@@ -5,6 +5,7 @@ import {
   type DbTransaction,
   systemContext,
   ticketMessages,
+  ticketParticipants,
   ticketStatuses,
   tickets,
   users,
@@ -63,6 +64,8 @@ const PROJECTION_JOB = 'portal:projection';
 /** A thread longer than this shows its first messages; a customer thread of this size is not a real one. */
 export const MESSAGE_LIMIT = 500;
 const COUNT_CAP = 100;
+/** A contact CC'd on more tickets than this is not a customer; the list then looks at the first of them. */
+const CC_LIMIT = 5000;
 
 const asProjection = <T>(
   db: Db,
@@ -80,7 +83,10 @@ const companyTickets = (scope: CustomerScope): SQL | undefined =>
     ? and(eq(tickets.accountId, scope.accountId), eq(tickets.portalPrivate, false))
     : undefined;
 
-/** Every ticket this customer may see, as the customer policy says it. */
+/**
+ * Every ticket this customer may see, as the customer policy says it: what a
+ * single-ticket lookup repeats beside the row-level security it already has.
+ */
 const visibleTickets = (scope: CustomerScope): SQL | undefined =>
   and(
     eq(tickets.brandId, scope.brandId),
@@ -90,16 +96,36 @@ const visibleTickets = (scope: CustomerScope): SQL | undefined =>
     or(ownTickets(scope), companyTickets(scope)),
   );
 
-const scopedTickets = (scope: CustomerScope, which: 'mine' | 'company'): SQL | undefined =>
-  which === 'company'
-    ? visibleTickets(scope)
-    : and(
-        eq(tickets.brandId, scope.brandId),
-        eq(tickets.portalEligible, true),
-        isNull(tickets.deletedAt),
-        isNull(tickets.mergedIntoId),
-        ownTickets(scope),
-      );
+/**
+ * The same set for a list or a count, written so the planner can use an index.
+ *
+ * `portal_contact_ids @> ...` is the policy's own test, but `@>` on arrays is
+ * not *leakproof*, and Postgres evaluates a user's non-leakproof condition only
+ * after a table's row-level-security filter, so it can never drive an index; the
+ * policy's own OR with the staff principals is not indexable either. So the list
+ * narrows by conditions built from leakproof equalities, which the planner may
+ * push below the policy: the requester (`tickets_brand_contact_idx`), the
+ * company (`tickets_brand_account_idx`) and the tickets where a staff-added CC
+ * names the customer (`ccTicketIds`, by primary key). That set can only be a
+ * superset of what the customer may read, never smaller; the policy then keeps
+ * exactly the rows it allows. It is the policy that is trusted.
+ */
+export const scopedTickets = (
+  scope: CustomerScope,
+  which: 'mine' | 'company',
+  ccTicketIds: readonly string[],
+): SQL | undefined =>
+  and(
+    eq(tickets.brandId, scope.brandId),
+    eq(tickets.portalEligible, true),
+    isNull(tickets.deletedAt),
+    isNull(tickets.mergedIntoId),
+    or(
+      eq(tickets.contactId, scope.contactId),
+      ccTicketIds.length === 0 ? undefined : inArray(tickets.id, [...ccTicketIds]),
+      which === 'company' ? companyTickets(scope) : undefined,
+    ),
+  );
 
 const ownMessages = (scope: CustomerScope): SQL | undefined =>
   or(
@@ -188,6 +214,27 @@ export const contactNames = (
         );
       });
 
+/**
+ * The tickets on which this contact is a participant of any source: ids and
+ * nothing else. It only narrows where the list looks (see {@link scopedTickets});
+ * whether a customer may read one of them is decided afterwards by the policy,
+ * which counts only a CC a staff action made, with a verified address.
+ */
+export const ccTicketIds = (db: Db, scope: CustomerScope): Promise<readonly string[]> =>
+  asProjection(db, scope.brandId, async (tx) => {
+    const rows = await tx
+      .select({ ticketId: ticketParticipants.ticketId })
+      .from(ticketParticipants)
+      .where(
+        and(
+          eq(ticketParticipants.brandId, scope.brandId),
+          eq(ticketParticipants.contactId, scope.contactId),
+        ),
+      )
+      .limit(CC_LIMIT);
+    return rows.map((row) => row.ticketId);
+  });
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** DOMAIN-RULES §2.10: the public name, never the full name, the address or the title. */
@@ -226,7 +273,7 @@ const searchWhere = (search: TicketListQuery['search']): SQL | undefined => {
 };
 
 /** Open and Solved are split on `closed_at`, which the status change sets and clears with the status. */
-const stateWhere = (state: TicketListQuery['state']): SQL =>
+export const stateWhere = (state: TicketListQuery['state']): SQL =>
   state === 'solved' ? isNotNull(tickets.closedAt) : isNull(tickets.closedAt);
 
 const countOf = async (tx: DbTransaction, where: SQL | undefined): Promise<number> => {
@@ -246,9 +293,10 @@ export const listTickets = async (
   query: TicketListQuery,
 ): Promise<PortalTicketList> => {
   const { cursor } = query;
+  const cc = await ccTicketIds(db, scope);
   const read = await withTenant(db, customerTenantContext(scope), async (tx) => {
     const where = and(
-      scopedTickets(scope, query.scope),
+      scopedTickets(scope, query.scope, cc),
       stateWhere(query.state),
       searchWhere(query.search),
       cursor === null
@@ -275,9 +323,9 @@ export const listTickets = async (
       .where(where)
       .orderBy(desc(tickets.updatedAt), desc(tickets.id))
       .limit(PAGE_SIZE + 1);
-    const mine = await countOf(tx, and(scopedTickets(scope, 'mine'), stateWhere(query.state)));
+    const mine = await countOf(tx, and(scopedTickets(scope, 'mine', cc), stateWhere(query.state)));
     const company = mayViewCompany(scope.sees)
-      ? await countOf(tx, and(scopedTickets(scope, 'company'), stateWhere(query.state)))
+      ? await countOf(tx, and(scopedTickets(scope, 'company', cc), stateWhere(query.state)))
       : null;
     return { rows, mine, company };
   });

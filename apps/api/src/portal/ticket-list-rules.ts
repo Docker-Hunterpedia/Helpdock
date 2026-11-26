@@ -79,6 +79,9 @@ export const decodeCursor = (value: string | undefined): ListCursor | null => {
 /** Whether the customer's account setting lets them switch to the company's tickets. */
 export const mayViewCompany = (sees: CustomerSees): boolean => sees === 'account';
 
+/** A bare ticket number, as typed after an optional `#`. */
+const BARE_NUMBER = /^[0-9]{1,12}$/;
+
 export const parseSearch = (value: string | undefined): ListSearch => {
   const text = (value ?? '').replace(/\s+/g, ' ').trim().slice(0, SEARCH_MAX);
   if (text === '') {
@@ -88,8 +91,8 @@ export const parseSearch = (value: string | undefined): ListSearch => {
   if (reference !== null) {
     return { kind: 'text', text, reference };
   }
-  const bare = /^#?([0-9]{1,12})$/.exec(text);
-  const number = bare === null ? 0 : Number(bare[1]);
+  const digits = text.startsWith('#') ? text.slice(1) : text;
+  const number = BARE_NUMBER.test(digits) ? Number(digits) : 0;
   return {
     kind: 'text',
     text,

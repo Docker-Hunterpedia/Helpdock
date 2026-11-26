@@ -80,6 +80,7 @@ h1, h2, h3 { text-wrap: pretty; }
 
 /* The portal's header links and signed-in menu (M21-02). Pure CSS: a details element, so no script. */
 .hd-portal-link { color: var(--hd-text-secondary); min-block-size: 44px; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.hd-portal-link[aria-current="page"] { color: var(--hd-text-link); box-shadow: inset 0 -2px 0 currentColor; }
 .hd-portal-signin { color: var(--hd-text-link); font-weight: 500; }
 .hd-menu { position: relative; }
 .hd-menu summary {

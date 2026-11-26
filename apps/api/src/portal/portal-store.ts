@@ -192,7 +192,7 @@ export const resolveSigner = async (
   tx: DbTransaction,
   brandId: string,
   email: string,
-  options: { readonly create: boolean },
+  options: { readonly create: boolean; readonly locale: 'en' | 'ar' },
 ): Promise<EmailOwner | null> => {
   const attach = async (contactId: string): Promise<EmailOwner> => {
     const { identity } = await attachVerifiedIdentity(tx, brandId, contactId, portalClaim(email));
@@ -210,6 +210,7 @@ export const resolveSigner = async (
     const created = await tx.transaction((savepoint) =>
       findOrCreateContactByIdentity(savepoint, brandId, portalClaim(email), {
         name: email.split('@')[0] ?? email,
+        locale: options.locale,
       }),
     );
     if (created.identity === null) {

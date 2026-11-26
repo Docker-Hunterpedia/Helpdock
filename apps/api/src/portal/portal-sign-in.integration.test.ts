@@ -565,6 +565,14 @@ describe.skipIf(!hasDocker)('customer sign-in (M21-02)', () => {
           tx.select().from(contactIdentities).where(eq(contactIdentities.value, stranger)),
         );
         expect(identity).toMatchObject({ verified: true, source: 'portal.sign_in', kind: 'email' });
+        // The new contact keeps the language of the page that pressed Continue.
+        const [created] = await rows(brandA(), (tx) =>
+          tx
+            .select()
+            .from(contacts)
+            .where(eq(contacts.id, identity?.contactId ?? '')),
+        );
+        expect(created?.locale).toBe('en');
       } finally {
         await setPortal(brandA(), { enabled: true, newCustomers: false });
       }

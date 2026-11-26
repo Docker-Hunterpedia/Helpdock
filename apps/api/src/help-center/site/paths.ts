@@ -179,6 +179,16 @@ export class SiteLinks {
     return `${this.base}/tickets${locale === undefined ? '' : `?lang=${locale}`}`;
   }
 
+  /** One ticket, by its public reference (`HD-1042`); the page's language rides along. */
+  portalTicket(reference: string, locale: HcLocale): string {
+    return `${this.base}/tickets/${encodeURIComponent(reference)}?lang=${locale}`;
+  }
+
+  /** One file of a ticket: it answers with a redirect to a short-lived address. */
+  portalAttachment(reference: string, attachmentId: string): string {
+    return `${this.base}/tickets/${encodeURIComponent(reference)}/attachments/${encodeURIComponent(attachmentId)}`;
+  }
+
   portalSignOut(): string {
     return `${this.base}/sign-out`;
   }

@@ -187,6 +187,65 @@
       "title": "This page is out of date",
       "body": "Open the sign-in page again and try once more.",
       "action": "Back to sign in"
+    },
+    "status": {
+      "open": "Open",
+      "waiting_you": "Waiting for you",
+      "waiting_us": "Waiting for us",
+      "solved": "Solved"
+    },
+    "channel": {
+      "email": "by email",
+      "chat": "by chat",
+      "telegram": "on Telegram",
+      "form": "by web form",
+      "whatsapp": "on WhatsApp",
+      "messenger": "on Messenger",
+      "instagram": "on Instagram",
+      "api": "online",
+      "manual": "by our team"
+    },
+    "list": {
+      "scopeLabel": "Tickets to show",
+      "stateLabel": "Ticket state",
+      "mine": "Mine",
+      "open": "Open",
+      "solved": "Solved",
+      "searchLabel": "Search your tickets",
+      "searchPlaceholder": "Subject or reference",
+      "noticeAll": "People at {{company}} can see the tickets you open here, and you can see theirs.",
+      "noticeManager": "You can see every ticket of {{company}} because you are a company manager.",
+      "listLabel": "Your tickets",
+      "updated": "Updated {{when}}",
+      "openedBy": "Opened by {{name}}",
+      "openedByYou": "Opened by you",
+      "openedByUnknown": "Opened by a coworker",
+      "onlyYou": "Only you",
+      "showMore": "Show more",
+      "emptyOpenTitle": "No open tickets",
+      "emptyOpenBody": "Tickets you send us by email or chat show here.",
+      "emptySolvedTitle": "No solved tickets",
+      "emptySolvedBody": "Tickets we have solved show here.",
+      "emptySearchTitle": "No tickets match “{{q}}”",
+      "emptySearchBody": "Check the spelling, or search by reference, like HD-1042."
+    },
+    "ticket": {
+      "back": "My tickets",
+      "openedByYou": "Opened by you · {{date}} · {{channel}}",
+      "openedBy": "Opened by {{name}} · {{date}} · {{channel}}",
+      "openedByUnknown": "Opened {{date}} · {{channel}}",
+      "thread": "Messages",
+      "articleLabel": "Message from {{sender}}, {{time}}",
+      "you": "You",
+      "from": "{{name}} from {{brand}}",
+      "support": "Support",
+      "coworker": "Coworker",
+      "attachments": "Attachments",
+      "noMessages": "There are no messages on this ticket yet.",
+      "someone": "Another participant",
+      "truncated": "This message is long and is shown in part.",
+      "moreFiles_one": "and {{count}} more file",
+      "moreFiles_other": "and {{count}} more files"
     }
   }
 }

@@ -1,6 +1,8 @@
 import type { Keyring } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
-import { CustomerContextError, loadCustomerScope } from './customer-context.js';
+import type { MediaService } from '../media/media.service.js';
+import { CustomerContextError, type CustomerScope, loadCustomerScope } from './customer-context.js';
+import { attachmentUrl, listTickets, readTicket } from './db-ticket-reader.js';
 import type { ConfirmOutcome, PortalStore } from './portal-site.js';
 import {
   asSystem,
@@ -20,6 +22,9 @@ import {
 } from './portal-store.js';
 import { signInExpiry } from './session-rules.js';
 import { queueSignInEmail } from './sign-in-email.js';
+import type { TicketListQuery } from './ticket-list-rules.js';
+import type { TicketReference } from './ticket-reference.js';
+import type { AttachmentLookup, PortalTicketList, TicketLookup } from './ticket-views.js';
 
 /** Raised inside the confirm transaction to roll it back when no contact may be signed in. */
 class NoSigner extends Error {}
@@ -37,10 +42,16 @@ class NoSigner extends Error {}
 export class DbPortalStore implements PortalStore {
   readonly #db: Db;
   readonly #keyring: Keyring;
+  readonly #media: Pick<MediaService, 'download'>;
 
-  constructor(options: { readonly db: Db; readonly keyring: Keyring }) {
+  constructor(options: {
+    readonly db: Db;
+    readonly keyring: Keyring;
+    readonly media: Pick<MediaService, 'download'>;
+  }) {
     this.#db = options.db;
     this.#keyring = options.keyring;
+    this.#media = options.media;
   }
 
   issueLink(input: Parameters<PortalStore['issueLink']>[0]): Promise<'issued' | 'skipped'> {
@@ -105,7 +116,10 @@ export class DbPortalStore implements PortalStore {
       if (!(await spendSignInToken(tx, link.id, now))) {
         return { kind: 'used' };
       }
-      const owner = await resolveSigner(tx, brandId, link.email, { create: portal.newCustomers });
+      const owner = await resolveSigner(tx, brandId, link.email, {
+        create: portal.newCustomers,
+        locale: input.locale,
+      });
       if (owner === null) {
         // Nobody may be signed in as this address any more (merged away, erased, or
         // new customers switched off). The spend is rolled back with everything
@@ -145,6 +159,22 @@ export class DbPortalStore implements PortalStore {
     }
   }
 
+  tickets(session: LiveSession, query: TicketListQuery): Promise<PortalTicketList> {
+    return listTickets(this.#db, scopeOf(session), query);
+  }
+
+  ticket(session: LiveSession, reference: TicketReference): Promise<TicketLookup> {
+    return readTicket(this.#db, scopeOf(session), reference);
+  }
+
+  attachment(
+    session: LiveSession,
+    reference: TicketReference,
+    attachmentId: string,
+  ): Promise<AttachmentLookup> {
+    return attachmentUrl(this.#db, this.#media, scopeOf(session), reference, attachmentId);
+  }
+
   endSession(brandId: string, sessionId: string): Promise<void> {
     return asSystem(this.#db, brandId, (tx) => deleteSession(tx, sessionId));
   }
@@ -153,3 +183,11 @@ export class DbPortalStore implements PortalStore {
     await asSystem(this.#db, brandId, (tx) => deleteContactSessions(tx, brandId, contactId));
   }
 }
+
+/** The scope the guard read on this request; a session without one never reaches a read. */
+const scopeOf = (session: LiveSession): CustomerScope => {
+  if (session.scope === undefined) {
+    throw new Error('A portal read needs the scope the session guard loads');
+  }
+  return session.scope;
+};

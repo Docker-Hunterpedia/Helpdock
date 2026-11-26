@@ -63,6 +63,8 @@ export interface FindOrCreateOptions {
   /** Used when a contact has to be created. Defaults to the identifier itself. */
   readonly name?: string;
   readonly accountId?: string | null;
+  /** The language the person was reading when they were first seen, kept on the new contact. */
+  readonly locale?: 'en' | 'ar';
 }
 
 export interface FindOrCreateResult {
@@ -267,6 +269,7 @@ export const findOrCreateContactByIdentity = async (
     brandId,
     name: name === undefined || name === '' ? value : name,
     accountId: options.accountId ?? null,
+    locale: options.locale ?? null,
   });
   await suggestSimilarNames(tx, brandId, contact);
 

@@ -13,6 +13,8 @@ import { PowCaptcha } from '../captcha/pow-captcha.js';
 import type { BrandResolver } from '../context/brand-resolver.js';
 import { createQueryEmbedder } from '../knowledge/retrieval/retrieve.js';
 import type { Logger } from '../logging/logger.js';
+import { MediaRepository } from '../media/media.repository.js';
+import { MediaService } from '../media/media.service.js';
 import { createS3Client, type ObjectStorage, S3ObjectStorage } from '../media/storage.js';
 import { DbPortalCaptcha } from '../portal/db-portal-captcha.js';
 import { DbPortalStore } from '../portal/db-portal-store.js';
@@ -102,7 +104,12 @@ export class HelpCenterModule {
     const keyring = createKeyring(env);
     const portalFor = (db: Db): PortalSite =>
       new PortalSite({
-        store: new DbPortalStore({ db, keyring }),
+        store: new DbPortalStore({
+          db,
+          keyring,
+          // The same short-lived addresses the widget and the admin issue, after the portal's own check of the ticket.
+          media: new MediaService(new MediaRepository(), storage),
+        }),
         captcha: new DbPortalCaptcha({
           db,
           keys: new DbCaptchaKeys(db, keyring),

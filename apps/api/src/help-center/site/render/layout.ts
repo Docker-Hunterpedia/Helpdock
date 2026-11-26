@@ -189,8 +189,10 @@ const portalLinks = (view: ChromeView): { before: string; after: string } => {
   if (portal === null || portal === undefined) {
     return { before: '', after: '' };
   }
-  const before = `<a class="hd-portal-link" href="${esc(portal.ticketsHref)}">${icon('ticket', 16)}${esc(view.t('portal.nav.tickets'))}</a>`;
   const { session } = portal;
+  // Only a portal page knows who is signed in, and every one of them is under "My tickets".
+  const current = session === null ? '' : ' aria-current="page"';
+  const before = `<a class="hd-portal-link" href="${esc(portal.ticketsHref)}"${current}>${icon('ticket', 16)}${esc(view.t('portal.nav.tickets'))}</a>`;
   if (session === null) {
     return {
       before,

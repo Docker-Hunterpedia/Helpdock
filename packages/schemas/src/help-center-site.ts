@@ -259,6 +259,10 @@ export const hcSiteQuerySchema = z.object({
   token: z.string().max(200).optional(),
   /** The portal path to land on after signing in. */
   next: z.string().max(300).optional(),
+  /** The portal's ticket list (M21-03): `mine` or `company`, `open` or `solved`, and where the next page starts. */
+  scope: z.string().max(20).optional(),
+  state: z.string().max(20).optional(),
+  cursor: z.string().max(200).optional(),
 });
 export type HcSiteQuery = z.infer<typeof hcSiteQuerySchema>;
 

@@ -63,14 +63,15 @@ const powStrip = (pow: PowStrip): string => {
 const hiddenFields = (view: { csrf: string; locale: HcLocale; next: string | null }): string =>
   `<input type="hidden" name="csrf" value="${esc(view.csrf)}"><input type="hidden" name="lang" value="${view.locale}">${view.next === null ? '' : `<input type="hidden" name="next" value="${esc(view.next)}">`}`;
 
-const heading = (text: string): string =>
+export const heading = (text: string): string =>
   `<h1 class="hd-display hd-portal-h1" id="hd-h1" tabindex="-1">${esc(text)}</h1>`;
 
 /** Moves focus to the h1 after each step (the board's accessibility note). The page's nonce'd script. */
 export const FOCUS_SCRIPT = "document.getElementById('hd-h1')?.focus();";
 
-const shell = (content: string): string =>
-  `<main class="hd-portal" id="hd-main" tabindex="-1"><div class="hd-portal-card">${content}</div></main>`;
+/** The card of a sign-in step; `after` is what the board draws under it, outside the card. */
+const shell = (content: string, after = ''): string =>
+  `<main class="hd-portal" id="hd-main" tabindex="-1"><div class="hd-portal-stack"><div class="hd-portal-card">${content}</div>${after}</div></main>`;
 
 export const signInMain = (view: SignInView): string => {
   const { t, error } = view;
@@ -84,7 +85,8 @@ export const signInMain = (view: SignInView): string => {
   const fieldError = invalid
     ? `<p class="hd-error" id="hd-email-error" role="alert">${icon('alert', 14)}<span>${esc(errorText)}</span></p>`
     : '';
-  return shell(`${heading(t('portal.signIn.title'))}
+  return shell(
+    `${heading(t('portal.signIn.title'))}
 <p class="hd-portal-lead">${esc(t('portal.signIn.lead'))}</p>
 ${warning}
 <form method="post" action="${esc(view.action)}" class="hd-portal-form" novalidate>
@@ -94,8 +96,9 @@ ${hiddenFields(view)}
 ${fieldError}</div>
 ${view.pow === null ? '' : powStrip(view.pow)}
 <button class="hd-button hd-button-lg hd-portal-wide" type="submit"${error === 'tooMany' ? ' disabled' : ''}>${esc(t('portal.signIn.submit'))}</button>
-</form>
-<p class="hd-caption hd-portal-note">${t('portal.signIn.newHere', { link: `<a href="${esc(view.contactHref)}">${esc(t('portal.signIn.sendMessage'))}</a>` })}</p>`);
+</form>`,
+    `<p class="hd-caption hd-portal-note hd-portal-outside">${t('portal.signIn.newHere', { link: `<a href="${esc(view.contactHref)}">${esc(t('portal.signIn.sendMessage'))}</a>` })}</p>`,
+  );
 };
 
 const bdi = (value: string): string =>
@@ -153,14 +156,12 @@ export const staleMain = (view: { t: Translate; signInHref: string }): string =>
 <div class="hd-portal-actions"><a class="hd-button hd-button-lg" href="${esc(view.signInHref)}">${esc(t('portal.stale.action'))}</a></div>`);
 };
 
-/** The signed-in landing M21-03 replaces with the ticket list: the title and nothing else. */
-export const ticketsMain = (view: { t: Translate }): string =>
-  `<main class="hd-portal-page" id="hd-main" tabindex="-1">${heading(view.t('portal.nav.tickets'))}</main>`;
-
 /** The sign-in pages' rules, after the help center's own; every value a token or a DESIGN scale step. */
 export const PORTAL_CSS = `
 .hd-portal { flex-grow: 1; inline-size: 100%; max-inline-size: 720px; margin-inline: auto; padding-block: 64px; padding-inline: 16px; display: flex; justify-content: center; align-items: flex-start; }
-.hd-portal-card { inline-size: 100%; max-inline-size: 440px; padding: 32px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; border: 1px solid var(--hd-border-default); border-radius: var(--hd-radius-lg); background: var(--hd-bg-surface); box-shadow: var(--hd-elevation-1); }
+.hd-portal-stack { inline-size: 100%; max-inline-size: 440px; display: flex; flex-direction: column; gap: 16px; }
+.hd-portal-outside { padding-inline: 8px; }
+.hd-portal-card { inline-size: 100%; padding: 32px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; border: 1px solid var(--hd-border-default); border-radius: var(--hd-radius-lg); background: var(--hd-bg-surface); box-shadow: var(--hd-elevation-1); }
 .hd-portal-page { flex-grow: 1; inline-size: 100%; max-inline-size: 1280px; margin-inline: auto; padding-block: 40px; padding-inline: 64px; }
 .hd-portal-h1 { font-size: 24px; line-height: 32px; }
 .hd-portal-h1:focus { outline: none; }

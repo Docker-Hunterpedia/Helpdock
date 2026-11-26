@@ -1023,6 +1023,20 @@
    "w": 2400,
    "x": 0,
    "y": 103000
+  },
+  "HelpCenterPortalTicket.dc.html": {
+   "h": 5380,
+   "title": "HelpCenter/Portal-Ticket",
+   "w": 2400,
+   "x": 4960,
+   "y": 103000
+  },
+  "HelpCenterPortalTickets.dc.html": {
+   "h": 3160,
+   "title": "HelpCenter/Portal-Tickets",
+   "w": 2400,
+   "x": 2480,
+   "y": 103000
   }
  },
  "createdOnFiles": {
@@ -1391,7 +1405,9 @@
   "AdminUxFixes.dc.html",
   "AdminTicketingPriorities.dc.html",
   "AdminTicketListToggleReplyTo.dc.html",
-  "HelpCenterPortalSignIn.dc.html"
+  "HelpCenterPortalSignIn.dc.html",
+  "HelpCenterPortalTickets.dc.html",
+  "HelpCenterPortalTicket.dc.html"
  ],
  "pages": [],
  "title": "Helpdock Design System"

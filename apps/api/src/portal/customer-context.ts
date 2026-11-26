@@ -9,7 +9,13 @@ import {
   type TenantContext,
   withTenant,
 } from '@helpdock/db';
-import { type CustomerSees, customerSees, parseBrandSettings } from '@helpdock/schemas';
+import {
+  type AccountRole,
+  type CustomerSees,
+  customerSees,
+  type PortalVisibility,
+  parseBrandSettings,
+} from '@helpdock/schemas';
 import { and, eq } from 'drizzle-orm';
 
 /**
@@ -47,6 +53,13 @@ export interface CustomerScope {
   /** The contact's account, when it has one that still exists in this brand. */
   readonly accountId: string | null;
   readonly sees: CustomerSees;
+  /**
+   * The account's setting and the contact's role, for the notices a page draws
+   * ("people at your company can see your tickets"). They never reach the
+   * policy: `sees` is what it reads. `own` and `member` when there is no account.
+   */
+  readonly visibility: PortalVisibility;
+  readonly role: AccountRole;
   /** The departments the brand shows in the portal (D-65): a list, or every one. */
   readonly departmentIds: readonly string[] | 'all';
 }
@@ -118,6 +131,8 @@ export const loadCustomerScope = (
           visibility: account?.visibility ?? 'own',
           role: contact.role,
         }),
+        visibility: account?.visibility ?? 'own',
+        role: account === undefined ? 'member' : contact.role,
         departmentIds: portal.departmentIds,
       };
     },

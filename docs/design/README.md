@@ -882,11 +882,13 @@ Built from [`Admin/UX-Fixes-2026-11`](artboards/AdminUxFixes.dc.html) (issue #45
 
 ### M21 Customer portal
 
-Customers sign in to a brand's help center by an emailed link and read their tickets there ([M21 plan](../in-development/M21-customer-portal.md)). The portal's other boards (`HelpCenter/Portal-Tickets`, `HelpCenter/Portal-Ticket`) are added with the deliverables that build them.
+Customers sign in to a brand's help center by an emailed link and read their tickets there ([M21 plan](../in-development/M21-customer-portal.md)). Its ticket list and ticket page boards are below; the new-ticket and header boards are added with the deliverables that build them.
 
 | Artboard | Deliverables | Screen | Source |
 |---|---|---|---|
 | `HelpCenter/Portal-SignIn` | M21-02 | [HelpCenter-Portal-SignIn.png](screens/m21/HelpCenter-Portal-SignIn.png) | [HelpCenterPortalSignIn.dc.html](artboards/HelpCenterPortalSignIn.dc.html) |
+| `HelpCenter/Portal-Tickets` | M21-03, M21-05 | [HelpCenter-Portal-Tickets.png](screens/m21/HelpCenter-Portal-Tickets.png) | [HelpCenterPortalTickets.dc.html](artboards/HelpCenterPortalTickets.dc.html) |
+| `HelpCenter/Portal-Ticket` | M21-03, M21-04, M21-05 | [HelpCenter-Portal-Ticket.png](screens/m21/HelpCenter-Portal-Ticket.png) | [HelpCenterPortalTicket.dc.html](artboards/HelpCenterPortalTicket.dc.html) |
 
 #### `HelpCenter/Portal-SignIn`
 

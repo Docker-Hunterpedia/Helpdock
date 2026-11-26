@@ -6,6 +6,7 @@ import {
   hashToken,
   isExpired,
   isTokenShaped,
+  maskCsrf,
   newToken,
   nonceCookieName,
   SESSION_TOUCH_INTERVAL_MS,
@@ -133,5 +134,37 @@ describe('csrf', () => {
     expect(csrfValid(key, 'cookie-a', '')).toBe(false);
     expect(csrfValid(key, 'cookie-a', 'forged')).toBe(false);
     expect(csrfValid(csrfKeyFrom(Buffer.alloc(32, 2)), 'cookie-a', token)).toBe(false);
+  });
+});
+
+describe('masked CSRF tokens', () => {
+  const key = csrfKeyFrom(Buffer.alloc(32, 3));
+  const cookie = 'c'.repeat(43);
+
+  it('differ on every call, and each one still validates', () => {
+    const token = csrfToken(key, cookie);
+    const first = maskCsrf(token);
+    const second = maskCsrf(token);
+
+    expect(first).not.toBe(second);
+    expect(first).not.toContain(token);
+    expect(csrfValid(key, cookie, first)).toBe(true);
+    expect(csrfValid(key, cookie, second)).toBe(true);
+  });
+
+  it('still accepts the unmasked token the sign-in pages carry', () => {
+    expect(csrfValid(key, cookie, csrfToken(key, cookie))).toBe(true);
+  });
+
+  it('refuses a mask of another cookie, a tampered mask and malformed ones', () => {
+    const mine = maskCsrf(csrfToken(key, cookie));
+    const other = maskCsrf(csrfToken(key, 'd'.repeat(43)));
+    const [pad, masked] = mine.split('.');
+
+    expect(csrfValid(key, cookie, other)).toBe(false);
+    expect(csrfValid(key, cookie, `${pad}.${(masked ?? '').slice(1)}A`)).toBe(false);
+    expect(csrfValid(key, cookie, `${pad}.`)).toBe(false);
+    expect(csrfValid(key, cookie, '.')).toBe(false);
+    expect(csrfValid(key, cookie, `${pad}.${masked}.${masked}`)).toBe(false);
   });
 });

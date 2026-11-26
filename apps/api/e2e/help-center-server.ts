@@ -45,6 +45,14 @@ import {
   IMPORTED_FILE_DOWNLOAD_PATH,
   withImportedArticle,
 } from './imported-article.ts';
+import {
+  PORTAL_ACME_ACCOUNT,
+  PORTAL_MANAGER,
+  PORTAL_MONA,
+  PORTAL_OWN_ONLY,
+  portalMonaFor,
+  portalTickets,
+} from './portal-fixtures.ts';
 
 const refundHits = [
   {
@@ -111,10 +119,37 @@ const fonts = loadFonts();
  */
 const portalStore = new MemoryPortalStore();
 portalStore.newCustomers = true;
-portalStore.known.set('mona@acme.example', {
+portalStore.known.set(PORTAL_MONA, {
   contactId: 'contact-mona',
   companyName: PORTAL_COMPANY,
+  accountId: PORTAL_ACME_ACCOUNT,
+  visibility: 'all',
+  role: 'member',
 });
+for (const locale of ['en', 'ar'] as const) {
+  portalStore.known.set(portalMonaFor(locale), {
+    contactId: 'contact-mona',
+    companyName: PORTAL_COMPANY,
+    accountId: PORTAL_ACME_ACCOUNT,
+    visibility: 'all',
+    role: 'member',
+  });
+}
+portalStore.known.set(PORTAL_OWN_ONLY, {
+  contactId: 'contact-lena',
+  companyName: PORTAL_COMPANY,
+  accountId: PORTAL_ACME_ACCOUNT,
+  visibility: 'own',
+  role: 'member',
+});
+portalStore.known.set(PORTAL_MANAGER, {
+  contactId: 'contact-maya',
+  companyName: PORTAL_COMPANY,
+  accountId: PORTAL_ACME_ACCOUNT,
+  visibility: 'managers',
+  role: 'manager',
+});
+portalStore.fixtures.push(...portalTickets(new Date()));
 const portalLimiter = new MemoryLimiter();
 const portalSite = new PortalSite({
   store: portalStore,
@@ -177,6 +212,13 @@ const serve = async (site: HelpCenterSite, port: number): Promise<void> => {
       const link = [...portalStore.sent].reverse().find((sent) => sent.to === email);
       return reply.header('cache-control', 'no-store').send({ url: link?.url ?? null });
     });
+    // Where the memory store's attachment redirect lands: a stand-in for the bucket's short-lived address.
+    server.get('/__e2e/file/:name', async (request, reply) =>
+      reply
+        .header('cache-control', 'private, no-store')
+        .type('text/plain')
+        .send(`file ${(request.params as { name: string }).name}`),
+    );
     server.post('/__e2e/expire', async (request, reply) => {
       portalStore.expireLinks((request.query as { email?: string }).email ?? '');
       return reply.send({ ok: true });

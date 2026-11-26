@@ -28,7 +28,6 @@ import {
   sentMain,
   signInMain,
   staleMain,
-  ticketsMain,
 } from './portal-pages.js';
 import type { LiveSession, TokenState } from './portal-store.js';
 import {
@@ -36,6 +35,7 @@ import {
   csrfValid,
   hashToken,
   isTokenShaped,
+  maskCsrf,
   NONCE_TTL_SECONDS,
   newToken,
   nonceCookieName,
@@ -43,6 +43,10 @@ import {
   safePortalNext,
   sessionCookieName,
 } from './session-rules.js';
+import { parseListQuery, type TicketListQuery } from './ticket-list-rules.js';
+import { TICKET_CSS, ticketListMain, ticketMain } from './ticket-pages.js';
+import { parseTicketReference, type TicketReference } from './ticket-reference.js';
+import type { AttachmentLookup, PortalTicketList, TicketLookup } from './ticket-views.js';
 
 /**
  * The customer portal's sign-in pages and routes (M21-02, ADR 0059, artboard
@@ -58,7 +62,9 @@ import {
  * | `GET /sign-in/confirm?token=` | the Continue page: reads the link, spends nothing |
  * | `POST /sign-in/confirm` | spends the link, sets the session cookie |
  * | `POST /sign-out`, `POST /sign-out-everywhere` | end the session, or all of the contact's |
- * | `GET /tickets` | the signed-in landing |
+ * | `GET /tickets` | the customer's ticket list (M21-03) |
+ * | `GET /tickets/<ref>` | one ticket, read-only; a ticket that is not the customer's is the help center's 404 |
+ * | `GET /tickets/<ref>/attachments/<id>` | a redirect to the file's short-lived address, after the parent ticket is authorised |
  *
  * Every answer is `private, no-store` and never reaches the page cache.
  */
@@ -96,6 +102,25 @@ export const PORTAL_CHALLENGE_IP_RULE: RateLimitRule = {
   windowSeconds: 15 * 60,
 };
 
+/**
+ * What one signed-in session may ask of the ticket pages: 120 page views (the
+ * list and the ticket pages together) and 60 file fetches in five minutes, per
+ * session. A person reading tickets stays well under both (a page a few seconds
+ * apart is about 60 in five minutes); a script walking references or files does
+ * not. They sit beside the widget's per-visitor write limits and are counted per
+ * api replica, like every limit.
+ */
+export const PORTAL_PAGE_RULE: RateLimitRule = {
+  bucket: 'portal-pages',
+  limit: 120,
+  windowSeconds: 5 * 60,
+};
+export const PORTAL_FILE_RULE: RateLimitRule = {
+  bucket: 'portal-files',
+  limit: 60,
+  windowSeconds: 5 * 60,
+};
+
 export type ConfirmOutcome =
   | { readonly kind: 'signed-in'; readonly contactId: string }
   | { readonly kind: 'expired' }
@@ -124,6 +149,8 @@ export interface PortalStore {
     readonly sessionTokenHash: string;
     readonly host: string;
     readonly userAgentFamily: string | null;
+    /** The language of the page the link was pressed on; a contact made by this sign-in keeps it. */
+    readonly locale: HcLocale;
     readonly now: Date;
   }): Promise<ConfirmOutcome>;
   /** The session the cookie names, if it is still good for this brand and host. */
@@ -133,6 +160,15 @@ export interface PortalStore {
     readonly host: string;
     readonly now: Date;
   }): Promise<LiveSession | null>;
+  /** The customer's tickets, newest change first, as the customer policy lets them be read (M21-03). */
+  tickets(session: LiveSession, query: TicketListQuery): Promise<PortalTicketList>;
+  ticket(session: LiveSession, reference: TicketReference): Promise<TicketLookup>;
+  /** A short-lived address for one file of a visible ticket, or null for every reason there is not one. */
+  attachment(
+    session: LiveSession,
+    reference: TicketReference,
+    attachmentId: string,
+  ): Promise<AttachmentLookup>;
   endSession(brandId: string, sessionId: string): Promise<void>;
   endAllSessions(brandId: string, contactId: string): Promise<void>;
 }
@@ -195,6 +231,8 @@ export interface PortalHost {
     readonly pow: boolean;
     readonly cookies?: readonly PortalCookie[];
   }): PortalResponse;
+  /** The help center's own not-found page, `private, no-store`, with the signed-in menu when there is a session. */
+  notFound(locale: HcLocale, session?: LiveSession, csrf?: string): PortalResponse;
   redirect(location: string, cookies?: readonly PortalCookie[]): PortalResponse;
   json(status: number, body: unknown): PortalResponse;
   plain(status: number, body: string): PortalResponse;
@@ -248,6 +286,33 @@ export const userAgentFamily = (userAgent: string | undefined): string | null =>
   return [browser ?? 'Browser', system === null ? '' : `on ${system}`].filter(Boolean).join(' ');
 };
 
+/** What a signed-in page works from: the live session and the cookie value it came from. */
+interface SignedIn {
+  readonly session: LiveSession;
+  readonly token: string;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The non-dismissible note over the list (artboard `HelpCenter/Portal-Tickets`):
+ * a member of an account that shows all tickets is told, on Mine, that coworkers
+ * see what they open; a manager is told, on Company, why they see everything.
+ */
+const noticeOf = (
+  scope: NonNullable<LiveSession['scope']>,
+  query: TicketListQuery,
+  company: string | null,
+): 'all' | 'manager' | null => {
+  if (company === null) {
+    return null;
+  }
+  if (query.scope === 'mine') {
+    return scope.visibility === 'all' ? 'all' : null;
+  }
+  return scope.role === 'manager' ? 'manager' : null;
+};
+
 const ok = <T>(parsed: { success: true; data: T } | { success: false }): T | null =>
   parsed.success ? parsed.data : null;
 
@@ -261,6 +326,9 @@ export class PortalSite {
   /** The portal's answer, or null when the path is not one of its own. */
   async handle(host: PortalHost): Promise<PortalResponse | null> {
     const { request, path } = host;
+    if (request.method === 'GET' && path.startsWith('/tickets/')) {
+      return this.#ticketRoute(host);
+    }
     if (!(PORTAL_PATHS as readonly string[]).includes(path)) {
       return null;
     }
@@ -348,11 +416,16 @@ export class PortalSite {
       query?: Record<string, string | undefined>;
       pow?: boolean;
       cookies?: readonly PortalCookie[];
-      session?: LiveSession;
-      csrf?: string;
+      css?: string;
+      /** The signed-in customer: the header draws their menu, its forms carrying a CSRF token masked for this response. */
+      live?: SignedIn;
     },
   ): PortalResponse {
-    const context = host.context(locale, page.session, page.csrf);
+    const context = host.context(
+      locale,
+      page.live?.session,
+      page.live === undefined ? undefined : this.#maskedCsrf(page.live),
+    );
     const other: HcLocale = locale === 'en' ? 'ar' : 'en';
     const params = new URLSearchParams();
     for (const [name, value] of Object.entries(page.query ?? {})) {
@@ -365,7 +438,7 @@ export class PortalSite {
       titleKey: page.titleKey,
       otherLocaleHref: `${host.links.base}${host.path}?${params.toString()}`,
       main: page.main,
-      css: PORTAL_CSS,
+      css: page.css ?? PORTAL_CSS,
       scripts: page.pow === true ? [FOCUS_SCRIPT, POW_SCRIPT] : [FOCUS_SCRIPT],
       ...(page.status === undefined ? {} : { status: page.status }),
     });
@@ -650,6 +723,7 @@ export class PortalSite {
       sessionTokenHash: hashToken(sessionToken),
       host: host.request.host,
       userAgentFamily: userAgentFamily(host.request.headers.userAgent),
+      locale,
       now,
     });
     if (outcome.kind !== 'signed-in') {
@@ -670,30 +744,161 @@ export class PortalSite {
 
   // ---------------------------------------------------------------- signed in
 
-  async #tickets(host: PortalHost): Promise<PortalResponse> {
-    const locale = host.locale(host.request.query.lang);
+  #maskedCsrf(live: SignedIn): string {
+    return maskCsrf(csrfToken(this.#deps.csrfKey, live.token));
+  }
+
+  /**
+   * Every page of a signed-in customer goes through here: the session is read
+   * once, a missing one sends the customer to sign in and back, and when the
+   * store slid the session's expiry the browser's cookie slides with it. The
+   * cookie refresh lives only here, so no page can forget it.
+   */
+  async #signedIn(
+    host: PortalHost,
+    locale: HcLocale,
+    next: string,
+    budget: RateLimitRule,
+    page: (live: SignedIn) => Promise<PortalResponse>,
+  ): Promise<PortalResponse> {
     const live = await this.#liveSession(host);
     if (live === null) {
-      return host.redirect(host.links.portalSignIn(locale, '/tickets'));
+      return host.redirect(host.links.portalSignIn(locale, next));
+    }
+    if (!(await this.#deps.limiter.consume(budget, `${host.brandId}:${live.session.id}`))) {
+      this.#deps.log.warn(
+        { securityEvent: 'portal.rate_limited', bucket: budget.bucket, brandId: host.brandId },
+        'customer portal security event',
+      );
+      const refused = host.plain(429, 'Too many requests');
+      return {
+        ...refused,
+        headers: { ...refused.headers, 'retry-after': String(budget.windowSeconds) },
+      };
+    }
+    const response = await page(live);
+    if (!live.session.touched) {
+      return response;
+    }
+    const name = this.#names(host).session;
+    return {
+      ...response,
+      cookies: [
+        ...response.cookies.filter((cookie) => cookie.name !== name),
+        this.#cookie(host, name, live.token, Math.floor(SESSION_TTL_MS / 1000)),
+      ],
+    };
+  }
+
+  /** The help center's 404, never a 403 and never a different page for "exists but not yours". */
+  #missing(host: PortalHost, locale: HcLocale, live: SignedIn): PortalResponse {
+    return host.notFound(locale, live.session, this.#maskedCsrf(live));
+  }
+
+  async #tickets(host: PortalHost): Promise<PortalResponse> {
+    const { query } = host.request;
+    const locale = host.locale(query.lang);
+    return this.#signedIn(host, locale, '/tickets', PORTAL_PAGE_RULE, async (live) => {
+      const { scope } = live.session;
+      if (scope === undefined) {
+        return host.redirect(host.links.portalSignIn(locale, '/tickets'));
+      }
+      const listQuery = parseListQuery(query, scope.sees);
+      const list = await this.#deps.store.tickets(live.session, listQuery);
+      const company = scope.sees === 'account' ? live.session.companyName : null;
+      return this.#page(host, locale, {
+        titleKey: 'portal.nav.tickets',
+        css: PORTAL_CSS + TICKET_CSS,
+        live,
+        main: ticketListMain({
+          t: translator(locale),
+          locale,
+          timeZone: host.config.timezone,
+          now: this.#now(),
+          listPath: `${host.links.base}/tickets`,
+          ticketPath: (reference) => host.links.portalTicket(reference, locale),
+          company,
+          scope: listQuery.scope,
+          state: listQuery.state,
+          q: listQuery.search.kind === 'text' ? listQuery.search.text : '',
+          list,
+          notice: noticeOf(scope, listQuery, company),
+        }),
+        query: {
+          scope: listQuery.scope === 'company' ? 'company' : undefined,
+          state: listQuery.state === 'solved' ? 'solved' : undefined,
+          q: listQuery.search.kind === 'text' ? listQuery.search.text : undefined,
+        },
+      });
+    });
+  }
+
+  /** `/tickets/<ref>` and `/tickets/<ref>/attachments/<id>`; any other shape under `/tickets/` is a 404. */
+  async #ticketRoute(host: PortalHost): Promise<PortalResponse> {
+    const locale = host.locale(host.request.query.lang);
+    const parts = host.path.split('/').slice(2);
+    const rawReference = parts[0] ?? '';
+    const isTicket = parts.length === 1;
+    const isFile = parts.length === 3 && parts[1] === 'attachments';
+    return this.#signedIn(
+      host,
+      locale,
+      host.path,
+      isFile ? PORTAL_FILE_RULE : PORTAL_PAGE_RULE,
+      async (live) => {
+        const reference = parseTicketReference(rawReference);
+        if (reference === null || !(isTicket || isFile)) {
+          return this.#missing(host, locale, live);
+        }
+        return isFile
+          ? this.#file(host, locale, live, reference, parts[2] ?? '')
+          : this.#ticket(host, locale, live, reference);
+      },
+    );
+  }
+
+  async #ticket(
+    host: PortalHost,
+    locale: HcLocale,
+    live: SignedIn,
+    reference: TicketReference,
+  ): Promise<PortalResponse> {
+    const found = await this.#deps.store.ticket(live.session, reference);
+    if (found.kind === 'missing') {
+      return this.#missing(host, locale, live);
+    }
+    if (found.kind === 'moved') {
+      return host.redirect(host.links.portalTicket(found.reference, locale));
     }
     return this.#page(host, locale, {
       titleKey: 'portal.nav.tickets',
-      main: ticketsMain({ t: translator(locale) }),
-      // The row's expiry just moved, so the browser's copy moves with it: the
-      // cookie slides only when the store touched the session.
-      cookies: live.session.touched
-        ? [
-            this.#cookie(
-              host,
-              this.#names(host).session,
-              live.token,
-              Math.floor(SESSION_TTL_MS / 1000),
-            ),
-          ]
-        : [],
-      session: live.session,
-      csrf: csrfToken(this.#deps.csrfKey, live.token),
+      css: PORTAL_CSS + TICKET_CSS,
+      live,
+      main: ticketMain({
+        t: translator(locale),
+        locale,
+        timeZone: host.config.timezone,
+        brandName: host.config.brandName,
+        listHref: host.links.portalTickets(locale),
+        attachmentPath: (ref, id) => host.links.portalAttachment(ref, id),
+        ticket: found.ticket,
+      }),
     });
+  }
+
+  /** A file is a redirect to its short-lived address, or the 404 that every refusal shares. */
+  async #file(
+    host: PortalHost,
+    locale: HcLocale,
+    live: SignedIn,
+    reference: TicketReference,
+    attachmentId: string,
+  ): Promise<PortalResponse> {
+    if (!UUID.test(attachmentId)) {
+      return this.#missing(host, locale, live);
+    }
+    const file = await this.#deps.store.attachment(live.session, reference, attachmentId);
+    return file === null ? this.#missing(host, locale, live) : host.redirect(file.url);
   }
 
   async #signOut(host: PortalHost, everywhere: boolean): Promise<PortalResponse> {

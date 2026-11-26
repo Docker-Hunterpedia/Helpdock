@@ -81,6 +81,8 @@ export type TicketActivityAction =
    * manual; `from.snoozedUntil` is when it was due).
    */
   | 'ticket.snoozed'
+  /** M21-06. Marked private to the requester in the customer portal, or shared with their company again: `from.private`, `to.private`. */
+  | 'ticket.portal_private.changed'
   | 'ticket.woke';
 
 /**

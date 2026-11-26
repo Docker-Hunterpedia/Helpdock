@@ -234,7 +234,7 @@ export type HcStaffPassResponse = z.infer<typeof hcStaffPassResponseSchema>;
  */
 export const HC_SITE_CHANGED_EVENT = 'help_center.site_changed';
 
-export const hcSiteCardSchema = z.enum(['appearance', 'home', 'links', 'custom_css']);
+export const hcSiteCardSchema = z.enum(['appearance', 'home', 'links', 'custom_css', 'portal']);
 export type HcSiteCard = z.infer<typeof hcSiteCardSchema>;
 
 // --------------------------------------------------------------------------

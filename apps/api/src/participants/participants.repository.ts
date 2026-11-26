@@ -77,10 +77,21 @@ export class ParticipantsRepository {
         name: sql<string>`coalesce(${survivor.name}, ${contacts.name})`,
         address: ticketParticipants.address,
         source: ticketParticipants.source,
+        addedByName: users.name,
+        // The customer portal's own rule (DOMAIN-RULES §2.5, the same test as
+        // `helpdock_portal_contact_ids`): a staff action, and the address is a
+        // verified email identity of that very contact.
+        seesInPortal: sql<boolean>`(${ticketParticipants.source}::text in ('agent', 'merge') and ${ticketParticipants.address} is not null and exists (
+          select 1 from ${contactIdentities} ci
+          where ci.contact_id = ${ticketParticipants.contactId}
+            and ci.kind = 'email' and ci.verified
+            and lower(ci.value) = lower(${ticketParticipants.address})
+        ))`,
       })
       .from(ticketParticipants)
       .innerJoin(contacts, eq(contacts.id, ticketParticipants.contactId))
       .leftJoin(survivor, eq(survivor.id, contacts.mergedIntoId))
+      .leftJoin(users, eq(users.id, ticketParticipants.addedBy))
       .where(eq(ticketParticipants.ticketId, ticketId))
       .orderBy(asc(ticketParticipants.createdAt));
   }

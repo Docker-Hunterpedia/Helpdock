@@ -48,6 +48,7 @@ import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
 import type { MediaRepository } from '../media/media.repository.js';
 import { uploaderFor } from '../media/uploader.js';
+import { readTicketPortalView } from '../portal-admin/ticket-portal-view.js';
 import type { SlaService } from '../sla/sla.service.js';
 // M1-06 lives in `ticketing/`; these five are what a ticket needs of it.
 import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values.js';
@@ -347,6 +348,8 @@ export class TicketsService {
       activityNextBefore: activity.nextBefore,
       csat: await this.#csat.forTicket(tx, found.ticket.brandId, ticketId),
       sla,
+      // M21-06: the private mark and who sees the ticket in the portal.
+      portal: await readTicketPortalView(tx, found.ticket),
       // M1-09: what was merged into this ticket, where it was merged to, and
       // what a split joined to it (DOMAIN-RULES §2.4).
       ...(await readMergeView(tx, found.ticket, new Date(), this.#attachments)),

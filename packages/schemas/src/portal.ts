@@ -89,3 +89,132 @@ export const portalSessionFormSchema = z.object({
   lang: z.string().max(10).optional(),
 });
 export type PortalSessionForm = z.infer<typeof portalSessionFormSchema>;
+
+// --------------------------------------------------------------------------
+// The staff side (M21-06)
+// --------------------------------------------------------------------------
+
+/**
+ * `PUT /api/brands/:brandId/portal-settings`: the whole `settings.portal` block
+ * and nothing else. "Only these departments" needs at least one, and a list
+ * never repeats an id; that every id is a department of the brand is the
+ * service's check, because only the database knows.
+ */
+export const portalSettingsUpdateSchema = z
+  .strictObject({
+    enabled: z.boolean(),
+    newCustomers: z.boolean(),
+    departmentIds: z.union([z.array(z.uuid()).min(1).max(200), z.literal('all')]),
+  })
+  .refine(
+    (value) =>
+      value.departmentIds === 'all' ||
+      new Set(value.departmentIds).size === value.departmentIds.length,
+    { message: 'A department is listed once', path: ['departmentIds'] },
+  );
+export type PortalSettingsUpdate = z.infer<typeof portalSettingsUpdateSchema>;
+
+/** `PUT /api/brands/:brandId/accounts/:accountId/portal`. */
+export const accountPortalUpdateSchema = z
+  .strictObject({
+    visibility: portalVisibilitySchema,
+    managerContactIds: z.array(z.uuid()).max(200),
+  })
+  .refine((value) => new Set(value.managerContactIds).size === value.managerContactIds.length, {
+    message: 'A manager is listed once',
+    path: ['managerContactIds'],
+  });
+export type AccountPortalUpdate = z.infer<typeof accountPortalUpdateSchema>;
+
+/** One member of an account on the account page's "Customer portal" section. */
+export const accountPortalMemberSchema = z.strictObject({
+  contactId: z.uuid(),
+  name: z.string(),
+  /** The address the person signs in with, when they have a verified one. */
+  email: z.string().nullable(),
+  role: accountRoleSchema,
+  /** The most recent portal activity of the contact; null when they never signed in. */
+  lastSignInAt: z.iso.datetime().nullable(),
+});
+export type AccountPortalMember = z.infer<typeof accountPortalMemberSchema>;
+
+export const accountPortalSchema = z.strictObject({
+  visibility: portalVisibilitySchema,
+  members: z.array(accountPortalMemberSchema).max(500),
+});
+export type AccountPortal = z.infer<typeof accountPortalSchema>;
+
+/** Why a contact sees what it sees; one word each, so the card can explain it. */
+export const portalSeesBecauseSchema = z.enum([
+  'no-account',
+  'own',
+  'manager',
+  'member-not-manager',
+  'all',
+]);
+export type PortalSeesBecause = z.infer<typeof portalSeesBecauseSchema>;
+
+/** `customerSees`, with the reason beside the answer. */
+export const portalSeesBecause = (input: {
+  readonly hasAccount: boolean;
+  readonly visibility: PortalVisibility;
+  readonly role: AccountRole;
+}): PortalSeesBecause => {
+  if (!input.hasAccount) {
+    return 'no-account';
+  }
+
+  switch (input.visibility) {
+    case 'all':
+      return 'all';
+    case 'managers':
+      return input.role === 'manager' ? 'manager' : 'member-not-manager';
+    case 'own':
+      return 'own';
+  }
+};
+
+/**
+ * One browser a customer is signed in on. Never the token hash, an address or
+ * the raw user agent: a family name, when it was last used and the help center
+ * host.
+ */
+export const contactPortalSessionSchema = z.strictObject({
+  id: z.uuid(),
+  userAgentFamily: z.string().nullable(),
+  lastSeenAt: z.iso.datetime(),
+  host: z.string(),
+});
+export type ContactPortalSession = z.infer<typeof contactPortalSessionSchema>;
+
+/** `GET /api/brands/:brandId/contacts/:contactId/portal`. */
+export const contactPortalAccessSchema = z.strictObject({
+  signedIn: z.boolean(),
+  /** The address of the most recent live session; null when there is none. */
+  signsInWith: z.string().nullable(),
+  sees: customerSeesSchema,
+  seesBecause: portalSeesBecauseSchema,
+  sessions: z.array(contactPortalSessionSchema).max(100),
+});
+export type ContactPortalAccess = z.infer<typeof contactPortalAccessSchema>;
+
+/** `POST .../portal/sign-out`: how many sessions ended. */
+export const contactPortalSignOutSchema = z.strictObject({ ended: z.int().nonnegative() });
+export type ContactPortalSignOut = z.infer<typeof contactPortalSignOutSchema>;
+
+/** `PUT /api/brands/:brandId/tickets/:ticketId/portal-private`. */
+export const ticketPortalPrivateUpdateSchema = z.strictObject({ private: z.boolean() });
+export type TicketPortalPrivateUpdate = z.infer<typeof ticketPortalPrivateUpdateSchema>;
+
+/**
+ * The details panel's "Customer portal" card: whether the ticket is private to
+ * its requester and who can see it in the portal now. `company` is null when the
+ * ticket is private, or the requester has no account, or the account shares
+ * nothing.
+ */
+export const ticketPortalViewSchema = z.strictObject({
+  private: z.boolean(),
+  requester: z.string().nullable(),
+  company: z.strictObject({ name: z.string(), audience: z.enum(['all', 'managers']) }).nullable(),
+});
+export type TicketPortalView = z.infer<typeof ticketPortalViewSchema>;

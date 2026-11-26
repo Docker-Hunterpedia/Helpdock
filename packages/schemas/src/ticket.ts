@@ -6,6 +6,7 @@ import { emailSenderKeySchema } from './email-sender-key.js';
 import { importMessageDetailsSchema, importSourceSchema } from './import.js';
 import { importSourceLink } from './import-source-link.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
+import { ticketPortalViewSchema } from './portal.js';
 import { ticketSlaSchema, ticketSlaSummarySchema } from './sla.js';
 import { MAX_TAGS_PER_BRAND, tagSchema } from './tags.js';
 import { ticketFieldFiltersParamSchema } from './ticket-field-filter.js';
@@ -572,6 +573,12 @@ export const ticketDetailSchema = z.object({
   merged: z.array(mergedTicketSchema).optional(),
   mergedInto: mergedIntoSchema.nullable().optional(),
   related: z.array(relatedTicketSchema).optional(),
+  /**
+   * M21-06. The "Customer portal" card: the private mark and who sees the
+   * ticket in the portal. Optional for the reason `tags` is; the api always
+   * fills it on the detail read.
+   */
+  portal: ticketPortalViewSchema.optional(),
 });
 export type TicketDetail = z.infer<typeof ticketDetailSchema>;
 

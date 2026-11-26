@@ -49,6 +49,7 @@ import { NotificationsModule } from './notifications/notifications.module.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { ParticipantsModule } from './participants/participants.module.js';
+import { PortalAdminModule } from './portal-admin/portal-admin.module.js';
 import { QuickSearchModule } from './quick-search/quick-search.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
 import { ReportsModule } from './reports/reports.module.js';
@@ -267,6 +268,8 @@ export class AppModule implements NestModule {
         ViewsModule.forRoot(),
         // M14-13: the Admin's "Get set up" checklist.
         SetupChecklistModule.forRoot(),
+        // M21-06: the staff side of the customer portal.
+        PortalAdminModule.forRoot(),
         // M2-05, M2-06: Channels › Outgoing email, signatures, the ticket
         // view's email context. Sending runs in the worker.
         EmailModule.forRoot(

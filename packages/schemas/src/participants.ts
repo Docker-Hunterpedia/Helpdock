@@ -19,6 +19,18 @@ export const ticketCcSchema = z.object({
   /** The normalized address it was added under; null for merged or imported contacts without one. */
   address: z.string().max(MAX_IDENTITY_LENGTH).nullable(),
   source: ticketParticipantSourceSchema,
+  /**
+   * M21-06. The staff member who added it, when a person did; null for mail, a
+   * merge, an import or a removed account. Optional for the reason `tags` is on
+   * a ticket: a client built before the field stays valid.
+   */
+  addedByName: z.string().nullable().optional(),
+  /**
+   * M21-06. Whether the customer portal will show this ticket to the CC: it
+   * was added by a staff action (`agent` or `merge`) and its address is a
+   * verified email identity of that contact (DOMAIN-RULES §2.5).
+   */
+  seesInPortal: z.boolean().optional(),
 });
 export type TicketCc = z.infer<typeof ticketCcSchema>;
 

@@ -266,7 +266,7 @@
       "truncated": "هذه الرسالة طويلة وتظهر جزئيًا.",
       "moreFiles_zero": "و{{count}} ملف آخر",
       "moreFiles_one": "و{{count}} ملف آخر",
-      "moreFiles_two": "و{{count}} ملفان آخران",
+      "moreFiles_two": "و{{count}} ملفين آخرين",
       "moreFiles_few": "و{{count}} ملفات أخرى",
       "moreFiles_many": "و{{count}} ملفًا آخر",
       "moreFiles_other": "و{{count}} ملف آخر"

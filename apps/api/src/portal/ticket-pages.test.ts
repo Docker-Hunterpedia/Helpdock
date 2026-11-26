@@ -48,7 +48,7 @@ describe('a long message and many files', () => {
   it('says how many files are not listed, with the plural of each language', () => {
     expect(page([message({ moreFiles: 1 })])).toContain('and 1 more file<');
     expect(page([message({ moreFiles: 7 })])).toContain('and 7 more files');
-    expect(page([message({ moreFiles: 2 })], 'ar')).toContain('وملفان آخران');
+    expect(page([message({ moreFiles: 2 })], 'ar')).toContain('و2 ملفين آخرين');
     expect(page([message({ moreFiles: 7 })], 'ar')).toContain('و7 ملفات أخرى');
     expect(page([message({ moreFiles: 0 })])).not.toContain('more file');
   });

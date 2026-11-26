@@ -14,6 +14,39 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 1.6.0 — 2026-11-26
+
+Two inbox additions, a security fix for incoming email, and the first parts of
+the customer portal. **This release has two migrations, and one of them takes
+time on a large install; read the upgrade note before upgrading.**
+
+- **Upgrade note.** The `0079_customer_portal` migration rewrites every ticket,
+  public message and attachment once under exclusive locks. Helpdock is
+  unavailable while it runs, for a time in proportion to their number. Take a
+  database dump first and plan a maintenance window; see
+  [Upgrading](docs/guides/operations.md) in the operations guide.
+- **Security: incoming email.** Email that the receiving mail server reports as
+  failing authentication, or as not matching its From address, no longer adds
+  its Cc addresses to a ticket or marks its sender's address as verified. It
+  still joins its ticket with the existing warning, and replies still reach the
+  customer. Mail that arrives with no authentication report is handled as
+  before, so this protects only where your inbound method carries the report;
+  the email guide's "Sender checks" section lists which do.
+- **Reply to one email.** Each email a customer sent has its own Reply button.
+  The reply quotes that email and is threaded to it in the customer's mail
+  client. It goes to the ticket's usual To and Cc, and the reply box says so
+  when the quoted email came from someone else.
+- **A button for the ticket list.** The ticket header has a button to hide and
+  show the ticket list, beside the existing `[` key.
+- **Invitations.** Accepting an invitation with a Google, GitHub or Microsoft
+  account that is not the invited address now always returns to the invitation
+  with the name typed; on a slow first load it could lose the way back.
+- **Customer portal, first parts (off by default).** Customers can sign in to a
+  brand's help center with a link sent to their email. Nothing shows unless a
+  brand's `portal.enabled` setting is on; there is no admin screen for it yet,
+  and the ticket pages, replying and the company-wide view come in later
+  releases. See the [customer portal guide](docs/guides/customer-portal.md).
+
 ## 1.5.0 — 2026-11-13
 
 Editable priority names, and dependency security updates. No migrations and no

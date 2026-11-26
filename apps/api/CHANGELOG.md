@@ -1,5 +1,25 @@
 # @helpdock/api
 
+## 1.6.0
+
+### Minor Changes
+
+- [#481](https://github.com/Docker-Hunterpedia/Helpdock/pull/481) [`5603c7c`](https://github.com/Docker-Hunterpedia/Helpdock/commit/5603c7c355fdb5dd9bd0151c465edf12d4128afb) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Groundwork for the customer portal: no visible change (M21-01). A new `customer` principal, the portal's session and sign-in-link tables, and row-level-security policies that give it only the tickets, public messages and files it may read.
+  
+  Upgrade note: this release's `0079_customer_portal` migration rewrites every ticket, public message and attachment once under exclusive locks. Expect downtime proportional to their size, take a dump first, and see the operations guide.
+
+- [#486](https://github.com/Docker-Hunterpedia/Helpdock/pull/486) [`00ba5fe`](https://github.com/Docker-Hunterpedia/Helpdock/commit/00ba5fe5c27f91a72e7f7a08f825d88f43862d4c) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Customers can sign in to a brand's help center with an emailed link (M21-02). With `brands.settings.portal.enabled` on, the help center header gains "My tickets" and "Sign in", and `/sign-in` asks for an address and emails a single-use link that is valid for 15 minutes and spent by pressing Continue, which starts a 30-day session (`__Host-` cookie). Sign out and Sign out everywhere end it. The page answers the same for known and unknown addresses; 5 requests per address and 20 per IP per hour; the built-in CAPTCHA is asked for when the brand's web form has it on. There is no admin screen for the setting yet (M21-06) and "My tickets" is a signed-in landing only (M21-03 builds the list).
+
+- [#469](https://github.com/Docker-Hunterpedia/Helpdock/pull/469) [`c53a094`](https://github.com/Docker-Hunterpedia/Helpdock/commit/c53a0945d16f1e5fbf8a8189a4a72d4334864745) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Reply to one email of a ticket (M14-31). A Reply button on each email a customer sent opens the composer on a "Replying to" strip; the server quotes that email under the reply and sets `In-Reply-To` and `References` to it. The public reply request takes an optional `replyToMessageId`, and messages carry it back.
+
+- [#468](https://github.com/Docker-Hunterpedia/Helpdock/pull/468) [`32c73a5`](https://github.com/Docker-Hunterpedia/Helpdock/commit/32c73a5f3c439ffeac7adb834e7e7818170c3295) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - The ticket header has a button that hides and shows the ticket list on a wide screen, in place of the full-width "Show the ticket list" row (M14-30).
+
+### Patch Changes
+
+- [#483](https://github.com/Docker-Hunterpedia/Helpdock/pull/483) [`4278aae`](https://github.com/Docker-Hunterpedia/Helpdock/commit/4278aaea8d20a27e148e9eb03cb86a93cf370a45) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Email that the receiving server reports as failing authentication, or as not matching its From address, no longer adds its Cc addresses to a ticket or marks its sender's address as verified.
+
+- [#484](https://github.com/Docker-Hunterpedia/Helpdock/pull/484) [`1999804`](https://github.com/Docker-Hunterpedia/Helpdock/commit/1999804f1bdbf899d509a1af516d511dbac3f7aa) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Accepting an invitation with a Google, GitHub or Microsoft account that is not the invited address now always returns to the invitation with the typed name. On a slow first load it could show "this tab no longer knows which invitation it came from" instead.
+
 ## 1.5.0
 
 ### Minor Changes

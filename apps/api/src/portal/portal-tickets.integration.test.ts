@@ -259,6 +259,7 @@ describe.skipIf(!hasDocker)('the customer portal ticket pages (M21-03)', () => {
     ticketKey: string,
     messageKey: string,
     fileStatus: 'ready' | 'pending' = 'ready',
+    name?: string,
   ): Promise<void> => {
     const id = uuidv7();
     t[key] = id;
@@ -272,7 +273,7 @@ describe.skipIf(!hasDocker)('the customer portal ticket pages (M21-03)', () => {
         uploaderType: 'contact',
         uploaderId: 'test',
         s3Key: `brands/${brandA()}/tickets/${t[ticketKey] ?? ''}/${id}/original`,
-        originalName: `${key}.pdf`,
+        originalName: name ?? `${key}.pdf`,
         mime: 'application/pdf',
         size: 10,
         kind: 'file',
@@ -719,7 +720,7 @@ describe.skipIf(!hasDocker)('the customer portal ticket pages (M21-03)', () => {
             .select({ id: tickets.id })
             .from(tickets)
             .where(and(scopedTickets(live, which, cc), stateWhere('open')))
-            .orderBy(desc(tickets.updatedAt), desc(tickets.id))
+            .orderBy(desc(tickets.updatedAt), desc(tickets.number))
             .limit(21);
           const result = await tx.execute(sql`explain (format json) ${query}`);
           return JSON.stringify(result);
@@ -960,6 +961,314 @@ describe.skipIf(!hasDocker)('the customer portal ticket pages (M21-03)', () => {
       } finally {
         await setPortal(brandA(), { enabled: true, departmentIds: [supportId] });
       }
+    });
+  });
+
+  describe('tickets merged into one the customer reads (DOMAIN-RULES §2.4)', () => {
+    const cast = async (
+      key: string,
+      values: Partial<typeof tickets.$inferInsert> & { contactId: string | null },
+      text: string,
+      author = who.omar ?? null,
+    ) => {
+      await seedTicket(key, values);
+      await seedMessage(`${key}M`, key, 'public', text, { type: 'contact', id: author });
+      await seedFile(`${key}F`, key, `${key}M`);
+    };
+    const mergedInto = (key: string) => ({
+      mergedIntoId: t[key] ?? null,
+      statusId: status.merged ?? '',
+      closedAt: new Date(),
+    });
+    const fileUrl = (ticketKey: string, fileKey: string) =>
+      `/tickets/${refs[ticketKey] ?? ''}/attachments/${t[fileKey] ?? ''}`;
+
+    beforeAll(async () => {
+      // A public primary of Omar's, with secondaries that each fail or pass one rule.
+      await cast('mpPrimary', { contactId: who.omar ?? null }, 'MP-PRIMARY-TEXT');
+      await cast(
+        'mpPublic',
+        { contactId: who.omar ?? null, ...mergedInto('mpPrimary') },
+        'MP-PUBLIC-TEXT',
+      );
+      await cast(
+        'mpPrivate',
+        { contactId: who.omar ?? null, portalPrivate: true, ...mergedInto('mpPrimary') },
+        'MP-PRIVATE-TEXT',
+      );
+      await cast(
+        'mpHidden',
+        {
+          contactId: who.omar ?? null,
+          preMergeDepartmentId: hrId,
+          ...mergedInto('mpPrimary'),
+        },
+        'MP-HIDDEN-DEPARTMENT-TEXT',
+      );
+      await cast(
+        'mpSpam',
+        {
+          contactId: who.omar ?? null,
+          preMergeStatusId: status.spam ?? '',
+          ...mergedInto('mpPrimary'),
+        },
+        'MP-SPAM-TEXT',
+      );
+      await cast(
+        'mpDeleted',
+        { contactId: who.omar ?? null, deletedAt: new Date(), ...mergedInto('mpPrimary') },
+        'MP-DELETED-TEXT',
+      );
+
+      // A private primary: the audience of the primary, whatever the secondaries were.
+      await cast(
+        'ppPrimary',
+        { contactId: who.omar ?? null, portalPrivate: true },
+        'PP-PRIMARY-TEXT',
+      );
+      await cast(
+        'ppPrivate',
+        { contactId: who.omar ?? null, portalPrivate: true, ...mergedInto('ppPrimary') },
+        'PP-PRIVATE-TEXT',
+      );
+      await ccOf('ppPrimary', 'lena', 'agent');
+
+      // Chains, each link tested on its own row.
+      await cast('chA', { contactId: who.omar ?? null }, 'CH-A-TEXT');
+      await cast('chB', { contactId: who.omar ?? null, ...mergedInto('chA') }, 'CH-B-TEXT');
+      await cast(
+        'chC',
+        { contactId: who.omar ?? null, portalPrivate: true, ...mergedInto('chB') },
+        'CH-C-PRIVATE-TEXT',
+      );
+      await cast('chA2', { contactId: who.omar ?? null }, 'CH-A2-TEXT');
+      await cast(
+        'chB2',
+        { contactId: who.omar ?? null, portalPrivate: true, ...mergedInto('chA2') },
+        'CH-B2-PRIVATE-TEXT',
+      );
+      await cast('chC2', { contactId: who.omar ?? null, ...mergedInto('chB2') }, 'CH-C2-TEXT');
+    });
+
+    const read = async (viewer: string, ticketKey: string) =>
+      get(HOST_A, `/tickets/${refs[ticketKey] ?? ''}`, await cookieFor(viewer));
+
+    it('shows a coworker the public secondary, and withholds a private one, a hidden-department one, a spam one and a deleted one, with nothing in their place', async () => {
+      await setVisibility('all');
+      const reply = await read('mona', 'mpPrimary');
+      const body = mainOf(reply);
+
+      expect(reply.status).toBe(200);
+      expect(body).toContain('MP-PRIMARY-TEXT');
+      expect(body).toContain('MP-PUBLIC-TEXT');
+      expect(body).toContain(`/attachments/${t.mpPublicF ?? ''}`);
+      for (const hidden of [
+        'MP-PRIVATE-TEXT',
+        'MP-HIDDEN-DEPARTMENT-TEXT',
+        'MP-SPAM-TEXT',
+        'MP-DELETED-TEXT',
+      ]) {
+        expect(body, hidden).not.toContain(hidden);
+      }
+      for (const file of ['mpPrivateF', 'mpHiddenF', 'mpSpamF', 'mpDeletedF']) {
+        expect(body, file).not.toContain(t[file] ?? 'x');
+      }
+      // No hint that anything was left out.
+      expect(body).not.toMatch(/withheld|not shown|merged/i);
+      expect(body.match(/<article/g)).toHaveLength(2);
+    });
+
+    it('answers 404 for the files of every withheld secondary, and redirects for the public one', async () => {
+      await setVisibility('all');
+      const cookies = await cookieFor('mona');
+
+      expect((await get(HOST_A, fileUrl('mpPrimary', 'mpPublicF'), cookies)).status).toBe(303);
+      for (const file of ['mpPrivateF', 'mpHiddenF', 'mpSpamF', 'mpDeletedF']) {
+        const reply = await get(HOST_A, fileUrl('mpPrimary', file), cookies);
+        expect(reply.status, file).toBe(404);
+        expect(reply.headers.location).toBeUndefined();
+      }
+    });
+
+    it('shows the private secondary to its own requester, and still not the hidden-department, spam or deleted ones', async () => {
+      await setVisibility('all');
+      const reply = await read('omar', 'mpPrimary');
+      const body = mainOf(reply);
+
+      expect(body).toContain('MP-PRIVATE-TEXT');
+      expect(body).toContain('MP-PUBLIC-TEXT');
+      for (const hidden of ['MP-HIDDEN-DEPARTMENT-TEXT', 'MP-SPAM-TEXT', 'MP-DELETED-TEXT']) {
+        expect(body, hidden).not.toContain(hidden);
+      }
+      expect(
+        (await get(HOST_A, fileUrl('mpPrimary', 'mpPrivateF'), await cookieFor('omar'))).status,
+      ).toBe(303);
+      expect(
+        (await get(HOST_A, fileUrl('mpPrimary', 'mpHiddenF'), await cookieFor('omar'))).status,
+      ).toBe(404);
+    });
+
+    it('gives a private primary’s merged private ticket the primary’s own audience: its requester and a staff-added CC, not a coworker', async () => {
+      await setVisibility('all');
+
+      expect((await read('mona', 'ppPrimary')).status).toBe(404);
+      expect(
+        (await get(HOST_A, fileUrl('ppPrimary', 'ppPrivateF'), await cookieFor('mona'))).status,
+      ).toBe(404);
+      for (const viewer of ['omar', 'lena']) {
+        const reply = await read(viewer, 'ppPrimary');
+        expect(reply.status, viewer).toBe(200);
+        expect(mainOf(reply), viewer).toContain('PP-PRIVATE-TEXT');
+        expect(
+          (await get(HOST_A, fileUrl('ppPrimary', 'ppPrivateF'), await cookieFor(viewer))).status,
+          viewer,
+        ).toBe(303);
+      }
+    });
+
+    it('tests each link of a chain on its own row', async () => {
+      await setVisibility('all');
+      const coworker = mainOf(await read('mona', 'chA'));
+      const owner = mainOf(await read('omar', 'chA'));
+
+      expect(coworker).toContain('CH-A-TEXT');
+      expect(coworker).toContain('CH-B-TEXT');
+      expect(coworker).not.toContain('CH-C-PRIVATE-TEXT');
+      expect(owner).toContain('CH-C-PRIVATE-TEXT');
+
+      // A withheld link takes what was merged into it along.
+      const second = mainOf(await read('mona', 'chA2'));
+      expect(second).toContain('CH-A2-TEXT');
+      expect(second).not.toContain('CH-B2-PRIVATE-TEXT');
+      expect(second).not.toContain('CH-C2-TEXT');
+      const secondOwner = mainOf(await read('omar', 'chA2'));
+      expect(secondOwner).toContain('CH-B2-PRIVATE-TEXT');
+      expect(secondOwner).toContain('CH-C2-TEXT');
+      expect((await get(HOST_A, fileUrl('chA', 'chCF'), await cookieFor('mona'))).status).toBe(404);
+      expect((await get(HOST_A, fileUrl('chA2', 'chC2F'), await cookieFor('mona'))).status).toBe(
+        404,
+      );
+      expect((await get(HOST_A, fileUrl('chA', 'chBF'), await cookieFor('mona'))).status).toBe(303);
+    });
+  });
+
+  describe('rows beyond what a page can hold', () => {
+    it('clips an oversized body, subject and file name, and lists the first 50 files with a count of the rest', async () => {
+      await seedTicket('bigTicket', { contactId: who.mona ?? null, subject: 'S'.repeat(2500) });
+      await seedMessage('bigM', 'bigTicket', 'public', `${'x'.repeat(300_000)}`, {
+        type: 'contact',
+        id: who.mona ?? null,
+      });
+      for (let n = 0; n < 60; n += 1) {
+        await seedFile(
+          `bigF${String(n)}`,
+          'bigTicket',
+          'bigM',
+          'ready',
+          `${'n'.repeat(400)}${String(n)}.pdf`,
+        );
+      }
+      const reply = await get(HOST_A, `/tickets/${refs.bigTicket ?? ''}`, await cookieFor('mona'));
+      const body = mainOf(reply);
+
+      expect(reply.status).toBe(200);
+      expect(body).toContain('This message is long and is shown in part.');
+      expect(body).toContain('and 10 more files');
+      expect(body.match(/class="hd-pt-file"/g)).toHaveLength(50);
+      expect(body).not.toContain('S'.repeat(1001));
+      expect(body).not.toContain('n'.repeat(256));
+      expect(body.length).toBeLessThan(600_000);
+      const list = await get(HOST_A, '/tickets?lang=en', await cookieFor('mona'));
+      expect(list.status).toBe(200);
+      expect(mainOf(list)).not.toContain('S'.repeat(1001));
+    });
+  });
+
+  describe('a file moved between messages', () => {
+    it('follows its new message: gone with a note, back under a public message', async () => {
+      await setVisibility('own');
+      await seedTicket('moveTicket', { contactId: who.mona ?? null });
+      await seedMessage('moveOne', 'moveTicket', 'public', 'MOVE-ONE-TEXT', {
+        type: 'contact',
+        id: who.mona ?? null,
+      });
+      await seedMessage('moveTwo', 'moveTicket', 'public', 'MOVE-TWO-TEXT', {
+        type: 'contact',
+        id: who.mona ?? null,
+      });
+      await seedMessage('moveNote', 'moveTicket', 'note', 'MOVE-NOTE-TEXT', {
+        type: 'staff',
+        id: null,
+      });
+      await seedFile('moveFile', 'moveTicket', 'moveOne');
+      const cookies = await cookieFor('mona');
+      const url = `/tickets/${refs.moveTicket ?? ''}`;
+      const articleOf = (body: string, text: string) =>
+        new RegExp(`<article[^]*?${text}[^]*?</article>`).exec(body)?.[0] ?? '';
+      const moveTo = (messageKey: string) =>
+        withSystem(runtime.db, brandA(), (tx) =>
+          tx
+            .update(attachments)
+            .set({ messageId: t[messageKey] ?? null })
+            .where(eq(attachments.id, t.moveFile ?? '')),
+        );
+
+      expect(articleOf(mainOf(await get(HOST_A, url, cookies)), 'MOVE-ONE-TEXT')).toContain(
+        t.moveFile ?? 'x',
+      );
+
+      await moveTo('moveNote');
+      const afterNote = await get(HOST_A, url, cookies);
+      expect(mainOf(afterNote)).not.toContain(t.moveFile ?? 'x');
+      expect((await get(HOST_A, `${url}/attachments/${t.moveFile ?? ''}`, cookies)).status).toBe(
+        404,
+      );
+
+      await moveTo('moveTwo');
+      const afterTwo = mainOf(await get(HOST_A, url, cookies));
+      expect(articleOf(afterTwo, 'MOVE-TWO-TEXT')).toContain(t.moveFile ?? 'x');
+      expect(articleOf(afterTwo, 'MOVE-ONE-TEXT')).not.toContain(t.moveFile ?? 'x');
+      expect((await get(HOST_A, `${url}/attachments/${t.moveFile ?? ''}`, cookies)).status).toBe(
+        303,
+      );
+    });
+  });
+
+  describe('names shown for other people', () => {
+    it('never shows a phone number or a channel id as a name, and falls back to words', async () => {
+      await setVisibility('all');
+      await addContact(brandA(), 'phoneContact', {
+        name: '201234567890',
+        accountId: who.acme ?? null,
+      });
+      await seedTicket('phoneTicket', { contactId: who.phoneContact ?? null });
+      await seedMessage('phoneM', 'phoneTicket', 'public', 'PHONE-TEXT', {
+        type: 'contact',
+        id: who.phoneContact ?? null,
+      });
+      const cookies = await cookieFor('mona');
+      const page = await get(HOST_A, `/tickets/${refs.phoneTicket ?? ''}`, cookies);
+      const company = await get(HOST_A, '/tickets?scope=company', cookies);
+
+      expect(mainOf(page)).toContain('Another participant');
+      expect(mainOf(page)).toMatch(/Opened \d+ \w+ \d{4} · by email/);
+      expect(mainOf(company)).toContain('Opened by a coworker');
+      expect(page.body).not.toContain('201234567890');
+      expect(company.body).not.toContain('201234567890');
+    });
+  });
+
+  describe('the pagination cursor', () => {
+    it('carries the ticket number and the instant, and no internal id', async () => {
+      await setVisibility('own');
+      const cookies = await cookieFor('lena');
+      const first = await get(HOST_A, '/tickets?lang=en', cookies);
+      const link = /href="([^"]*cursor=([^"&]+)[^"]*)"/.exec(mainOf(first));
+      const decoded = Buffer.from(decodeURIComponent(link?.[2] ?? ''), 'base64url').toString();
+
+      expect(link).not.toBeNull();
+      expect(JSON.parse(decoded)).toEqual({ u: expect.any(String), n: expect.any(Number) });
+      expect(decoded).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
     });
   });
 });

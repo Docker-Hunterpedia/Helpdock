@@ -104,7 +104,9 @@ const message = {
   author: { kind: 'you' },
   at: AT,
   text: 'Hello',
+  truncated: false,
   attachments: [attachment],
+  moreFiles: 0,
 };
 const ticket = {
   reference: 'HD-1042',
@@ -252,5 +254,30 @@ describe('displayNameOf', () => {
     expect(displayNameOf('@acme.example')).toBeNull();
     expect(displayNameOf('   ')).toBeNull();
     expect(displayNameOf('x'.repeat(500))?.length).toBe(200);
+  });
+
+  it.each([
+    ['a WhatsApp number', '201234567890'],
+    ['a formatted phone number', '+20 123 456 7890'],
+    ['an Arabic-digit number', '٠١٢٣٤٥٦٧٨٩٠١'],
+    ['a Messenger scoped id', '6543219870123456'],
+    ['a Telegram chat id', '-1001234567890'],
+    ['an Instagram handle', '@omar_saleh'],
+    ['the widget placeholder', 'Visitor 1a2b3c'],
+  ])('refuses %s as a name', (_what, name) => {
+    expect(displayNameOf(name)).toBeNull();
+  });
+
+  it('refuses a name that is the contact’s own identity value on any channel', () => {
+    expect(displayNameOf('omar_saleh', ['@omar_saleh'])).toBeNull();
+    expect(displayNameOf('Omar.Saleh', ['omar.saleh'])).toBeNull();
+    expect(displayNameOf('omar@acme.example', ['omar@acme.example'])).toBeNull();
+    expect(displayNameOf('Omar Saleh', ['omar@acme.example', '201234567890'])).toBe('Omar Saleh');
+  });
+
+  it('keeps ordinary names with a digit or two', () => {
+    expect(displayNameOf('Room 12 Desk')).toBe('Room 12 Desk');
+    expect(displayNameOf('Omar 2')).toBe('Omar 2');
+    expect(displayNameOf('عمر صالح')).toBe('عمر صالح');
   });
 });

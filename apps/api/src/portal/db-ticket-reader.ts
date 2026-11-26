@@ -1,5 +1,6 @@
 import {
   attachments,
+  contactIdentities,
   contacts,
   type Db,
   type DbTransaction,
@@ -14,8 +15,17 @@ import {
 import { publicNameOf } from '@helpdock/schemas';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, type SQL, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { MediaService } from '../media/media.service.js';
 import { type CustomerScope, customerTenantContext } from './customer-context.js';
+import {
+  clipLine,
+  clipText,
+  FILE_NAME_MAX,
+  FILES_PER_MESSAGE_MAX,
+  MESSAGE_TEXT_MAX,
+  SUBJECT_MAX,
+} from './portal-clip.js';
 import {
   encodeCursor,
   likePattern,
@@ -175,11 +185,51 @@ export interface ContactName {
   readonly sameAccount: boolean;
 }
 
-/** A display name never carries an address: `omar@acme.example` is shown as `omar`. */
-export const displayNameOf = (name: string): string | null => {
+/** What a channel calls a contact it knows nothing else about: the widget's `Visitor 1a2b3c`. */
+const PLACEHOLDER_NAME = /^visitor [0-9a-f]{6}$/i;
+
+const bare = (value: string): string =>
+  value
+    .trim()
+    .replace(/^[@+]+/, '')
+    .toLowerCase();
+
+/**
+ * A name a customer may be shown for somebody else, or null.
+ *
+ * A contact a channel creates without a name is named by what identifies them
+ * there: a WhatsApp number (`201234567890`), a Messenger or Instagram scoped id,
+ * a Telegram chat id, an Instagram `@handle`, the widget's `Visitor 1a2b3c`. None
+ * of those is a name, and some are contact details of a person the viewer never
+ * met, so a name is refused when it:
+ *
+ * - is address-shaped (cut to what is before the `@`; nothing before it is no name);
+ * - starts with `@` (a handle);
+ * - is mostly digits (a phone number or an id);
+ * - is the widget's placeholder;
+ * - equals one of the contact's own identity values on any channel.
+ *
+ * The page then says "a coworker" or "another participant".
+ */
+export const displayNameOf = (
+  name: string,
+  identityValues: readonly string[] = [],
+): string | null => {
   const trimmed = name.trim();
-  const shown = trimmed.includes('@') ? (trimmed.split('@')[0] ?? '') : trimmed;
-  return shown === '' ? null : shown.slice(0, 200);
+  if (trimmed === '' || trimmed.startsWith('@') || PLACEHOLDER_NAME.test(trimmed)) {
+    return null;
+  }
+  const shown = trimmed.includes('@') ? (trimmed.split('@')[0] ?? '').trim() : trimmed;
+  const letters = shown.replace(/\s/g, '');
+  const digits = letters.replace(/[^0-9٠-٩۰-۹]/g, '').length;
+  if (
+    shown === '' ||
+    digits * 2 >= letters.length ||
+    identityValues.some((value) => bare(value) === bare(shown) || bare(value) === bare(trimmed))
+  ) {
+    return null;
+  }
+  return shown.slice(0, 200);
 };
 
 /**
@@ -203,11 +253,31 @@ export const contactNames = (
           })
           .from(contacts)
           .where(and(eq(contacts.brandId, scope.brandId), inArray(contacts.id, [...ids])));
+        // Only to recognise a name that is really an identifier; the values never leave this function.
+        const identities = await tx
+          .select({ contactId: contactIdentities.contactId, value: contactIdentities.value })
+          .from(contactIdentities)
+          .where(
+            and(
+              eq(contactIdentities.brandId, scope.brandId),
+              inArray(contactIdentities.contactId, [...ids]),
+            ),
+          );
+        const valuesOf = new Map<string, string[]>();
+        for (const identity of identities) {
+          valuesOf.set(identity.contactId, [
+            ...(valuesOf.get(identity.contactId) ?? []),
+            identity.value,
+          ]);
+        }
         return new Map(
           rows.map((row) => [
             row.id,
             {
-              name: row.anonymisedAt === null ? displayNameOf(row.name) : null,
+              name:
+                row.anonymisedAt === null
+                  ? displayNameOf(row.name, valuesOf.get(row.id) ?? [])
+                  : null,
               sameAccount: scope.accountId !== null && row.accountId === scope.accountId,
             },
           ]),
@@ -303,7 +373,7 @@ export const listTickets = async (
         ? undefined
         : or(
             lt(tickets.updatedAt, cursor.updatedAt),
-            and(eq(tickets.updatedAt, cursor.updatedAt), lt(tickets.id, cursor.id)),
+            and(eq(tickets.updatedAt, cursor.updatedAt), lt(tickets.number, cursor.number)),
           ),
     );
     const rows = await tx
@@ -321,7 +391,7 @@ export const listTickets = async (
       })
       .from(tickets)
       .where(where)
-      .orderBy(desc(tickets.updatedAt), desc(tickets.id))
+      .orderBy(desc(tickets.updatedAt), desc(tickets.number))
       .limit(PAGE_SIZE + 1);
     const mine = await countOf(tx, and(scopedTickets(scope, 'mine', cc), stateWhere(query.state)));
     const company = mayViewCompany(scope.sees)
@@ -344,7 +414,7 @@ export const listTickets = async (
   return portalTicketListSchema.parse({
     rows: page.map((row) => ({
       reference: formatTicketReference(row.prefix, row.number),
-      subject: row.subject,
+      subject: clipLine(row.subject, SUBJECT_MAX),
       status: customerStatusOf({
         status: statuses.get(row.statusId),
         closed: row.closed,
@@ -356,7 +426,7 @@ export const listTickets = async (
     })),
     nextCursor:
       read.rows.length > PAGE_SIZE && last !== undefined
-        ? encodeCursor({ updatedAt: last.updatedAt, id: last.id })
+        ? encodeCursor({ updatedAt: last.updatedAt, number: last.number })
         : null,
     counts: { mine: read.mine, company: read.company },
   });
@@ -395,23 +465,92 @@ interface FileRow {
   readonly kind: string;
 }
 
-/** The messages and files of the tickets merged into `primaryId`, which a customer's own policy cannot reach (DOMAIN-RULES §2.4). */
-const mergedThread = (
-  db: Db,
-  brandId: string,
-  primaryId: string,
-): Promise<{ messages: ThreadRow[]; files: FileRow[] }> =>
-  asProjection(db, brandId, async (tx) => {
-    const secondaries = tx
-      .select({ id: tickets.id })
+const MERGE_DEPTH = 5;
+
+/**
+ * The tickets merged into `root`, directly or through a chain, whose messages
+ * and files a customer who may read `root` may read too. A merge does not undo
+ * the portal's own rules, so each link is tested on its own row (DOMAIN-RULES
+ * §2.4):
+ *
+ * - not deleted, and not spam (neither its status nor the status it had before
+ *   the merge is spam; `portal_eligible` cannot say, a merged-away ticket is
+ *   ineligible by definition);
+ * - **private**: not `portal_private`, or the ticket it was merged into is
+ *   `portal_private` too, or the viewer is its own requester;
+ * - **department**: the department it was in before the merge
+ *   (`pre_merge_department_id`; a merge moves it into the primary's) is one the
+ *   brand shows in the portal.
+ *
+ * A link that fails takes everything merged into it with it. Nothing is drawn
+ * in its place.
+ */
+export const allowedSecondaries = async (
+  tx: DbTransaction,
+  scope: CustomerScope,
+  root: { readonly id: string; readonly portalPrivate: boolean },
+): Promise<string[]> => {
+  const allowed: string[] = [];
+  const seen = new Set([root.id]);
+  let frontier = [root];
+  const shown = scope.departmentIds;
+  for (let depth = 0; depth < MERGE_DEPTH && frontier.length > 0; depth += 1) {
+    const parents = new Map(frontier.map((parent) => [parent.id, parent]));
+    const rows = await tx
+      .select({
+        id: tickets.id,
+        parentId: tickets.mergedIntoId,
+        contactId: tickets.contactId,
+        portalPrivate: tickets.portalPrivate,
+        departmentId: sql<string>`coalesce(${tickets.preMergeDepartmentId}, ${tickets.departmentId})`,
+        spam: sql<boolean>`(coalesce(${currentStatus.isSpam}, false) or coalesce(${beforeMergeStatus.isSpam}, false))`,
+      })
       .from(tickets)
+      .leftJoin(currentStatus, eq(currentStatus.id, tickets.statusId))
+      .leftJoin(beforeMergeStatus, eq(beforeMergeStatus.id, tickets.preMergeStatusId))
       .where(
         and(
-          eq(tickets.brandId, brandId),
-          eq(tickets.mergedIntoId, primaryId),
+          eq(tickets.brandId, scope.brandId),
+          inArray(tickets.mergedIntoId, [...parents.keys()]),
           isNull(tickets.deletedAt),
         ),
       );
+    const next: { id: string; portalPrivate: boolean }[] = [];
+    for (const row of rows) {
+      const parent = row.parentId === null ? undefined : parents.get(row.parentId);
+      if (parent === undefined || seen.has(row.id)) {
+        continue;
+      }
+      seen.add(row.id);
+      const mayRead =
+        !row.spam &&
+        (shown === 'all' || shown.includes(row.departmentId)) &&
+        (!row.portalPrivate || parent.portalPrivate || row.contactId === scope.contactId);
+      if (mayRead) {
+        allowed.push(row.id);
+        next.push({ id: row.id, portalPrivate: row.portalPrivate });
+      }
+    }
+    frontier = next;
+  }
+  return allowed;
+};
+
+const currentStatus = alias(ticketStatuses, 'portal_current_status');
+const beforeMergeStatus = alias(ticketStatuses, 'portal_before_merge_status');
+
+/** The messages and files of the tickets {@link allowedSecondaries} lets through, which a customer's own policy cannot reach (DOMAIN-RULES §2.4). */
+const mergedThread = (
+  db: Db,
+  scope: CustomerScope,
+  root: { readonly id: string; readonly portalPrivate: boolean },
+): Promise<{ messages: ThreadRow[]; files: FileRow[] }> =>
+  asProjection(db, scope.brandId, async (tx) => {
+    const brandId = scope.brandId;
+    const secondaries = await allowedSecondaries(tx, scope, root);
+    if (secondaries.length === 0) {
+      return { messages: [], files: [] };
+    }
     const messages = await tx
       .select({
         id: ticketMessages.id,
@@ -491,6 +630,15 @@ export const authorOf = (
   }
 };
 
+const toAttachmentDto = (file: FileRow): PortalAttachment =>
+  portalAttachmentSchema.parse({
+    id: file.id,
+    name: clipLine(file.name, FILE_NAME_MAX),
+    mime: file.mime.slice(0, 255),
+    size: file.size,
+    kind: file.kind,
+  });
+
 export const readTicket = async (
   db: Db,
   scope: CustomerScope,
@@ -507,6 +655,7 @@ export const readTicket = async (
         contactId: tickets.contactId,
         channel: tickets.channel,
         createdAt: tickets.createdAt,
+        portalPrivate: tickets.portalPrivate,
         closed: sql<boolean>`(${tickets.closedAt} is not null)`,
         snoozed: sql<boolean>`(${tickets.snoozedUntil} is not null)`,
       })
@@ -565,7 +714,7 @@ export const readTicket = async (
     return movedTo(db, scope, reference);
   }
   const { ticket } = own;
-  const merged = await mergedThread(db, scope.brandId, ticket.id);
+  const merged = await mergedThread(db, scope, ticket);
   const thread: ThreadRow[] = [
     ...own.messages.map((message) => ({ ...message, ticketContactId: ticket.contactId })),
     ...merged.messages,
@@ -594,36 +743,33 @@ export const readTicket = async (
     staffNames(db, scope.brandId, [...staffIds]),
   ]);
 
-  const filesOf = new Map<string, PortalAttachment[]>();
+  const filesOf = new Map<string, FileRow[]>();
   for (const file of files) {
     if (file.messageId !== null) {
-      filesOf.set(file.messageId, [
-        ...(filesOf.get(file.messageId) ?? []),
-        portalAttachmentSchema.parse({
-          id: file.id,
-          name: file.name,
-          mime: file.mime,
-          size: file.size,
-          kind: file.kind,
-        }),
-      ]);
+      const list = filesOf.get(file.messageId) ?? [];
+      list.push(file);
+      filesOf.set(file.messageId, list);
     }
   }
-  const messages: PortalMessage[] = thread.map((row) =>
-    portalMessageSchema.parse({
+  const messages: PortalMessage[] = thread.map((row) => {
+    const text = clipText(row.bodyText, MESSAGE_TEXT_MAX);
+    const own = filesOf.get(row.id) ?? [];
+    return portalMessageSchema.parse({
       id: row.id,
       author: authorOf(scope, row, names, staff),
       at: row.createdAt.toISOString(),
-      text: row.bodyText,
-      attachments: filesOf.get(row.id) ?? [],
-    }),
-  );
+      text: text.text,
+      truncated: text.clipped,
+      attachments: own.slice(0, FILES_PER_MESSAGE_MAX).map((file) => toAttachmentDto(file)),
+      moreFiles: Math.max(0, own.length - FILES_PER_MESSAGE_MAX),
+    });
+  });
 
   return {
     kind: 'found',
     ticket: portalTicketSchema.parse({
       reference: formatTicketReference(ticket.prefix, ticket.number),
-      subject: ticket.subject,
+      subject: clipLine(ticket.subject, SUBJECT_MAX),
       status: customerStatusOf({
         status: statuses.get(ticket.statusId),
         closed: ticket.closed,
@@ -725,9 +871,9 @@ export const attachmentUrl = async (
   reference: TicketReference,
   attachmentId: string,
 ): Promise<AttachmentLookup> => {
-  const ticketId = await withTenant(db, customerTenantContext(scope), async (tx) => {
+  const root = await withTenant(db, customerTenantContext(scope), async (tx) => {
     const [row] = await tx
-      .select({ id: tickets.id })
+      .select({ id: tickets.id, portalPrivate: tickets.portalPrivate })
       .from(tickets)
       .where(
         and(
@@ -737,11 +883,12 @@ export const attachmentUrl = async (
         ),
       )
       .limit(1);
-    return row?.id ?? null;
+    return row ?? null;
   });
-  if (ticketId === null) {
+  if (root === null) {
     return null;
   }
+  const ticketId = root.id;
   const direct = await withTenant(db, customerTenantContext(scope), async (tx) => {
     const [row] = await tx
       .select({ id: attachments.id })
@@ -762,19 +909,21 @@ export const attachmentUrl = async (
     return { url: direct };
   }
   return asProjection(db, scope.brandId, async (tx) => {
+    const secondaries = await allowedSecondaries(tx, scope, root);
+    if (secondaries.length === 0) {
+      return null;
+    }
     const [row] = await tx
       .select({ ticketId: attachments.ticketId })
       .from(attachments)
       .innerJoin(ticketMessages, eq(ticketMessages.id, attachments.messageId))
-      .innerJoin(tickets, eq(tickets.id, attachments.ticketId))
       .where(
         and(
           eq(attachments.id, attachmentId),
           eq(attachments.brandId, scope.brandId),
           eq(attachments.status, 'ready'),
           inArray(ticketMessages.kind, ['public', 'ai']),
-          eq(tickets.mergedIntoId, ticketId),
-          isNull(tickets.deletedAt),
+          inArray(attachments.ticketId, secondaries),
         ),
       )
       .limit(1);

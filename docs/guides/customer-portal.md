@@ -120,7 +120,7 @@ A ticket staff marked **private** shows only to its requester and to staff-added
 
 `/tickets/HD-1042`: the subject, the reference, the status, who opened it ("Opened by you · 10 Nov 2026 · by email"), then **every public message** and every assistant message, oldest first, each in an article named by its sender and time. Times are in the brand's time zone, never the viewer's. A message shows who wrote it: **You**; a coworker by name with a **Coworker** tag; staff by their public name ("Lina from *Brand*", DOMAIN-RULES §2.10, with a **Support** tag), never their full name, address or job title; the assistant and automatic messages as the brand's name. Message text is shown as plain text in paragraphs; formatting an agent used is not drawn. Attachments are links to `/tickets/HD-1042/attachments/<id>`, which check the ticket, then redirect to a short-lived download address (five minutes). A copied link stops working.
 
-If tickets were merged into this one, their public messages appear in the thread in time order. The merged ticket's own reference sends the customer to this one, but only if they can see it.
+If tickets were merged into this one, their public messages appear in the thread in time order, **but a merge does not undo what hid a ticket**: a merged ticket that is private is shown only to its own requester (unless this ticket is private too, when it has this ticket's audience), one that was in a department the portal does not show before the merge is never shown, and neither is a spam or deleted one. Nothing marks the place of a withheld message, and its files answer 404. The merged ticket's own reference sends the customer to this one, but only if they can see it.
 
 A solved or closed ticket shows its status and nothing more here yet: replying, reopening and the rating are M21-04.
 
@@ -130,7 +130,9 @@ Internal notes, system lines, activity, tags, priority, SLA, who the ticket is a
 
 ### Limits to know
 
-- A thread shows its first 500 messages.
+- A thread shows its first 500 messages. A message longer than 200,000 characters is cut with an ellipsis and says it is shown in part; a message shows its first 50 files and "and N more files"; a subject is cut at 1,000 characters and a file name at 255.
+- **Limits per signed-in session**: 120 page views (the list and the ticket pages together) and 60 file fetches in five minutes. Over a limit the page is a plain 429 with `Retry-After`. A person reading tickets stays well under; a script walking references does not.
+- A person's name is shown to coworkers only when it is a name: a WhatsApp number, a Messenger, Instagram or Telegram id, an Instagram handle or the widget's `Visitor xxxxxx` is never shown, and the page says "a coworker" or "another participant".
 - A help center served on a brand's own domain over plain http on a non-standard port (local development) gets absolute links, such as the one in the sign-in email, without the port, because the portal builds them from the verified domain and never from the `Host` header as sent. The pages themselves, and the install's `/hc/<brandId>` path, are fine. Use https, or the `/hc/<brandId>` path, when developing.
 
 ## For customers

@@ -218,7 +218,7 @@
       "email": "بالبريد",
       "chat": "بالدردشة",
       "telegram": "عبر تيليغرام",
-      "form": "عبر النموذج",
+      "form": "عبر نموذج الموقع",
       "whatsapp": "عبر واتساب",
       "messenger": "عبر ماسنجر",
       "instagram": "عبر إنستغرام",
@@ -262,7 +262,14 @@
       "coworker": "زميل",
       "attachments": "المرفقات",
       "noMessages": "لا توجد رسائل في هذه التذكرة بعد.",
-      "someone": "مشارك آخر"
+      "someone": "مشارك آخر",
+      "truncated": "هذه الرسالة طويلة وتظهر جزئيًا.",
+      "moreFiles_zero": "و{{count}} ملف آخر",
+      "moreFiles_one": "وملف آخر",
+      "moreFiles_two": "وملفان آخران",
+      "moreFiles_few": "و{{count}} ملفات أخرى",
+      "moreFiles_many": "و{{count}} ملفًا آخر",
+      "moreFiles_other": "و{{count}} ملف آخر"
     }
   }
 }

@@ -102,6 +102,25 @@ export const PORTAL_CHALLENGE_IP_RULE: RateLimitRule = {
   windowSeconds: 15 * 60,
 };
 
+/**
+ * What one signed-in session may ask of the ticket pages: 120 page views (the
+ * list and the ticket pages together) and 60 file fetches in five minutes, per
+ * session. A person reading tickets stays well under both (a page a few seconds
+ * apart is about 60 in five minutes); a script walking references or files does
+ * not. They sit beside the widget's per-visitor write limits and are counted per
+ * api replica, like every limit.
+ */
+export const PORTAL_PAGE_RULE: RateLimitRule = {
+  bucket: 'portal-pages',
+  limit: 120,
+  windowSeconds: 5 * 60,
+};
+export const PORTAL_FILE_RULE: RateLimitRule = {
+  bucket: 'portal-files',
+  limit: 60,
+  windowSeconds: 5 * 60,
+};
+
 export type ConfirmOutcome =
   | { readonly kind: 'signed-in'; readonly contactId: string }
   | { readonly kind: 'expired' }
@@ -739,11 +758,23 @@ export class PortalSite {
     host: PortalHost,
     locale: HcLocale,
     next: string,
+    budget: RateLimitRule,
     page: (live: SignedIn) => Promise<PortalResponse>,
   ): Promise<PortalResponse> {
     const live = await this.#liveSession(host);
     if (live === null) {
       return host.redirect(host.links.portalSignIn(locale, next));
+    }
+    if (!(await this.#deps.limiter.consume(budget, `${host.brandId}:${live.session.id}`))) {
+      this.#deps.log.warn(
+        { securityEvent: 'portal.rate_limited', bucket: budget.bucket, brandId: host.brandId },
+        'customer portal security event',
+      );
+      const refused = host.plain(429, 'Too many requests');
+      return {
+        ...refused,
+        headers: { ...refused.headers, 'retry-after': String(budget.windowSeconds) },
+      };
     }
     const response = await page(live);
     if (!live.session.touched) {
@@ -767,7 +798,7 @@ export class PortalSite {
   async #tickets(host: PortalHost): Promise<PortalResponse> {
     const { query } = host.request;
     const locale = host.locale(query.lang);
-    return this.#signedIn(host, locale, '/tickets', async (live) => {
+    return this.#signedIn(host, locale, '/tickets', PORTAL_PAGE_RULE, async (live) => {
       const { scope } = live.session;
       if (scope === undefined) {
         return host.redirect(host.links.portalSignIn(locale, '/tickets'));
@@ -809,15 +840,21 @@ export class PortalSite {
     const rawReference = parts[0] ?? '';
     const isTicket = parts.length === 1;
     const isFile = parts.length === 3 && parts[1] === 'attachments';
-    return this.#signedIn(host, locale, host.path, async (live) => {
-      const reference = parseTicketReference(rawReference);
-      if (reference === null || !(isTicket || isFile)) {
-        return this.#missing(host, locale, live);
-      }
-      return isFile
-        ? this.#file(host, locale, live, reference, parts[2] ?? '')
-        : this.#ticket(host, locale, live, reference);
-    });
+    return this.#signedIn(
+      host,
+      locale,
+      host.path,
+      isFile ? PORTAL_FILE_RULE : PORTAL_PAGE_RULE,
+      async (live) => {
+        const reference = parseTicketReference(rawReference);
+        if (reference === null || !(isTicket || isFile)) {
+          return this.#missing(host, locale, live);
+        }
+        return isFile
+          ? this.#file(host, locale, live, reference, parts[2] ?? '')
+          : this.#ticket(host, locale, live, reference);
+      },
+    );
   }
 
   async #ticket(

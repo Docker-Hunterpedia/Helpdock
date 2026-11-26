@@ -9,7 +9,7 @@ import {
   SEARCH_MAX,
 } from './ticket-list-rules.js';
 
-const ID = '0192c3f0-1a2b-7c3d-8e4f-000000000001';
+const NUMBER = 1042;
 const AT = new Date('2026-11-26T10:00:00.123Z');
 
 describe('the ticket list query', () => {
@@ -71,10 +71,25 @@ describe('the search', () => {
 });
 
 describe('the cursor', () => {
+  it('carries the ticket number and the instant, and no internal id', () => {
+    const raw = Buffer.from(
+      encodeCursor({ updatedAt: AT, number: NUMBER }),
+      'base64url',
+    ).toString();
+    expect(JSON.parse(raw)).toEqual({ u: AT.toISOString(), n: NUMBER });
+    expect(raw).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+  });
+
+  it.each([0, -1, 1.5, 2 ** 60])('refuses the number %s', (n) => {
+    expect(
+      decodeCursor(Buffer.from(JSON.stringify({ u: AT.toISOString(), n })).toString('base64url')),
+    ).toBeNull();
+  });
+
   it('round-trips the last row', () => {
-    expect(decodeCursor(encodeCursor({ updatedAt: AT, id: ID }))).toEqual({
+    expect(decodeCursor(encodeCursor({ updatedAt: AT, number: NUMBER }))).toEqual({
       updatedAt: AT,
-      id: ID,
+      number: 1042,
     });
   });
 
@@ -84,9 +99,9 @@ describe('the cursor', () => {
     'not base64 json',
     Buffer.from('null').toString('base64url'),
     Buffer.from('{}').toString('base64url'),
-    Buffer.from(JSON.stringify({ u: 'yesterday', i: ID })).toString('base64url'),
-    Buffer.from(JSON.stringify({ u: AT.toISOString(), i: "1' or '1'='1" })).toString('base64url'),
-    Buffer.from(JSON.stringify({ u: '2026-11-26', i: ID })).toString('base64url'),
+    Buffer.from(JSON.stringify({ u: 'yesterday', n: NUMBER })).toString('base64url'),
+    Buffer.from(JSON.stringify({ u: AT.toISOString(), n: "1' or '1'='1" })).toString('base64url'),
+    Buffer.from(JSON.stringify({ u: '2026-11-26', n: NUMBER })).toString('base64url'),
     'x'.repeat(300),
   ])('starts from the top for %j', (value) => {
     expect(decodeCursor(value)).toBeNull();

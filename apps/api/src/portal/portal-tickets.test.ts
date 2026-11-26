@@ -556,3 +556,54 @@ describe('GET /tickets/<ref>/attachments/<id>', () => {
     expect(response.headers.location).toMatch(/^\/sign-in\?lang=en/);
   });
 });
+
+describe('the limits on a session’s reads', () => {
+  const FILE = '0192c3f0-1a2b-7c3d-8e4f-0000000000f1';
+
+  it('refuses the 121st page view in five minutes with a 429, private and with Retry-After, and counts the list and the ticket page together', async () => {
+    const s = setup();
+    const cookies = signedIn(s);
+    for (let n = 0; n < 60; n += 1) {
+      expect((await s.site.handle(onHost('/tickets', { cookies }))).status).toBe(200);
+      expect((await s.site.handle(onHost('/tickets/HD-1042', { cookies }))).status).toBe(200);
+    }
+
+    const over = await s.site.handle(onHost('/tickets/HD-1042', { cookies }));
+    expect(over.status).toBe(429);
+    expect(over.headers['cache-control']).toBe(PRIVATE_CACHE_CONTROL);
+    expect(over.headers['retry-after']).toBe('300');
+    expect(over.body).not.toContain('Refund');
+    expect((await s.site.handle(onHost('/tickets', { cookies }))).status).toBe(429);
+  });
+
+  it('keeps file fetches on a budget of their own: 60 in five minutes, apart from the pages', async () => {
+    const s = setup();
+    const cookies = signedIn(s);
+    for (let n = 0; n < 60; n += 1) {
+      expect(
+        (await s.site.handle(onHost(`/tickets/HD-1042/attachments/${FILE}`, { cookies }))).status,
+      ).toBe(303);
+    }
+
+    const over = await s.site.handle(onHost(`/tickets/HD-1042/attachments/${FILE}`, { cookies }));
+    expect(over.status).toBe(429);
+    expect(over.headers['retry-after']).toBe('300');
+    // The pages are untouched by the files.
+    expect((await s.site.handle(onHost('/tickets', { cookies }))).status).toBe(200);
+  });
+
+  it('counts per session: another session of the same customer has its own budget', async () => {
+    const s = setup();
+    const first = signedIn(s);
+    for (let n = 0; n < 120; n += 1) {
+      await s.site.handle(onHost('/tickets', { cookies: first }));
+    }
+    expect((await s.site.handle(onHost('/tickets', { cookies: first }))).status).toBe(429);
+
+    s.store.seed('b'.repeat(43), KNOWN, HOST, NOW);
+    const second = await s.site.handle(
+      onHost('/tickets', { cookies: { '__Host-hd_cs': 'b'.repeat(43) } }),
+    );
+    expect(second.status).toBe(200);
+  });
+});

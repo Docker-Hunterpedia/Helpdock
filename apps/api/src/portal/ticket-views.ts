@@ -78,7 +78,11 @@ export const portalMessageSchema = z.strictObject({
   at: isoInstant,
   /** Plain text: the page escapes it and splits it into paragraphs; it is never parsed as markup. */
   text: z.string().max(200_000),
+  /** The text was cut (`portal-clip.ts`); the page says so. */
+  truncated: z.boolean(),
   attachments: z.array(portalAttachmentSchema).max(50),
+  /** Files beyond the first 50 on this message, not listed. */
+  moreFiles: z.number().int().min(0),
 });
 export type PortalMessage = z.infer<typeof portalMessageSchema>;
 

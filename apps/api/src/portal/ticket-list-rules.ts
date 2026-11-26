@@ -13,10 +13,15 @@ export const SEARCH_MAX = 100;
 export type ListScope = 'mine' | 'company';
 export type ListState = 'open' | 'solved';
 
-/** Where the next page starts: the last row's `(updated_at, id)`, newest first. */
+/**
+ * Where the next page starts: the last row's `(updated_at, number)`, newest
+ * first. The number is the ticket's public reference, unique in a brand, so it
+ * breaks ties between rows changed at the same instant and no internal id ever
+ * leaves the server.
+ */
 export interface ListCursor {
   readonly updatedAt: Date;
-  readonly id: string;
+  readonly number: number;
 }
 
 export type ListSearch =
@@ -43,10 +48,8 @@ export interface RawListQuery {
   readonly cursor?: string | undefined;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export const encodeCursor = (cursor: ListCursor): string =>
-  Buffer.from(JSON.stringify({ u: cursor.updatedAt.toISOString(), i: cursor.id })).toString(
+  Buffer.from(JSON.stringify({ u: cursor.updatedAt.toISOString(), n: cursor.number })).toString(
     'base64url',
   );
 
@@ -60,14 +63,14 @@ export const decodeCursor = (value: string | undefined): ListCursor | null => {
     if (typeof parsed !== 'object' || parsed === null) {
       return null;
     }
-    const { u, i } = parsed as { u?: unknown; i?: unknown };
-    if (typeof u !== 'string' || typeof i !== 'string' || !UUID.test(i)) {
+    const { u, n } = parsed as { u?: unknown; n?: unknown };
+    if (typeof u !== 'string' || typeof n !== 'number' || !Number.isSafeInteger(n) || n < 1) {
       return null;
     }
     const updatedAt = new Date(u);
     return Number.isNaN(updatedAt.getTime()) || updatedAt.toISOString() !== u
       ? null
-      : { updatedAt, id: i };
+      : { updatedAt, number: n };
   } catch {
     return null;
   }

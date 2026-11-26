@@ -242,7 +242,10 @@
       "coworker": "Coworker",
       "attachments": "Attachments",
       "noMessages": "There are no messages on this ticket yet.",
-      "someone": "Another participant"
+      "someone": "Another participant",
+      "truncated": "This message is long and is shown in part.",
+      "moreFiles_one": "and {{count}} more file",
+      "moreFiles_other": "and {{count}} more files"
     }
   }
 }

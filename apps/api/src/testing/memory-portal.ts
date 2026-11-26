@@ -102,7 +102,6 @@ export interface MemoryTicket {
   }[];
 }
 
-const ticketUuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const PAGE = 20;
 
 export class MemoryPortalStore implements PortalStore {
@@ -252,7 +251,7 @@ export class MemoryPortalStore implements PortalStore {
     const sorted = this.#visible(session, query.scope)
       .filter(inState)
       .filter(matches)
-      .map((ticket, index) => ({ ticket, id: ticketUuid(index + 1) }))
+      .map((ticket) => ({ ticket, number: Number(ticket.reference.split('-')[1]) }))
       .sort((a, b) => b.ticket.updatedAt.getTime() - a.ticket.updatedAt.getTime());
     const after =
       query.cursor === null
@@ -276,7 +275,7 @@ export class MemoryPortalStore implements PortalStore {
       nextCursor:
         after.length > PAGE && last !== undefined
           ? Buffer.from(
-              JSON.stringify({ u: last.ticket.updatedAt.toISOString(), i: last.id }),
+              JSON.stringify({ u: last.ticket.updatedAt.toISOString(), n: last.number }),
             ).toString('base64url')
           : null,
       counts: {
@@ -304,6 +303,8 @@ export class MemoryPortalStore implements PortalStore {
               : { kind: 'coworker', name: message.by.name },
       at: message.at.toISOString(),
       text: message.text,
+      truncated: false,
+      moreFiles: 0,
       attachments: (message.files ?? []).map((file) => ({ ...file, kind: 'document' })),
     }));
     return Promise.resolve({

@@ -181,7 +181,7 @@ const message = (view: TicketView, entry: PortalMessage): string => {
               `<li><a class="hd-pt-file" href="${esc(view.attachmentPath(view.ticket.reference, file.id))}">${FILE_ICON}<bdi dir="ltr">${esc(file.name)}</bdi></a></li>`,
           )
           .join('')}</ul>`;
-  return `<article class="hd-pt-msg" aria-label="${esc(t('portal.ticket.articleLabel', { sender: who.name, time }))}"><div class="hd-pt-who"><strong><bdi>${esc(who.name)}</bdi></strong>${who.tag === null ? '' : `<span class="hd-pt-tag">${esc(who.tag)}</span>`}<time datetime="${esc(entry.at)}">${esc(time)}</time></div><div class="hd-pt-bubble${team ? ' hd-pt-bubble-team' : ''}" dir="auto">${plainTextToHtml(entry.text)}${files}</div></article>`;
+  return `<article class="hd-pt-msg" aria-label="${esc(t('portal.ticket.articleLabel', { sender: who.name, time }))}"><div class="hd-pt-who"><strong><bdi>${esc(who.name)}</bdi></strong>${who.tag === null ? '' : `<span class="hd-pt-tag">${esc(who.tag)}</span>`}<time datetime="${esc(entry.at)}">${esc(time)}</time></div><div class="hd-pt-bubble${team ? ' hd-pt-bubble-team' : ''}" dir="auto">${plainTextToHtml(entry.text)}${entry.truncated ? `<p class="hd-pt-quiet">${esc(t('portal.ticket.truncated'))}</p>` : ''}${files}${entry.moreFiles > 0 ? `<p class="hd-pt-quiet">${esc(t('portal.ticket.moreFiles', { count: entry.moreFiles }))}</p>` : ''}</div></article>`;
 };
 
 export const ticketMain = (view: TicketView): string => {

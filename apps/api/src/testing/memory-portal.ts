@@ -8,6 +8,17 @@ import type {
   PortalStore,
 } from '../portal/portal-site.js';
 import type { LiveSession, TokenState } from '../portal/portal-store.js';
+import type { TicketListQuery } from '../portal/ticket-list-rules.js';
+import type { TicketReference } from '../portal/ticket-reference.js';
+import type {
+  AttachmentLookup,
+  PortalMessage,
+  PortalOpenedBy,
+  PortalTicket,
+  PortalTicketList,
+  PortalTicketRow,
+  TicketLookup,
+} from '../portal/ticket-views.js';
 
 /**
  * The portal's store, limiter and CAPTCHA held in memory, for the pages' unit
@@ -51,9 +62,54 @@ interface Session {
   lastSeenAt: Date;
 }
 
+/** What the memory store knows of a customer: who, which company, and what the account lets them see. */
+export interface KnownCustomer {
+  contactId: string;
+  companyName: string | null;
+  /** The account's id when there is one; tickets with the same `company` belong to it. */
+  accountId?: string;
+  visibility?: 'own' | 'managers' | 'all';
+  role?: 'member' | 'manager';
+}
+
+/** A ticket fixture. `author` is relative to nobody: the store turns it into "you", "coworker" and so on per viewer. */
+export interface MemoryTicket {
+  readonly reference: string;
+  readonly subject: string;
+  readonly status: PortalTicketRow['status'];
+  readonly updatedAt: Date;
+  readonly createdAt: Date;
+  readonly channel: PortalTicket['channel'];
+  /** The contact who opened it. */
+  readonly opener: { readonly contactId: string; readonly name: string };
+  /** The account whose members may see it under "all"; null for a ticket with no company. */
+  readonly accountId: string | null;
+  readonly private: boolean;
+  readonly messages: readonly {
+    readonly id: string;
+    readonly by:
+      | { readonly kind: 'contact'; readonly contactId: string; readonly name: string }
+      | { readonly kind: 'staff'; readonly name: string }
+      | { readonly kind: 'brand' };
+    readonly at: Date;
+    readonly text: string;
+    readonly files?: readonly {
+      readonly id: string;
+      readonly name: string;
+      readonly mime: string;
+      readonly size: number;
+    }[];
+  }[];
+}
+
+const ticketUuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const PAGE = 20;
+
 export class MemoryPortalStore implements PortalStore {
   /** Known addresses of the brand, by address. */
-  readonly known = new Map<string, { contactId: string; companyName: string | null }>();
+  readonly known = new Map<string, KnownCustomer>();
+  /** Every ticket of the brand, for the list and the page. */
+  readonly fixtures: MemoryTicket[] = [];
   newCustomers = false;
   readonly sent: SentLink[] = [];
   readonly links: Link[] = [];
@@ -130,14 +186,150 @@ export class MemoryPortalStore implements PortalStore {
       found.lastSeenAt = input.now;
       found.expiresAt = sessionExpiry(input.now);
     }
+    const customer = this.known.get(found.address);
+    const visibility = customer?.visibility ?? 'own';
+    const role = customer?.role ?? 'member';
+    const sees =
+      customer?.accountId !== undefined &&
+      (visibility === 'all' || (visibility === 'managers' && role === 'manager'))
+        ? 'account'
+        : 'own';
     return Promise.resolve({
       id: found.id,
       brandId: found.brandId,
       contactId: found.contactId,
       address: found.address,
-      companyName: this.known.get(found.address)?.companyName ?? null,
+      companyName: customer?.companyName ?? null,
       touched,
+      scope: {
+        brandId: found.brandId,
+        contactId: found.contactId,
+        accountId: customer?.accountId ?? null,
+        sees,
+        visibility,
+        role,
+        departmentIds: 'all',
+      },
     });
+  }
+
+  /** The tickets this customer may see: their own, or the company's under "all" (never a private one). */
+  #visible(session: LiveSession, which: 'mine' | 'company'): MemoryTicket[] {
+    const scope = session.scope;
+    return this.fixtures.filter((ticket) => {
+      if (ticket.opener.contactId === session.contactId) {
+        return true;
+      }
+      return (
+        which === 'company' &&
+        scope?.sees === 'account' &&
+        ticket.accountId !== null &&
+        ticket.accountId === scope.accountId &&
+        !ticket.private
+      );
+    });
+  }
+
+  tickets(session: LiveSession, query: TicketListQuery): Promise<PortalTicketList> {
+    const inState = (ticket: MemoryTicket): boolean =>
+      (ticket.status === 'solved') === (query.state === 'solved');
+    const matches = (ticket: MemoryTicket): boolean => {
+      if (query.search.kind === 'none') {
+        return true;
+      }
+      const { text, reference } = query.search;
+      const number = ticket.reference.split('-')[1];
+      return (
+        ticket.subject.toLowerCase().includes(text.toLowerCase()) ||
+        (reference !== null &&
+          ('prefix' in reference
+            ? ticket.reference === `${reference.prefix}-${String(reference.number)}`
+            : number === String(reference.number)))
+      );
+    };
+    const sorted = this.#visible(session, query.scope)
+      .filter(inState)
+      .filter(matches)
+      .map((ticket, index) => ({ ticket, id: ticketUuid(index + 1) }))
+      .sort((a, b) => b.ticket.updatedAt.getTime() - a.ticket.updatedAt.getTime());
+    const after =
+      query.cursor === null
+        ? sorted
+        : sorted.filter(
+            ({ ticket }) => ticket.updatedAt.getTime() < (query.cursor?.updatedAt.getTime() ?? 0),
+          );
+    const page = after.slice(0, PAGE);
+    const last = page.at(-1);
+    const count = (which: 'mine' | 'company'): number =>
+      this.#visible(session, which).filter(inState).length;
+    return Promise.resolve({
+      rows: page.map(({ ticket }) => ({
+        reference: ticket.reference,
+        subject: ticket.subject,
+        status: ticket.status,
+        updatedAt: ticket.updatedAt.toISOString(),
+        openedBy: query.scope === 'company' ? openedBy(session, ticket) : null,
+        onlyYou: ticket.private && ticket.opener.contactId === session.contactId,
+      })),
+      nextCursor:
+        after.length > PAGE && last !== undefined
+          ? Buffer.from(
+              JSON.stringify({ u: last.ticket.updatedAt.toISOString(), i: last.id }),
+            ).toString('base64url')
+          : null,
+      counts: {
+        mine: count('mine'),
+        company: session.scope?.sees === 'account' ? count('company') : null,
+      },
+    });
+  }
+
+  ticket(session: LiveSession, reference: TicketReference): Promise<TicketLookup> {
+    const wanted = `${reference.prefix}-${String(reference.number)}`;
+    const ticket = this.#visible(session, 'company').find((entry) => entry.reference === wanted);
+    if (ticket === undefined) {
+      return Promise.resolve({ kind: 'missing' });
+    }
+    const messages: PortalMessage[] = ticket.messages.map((message) => ({
+      id: message.id,
+      author:
+        message.by.kind === 'staff'
+          ? { kind: 'staff', name: message.by.name }
+          : message.by.kind === 'brand'
+            ? { kind: 'brand' }
+            : message.by.contactId === session.contactId
+              ? { kind: 'you' }
+              : { kind: 'coworker', name: message.by.name },
+      at: message.at.toISOString(),
+      text: message.text,
+      attachments: (message.files ?? []).map((file) => ({ ...file, kind: 'document' })),
+    }));
+    return Promise.resolve({
+      kind: 'found',
+      ticket: {
+        reference: ticket.reference,
+        subject: ticket.subject,
+        status: ticket.status,
+        openedBy: openedBy(session, ticket),
+        createdAt: ticket.createdAt.toISOString(),
+        channel: ticket.channel,
+        mine: ticket.opener.contactId === session.contactId,
+        messages,
+      },
+    });
+  }
+
+  attachment(
+    session: LiveSession,
+    reference: TicketReference,
+    attachmentId: string,
+  ): Promise<AttachmentLookup> {
+    const wanted = `${reference.prefix}-${String(reference.number)}`;
+    const ticket = this.#visible(session, 'company').find((entry) => entry.reference === wanted);
+    const file = ticket?.messages
+      .flatMap((message) => message.files ?? [])
+      .find((f) => f.id === attachmentId);
+    return Promise.resolve(file === undefined ? null : { url: `/__e2e/file/${file.name}` });
   }
 
   /** For a browser test: every link emailed to this address is now past its fifteen minutes. */
@@ -167,6 +359,11 @@ export class MemoryPortalStore implements PortalStore {
     return Promise.resolve();
   }
 }
+
+const openedBy = (session: LiveSession, ticket: MemoryTicket): PortalOpenedBy =>
+  ticket.opener.contactId === session.contactId
+    ? { kind: 'you' }
+    : { kind: 'person', name: ticket.opener.name };
 
 /** Counts per rule and subject, never expiring: a test's budget is one test long. */
 export class MemoryLimiter {

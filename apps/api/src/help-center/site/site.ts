@@ -296,6 +296,50 @@ export class HelpCenterSite {
 
   #portalHost(request: SiteRequest, where: Where, config: SiteConfig, path: string): PortalHost {
     const secure = this.#secure;
+    const context: PortalHost['context'] = (locale, session, csrf) => ({
+      config,
+      locale,
+      links: where.links,
+      seo: where.seo,
+      audience: 'public',
+      staff: null,
+      tree: [],
+      publicIds: null,
+      widget: false,
+      adminUrl: (adminPath) => `${this.#appOrigin}${adminPath}`,
+      portalSession:
+        session === undefined || csrf === undefined
+          ? undefined
+          : {
+              address: session.address,
+              companyName: session.companyName,
+              signOutHref: where.links.portalSignOut(),
+              signOutEverywhereHref: where.links.portalSignOutEverywhere(),
+              csrf,
+            },
+    });
+    // A page for the signed-in customer is `private, no-store` and carries their menu; the 404 of
+    // a ticket that is not theirs is that page too, so it says nothing the next ticket's would not.
+    const respond: PortalHost['respond'] = ({ status, rendered, pow, cookies }) => {
+      const nonce = nonceOf();
+      return {
+        status,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'content-security-policy': pageContentSecurityPolicy(nonce, {
+            widget: false,
+            imageSources: this.#deps.imageSources,
+            scripts: true,
+            connect: pow,
+          }),
+          'cache-control': PRIVATE_CACHE_CONTROL,
+          'x-robots-tag': 'noindex',
+          'referrer-policy': 'no-referrer',
+        },
+        body: rendered.html.replaceAll(NONCE, nonce),
+        cookies: cookies ?? [],
+      };
+    };
     return {
       request: {
         method: request.method,
@@ -318,48 +362,14 @@ export class HelpCenterSite {
           ? parsed.data
           : pickLocale(request.headers.acceptLanguage, config.defaultLocale);
       },
-      context: (locale, session, csrf) => ({
-        config,
-        locale,
-        links: where.links,
-        seo: where.seo,
-        audience: 'public',
-        staff: null,
-        tree: [],
-        publicIds: null,
-        widget: false,
-        adminUrl: (adminPath) => `${this.#appOrigin}${adminPath}`,
-        portalSession:
-          session === undefined || csrf === undefined
-            ? undefined
-            : {
-                address: session.address,
-                companyName: session.companyName,
-                signOutHref: where.links.portalSignOut(),
-                signOutEverywhereHref: where.links.portalSignOutEverywhere(),
-                csrf,
-              },
-      }),
-      respond: ({ status, rendered, pow, cookies }) => {
-        const nonce = nonceOf();
-        return {
-          status,
-          headers: {
-            'content-type': 'text/html; charset=utf-8',
-            'content-security-policy': pageContentSecurityPolicy(nonce, {
-              widget: false,
-              imageSources: this.#deps.imageSources,
-              scripts: true,
-              connect: pow,
-            }),
-            'cache-control': PRIVATE_CACHE_CONTROL,
-            'x-robots-tag': 'noindex',
-            'referrer-policy': 'no-referrer',
-          },
-          body: rendered.html.replaceAll(NONCE, nonce),
-          cookies: cookies ?? [],
-        };
-      },
+      context,
+      respond,
+      notFound: (locale, session, csrf) =>
+        respond({
+          status: 404,
+          rendered: renderNotFound(context(locale, session, csrf), []),
+          pow: false,
+        }),
       redirect: (location, cookies) => ({
         ...redirect(303, location, true),
         cookies: cookies ?? [],

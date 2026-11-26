@@ -73,8 +73,8 @@ export const nonceCookieName = (options: {
 /**
  * Where Continue may send a customer: a portal page, never anything else. The
  * allow-list is a pattern, not "starts with a slash", so `//evil.example`,
- * `/\evil`, a scheme or an encoded newline cannot pass. M21-03 and M21-04 widen
- * it to the ticket pages. The returned path is relative to the help center's
+ * `/\evil`, a scheme or an encoded newline cannot pass. M21-03 widened it
+ * to the ticket page; M21-04 adds the new-ticket page. The returned path is relative to the help center's
  * base (`''` or `/hc/<brandId>`).
  */
 const NEXT_PATTERN = /^\/tickets(?:\/[A-Za-z0-9-]{1,64})?$/;
@@ -96,6 +96,34 @@ export const csrfKeyFrom = (masterKey: Buffer): Buffer =>
 export const csrfToken = (key: Buffer, cookieValue: string): string =>
   createHmac('sha256', key).update(`csrf\n${cookieValue}`).digest('base64url');
 
+/**
+ * The same token, masked for one response: a random pad of the token's length
+ * and the token XOR the pad, joined by a dot. The page carries a different
+ * string every time, so a compression side channel (BREACH) over responses that
+ * reflect input, like the ticket list's search box, has nothing fixed to
+ * recover. {@link csrfValid} unmasks before it compares.
+ */
+export const maskCsrf = (token: string): string => {
+  const bytes = Buffer.from(token, 'base64url');
+  const pad = randomBytes(bytes.length);
+  const masked = Buffer.from(bytes.map((byte, index) => byte ^ (pad[index] ?? 0)));
+  return `${pad.toString('base64url')}.${masked.toString('base64url')}`;
+};
+
+/** The token under a mask, or what was given when it is not masked. */
+const unmaskCsrf = (presented: string): string => {
+  const dot = presented.indexOf('.');
+  if (dot < 0) {
+    return presented;
+  }
+  const pad = Buffer.from(presented.slice(0, dot), 'base64url');
+  const masked = Buffer.from(presented.slice(dot + 1), 'base64url');
+  if (pad.length !== masked.length) {
+    return '';
+  }
+  return Buffer.from(masked.map((byte, index) => byte ^ (pad[index] ?? 0))).toString('base64url');
+};
+
 export const csrfValid = (
   key: Buffer,
   cookieValue: string | undefined,
@@ -104,4 +132,4 @@ export const csrfValid = (
   cookieValue !== undefined &&
   cookieValue !== '' &&
   presented !== '' &&
-  sameHash(csrfToken(key, cookieValue), presented);
+  sameHash(csrfToken(key, cookieValue), unmaskCsrf(presented));

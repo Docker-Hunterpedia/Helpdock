@@ -111,6 +111,8 @@ export class MemoryPortalStore implements PortalStore {
   /** Every ticket of the brand, for the list and the page. */
   readonly fixtures: MemoryTicket[] = [];
   newCustomers = false;
+  /** The brand `seed` signs sessions in to. */
+  seedBrandId = '';
   readonly sent: SentLink[] = [];
   readonly links: Link[] = [];
   readonly sessions: Session[] = [];
@@ -330,6 +332,21 @@ export class MemoryPortalStore implements PortalStore {
       .flatMap((message) => message.files ?? [])
       .find((f) => f.id === attachmentId);
     return Promise.resolve(file === undefined ? null : { url: `/__e2e/file/${file.name}` });
+  }
+
+  /** For a suite that starts signed in: a session for a known address, valid for the cookie value `token`. */
+  seed(token: string, email: string, host: string, now: Date): void {
+    this.#counter += 1;
+    this.sessions.push({
+      id: `session-${String(this.#counter)}`,
+      brandId: this.seedBrandId,
+      contactId: this.known.get(email)?.contactId ?? `contact-${String(this.#counter)}`,
+      address: email,
+      hash: hashToken(token),
+      host,
+      expiresAt: sessionExpiry(now),
+      lastSeenAt: now,
+    });
   }
 
   /** For a browser test: every link emailed to this address is now past its fifteen minutes. */

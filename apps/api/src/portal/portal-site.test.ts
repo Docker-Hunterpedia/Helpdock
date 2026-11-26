@@ -193,6 +193,16 @@ describe('the sign-in form', () => {
     expect(csrfOf(response)).not.toBe('');
   });
 
+  it('draws the "New here?" line below the card, as the board does, not inside it', async () => {
+    const { site } = setup();
+    const body = (await site.handle(onHost('/sign-in'))).body;
+
+    const card = body.indexOf('class="hd-portal-card"');
+    const note = body.indexOf('hd-portal-note hd-portal-outside');
+    expect(body.indexOf('</form></div>', card)).toBeLessThan(note);
+    expect(body).toContain('Send us a message</a> instead.');
+  });
+
   it('draws the Arabic page for lang=ar', async () => {
     const { site } = setup();
     const response = await site.handle(onHost('/sign-in', { query: { lang: 'ar' } }));

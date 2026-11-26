@@ -328,7 +328,7 @@ const openedByOf = (
 
 // ---------------------------------------------------------------- one ticket
 
-interface ThreadRow {
+export interface ThreadRow {
   readonly id: string;
   readonly authorType: 'staff' | 'contact' | 'system' | 'ai';
   readonly authorId: string | null;
@@ -406,7 +406,8 @@ const fileColumns = {
   kind: attachments.kind,
 };
 
-const authorOf = (
+/** Who a message is from, to this viewer; pure, over the names the system-side lookups returned. */
+export const authorOf = (
   scope: CustomerScope,
   row: ThreadRow,
   contactsById: ReadonlyMap<string, ContactName>,

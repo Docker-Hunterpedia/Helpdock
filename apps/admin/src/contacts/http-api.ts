@@ -3,6 +3,8 @@ import type {
   AccountCreateRequest,
   AccountDetail,
   AccountList,
+  AccountPortal,
+  AccountPortalUpdate,
   AccountSearchQuery,
   AccountUpdateRequest,
   ContactCreateRequest,
@@ -12,6 +14,8 @@ import type {
   ContactMergePreview,
   ContactMergeRequest,
   ContactNoteRequest,
+  ContactPortalAccess,
+  ContactPortalSignOut,
   ContactSearchQuery,
   ContactTimeline,
   ContactUpdateRequest,
@@ -19,10 +23,13 @@ import type {
 import {
   accountDetailSchema,
   accountListSchema,
+  accountPortalSchema,
   accountSchema,
   contactDetailSchema,
   contactListSchema,
   contactMergePreviewSchema,
+  contactPortalAccessSchema,
+  contactPortalSignOutSchema,
   contactTimelineSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
@@ -199,6 +206,40 @@ export class HttpContactsApi implements ContactsApi {
         request,
       ),
     );
+  }
+
+  // ---------------------------------------------------------------- M21-06
+
+  async accountPortal(brandId: string, accountId: string): Promise<AccountPortal> {
+    return accountPortalSchema.parse(
+      await this.#transport.request('GET', this.#accountPortal(brandId, accountId)),
+    );
+  }
+
+  async saveAccountPortal(
+    brandId: string,
+    accountId: string,
+    request: AccountPortalUpdate,
+  ): Promise<AccountPortal> {
+    return accountPortalSchema.parse(
+      await this.#transport.request('PUT', this.#accountPortal(brandId, accountId), request),
+    );
+  }
+
+  async contactPortal(brandId: string, contactId: string): Promise<ContactPortalAccess> {
+    return contactPortalAccessSchema.parse(
+      await this.#transport.request('GET', `${this.#contact(brandId, contactId)}/portal`),
+    );
+  }
+
+  async signOutOfPortal(brandId: string, contactId: string): Promise<ContactPortalSignOut> {
+    return contactPortalSignOutSchema.parse(
+      await this.#transport.request('POST', `${this.#contact(brandId, contactId)}/portal/sign-out`),
+    );
+  }
+
+  #accountPortal(brandId: string, accountId: string): string {
+    return `${this.#accounts(brandId)}/${encodeURIComponent(accountId)}/portal`;
   }
 
   #contacts(brandId: string): string {

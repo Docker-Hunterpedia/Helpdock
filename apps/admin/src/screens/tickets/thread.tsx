@@ -676,6 +676,15 @@ export const describeEvent = (
       : 'time';
     return `${t(`tickets:event.woke.${reason}`, { actor })} · ${at}`;
   }
+  // M21-06: the private mark, set or taken off.
+  if (entry.action === 'ticket.portal_private.changed') {
+    return `${t(
+      entry.to?.private === true
+        ? 'tickets:event.portalPrivateOn'
+        : 'tickets:event.portalPrivateOff',
+      { actor },
+    )} ${via} · ${at}`;
+  }
   // M14-26: a rule chose the mailbox replies leave from.
   if (entry.action === 'ticket.reply_mailbox.changed') {
     return `${t(

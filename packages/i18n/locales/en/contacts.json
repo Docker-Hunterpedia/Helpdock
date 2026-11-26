@@ -246,5 +246,58 @@
     "domain": "Domain",
     "noDomain": "No domain"
   },
-  "loadFailed": "The contacts could not be loaded."
+  "loadFailed": "The contacts could not be loaded.",
+  "portal": {
+    "account": {
+      "heading": "Customer portal",
+      "caption": "Who at {{name}} sees the company’s tickets when they sign in.",
+      "off": "The customer portal is off for this brand, so this setting has no effect yet.",
+      "offLink": "Portal settings",
+      "legend": "Tickets a member sees",
+      "own": "Own tickets",
+      "ownHint": "Each person sees only tickets they opened or were added to by your team.",
+      "managers": "Managers",
+      "managersHint": "People marked company manager see all of {{name}}’s tickets. Everyone else sees their own.",
+      "all": "All members",
+      "allHint": "Everyone at {{name}} sees all of its tickets and can reply to them.",
+      "warning": "This shows people’s support history to their coworkers. Tickets marked “Private to the requester” stay hidden. The portal tells members their company can see what they open.",
+      "members": "Members",
+      "person": "Person",
+      "lastSignIn": "Last portal sign-in",
+      "manager": "Company manager",
+      "managerOf": "Company manager: {{name}}",
+      "managerNote": "Company manager applies only while the setting is Managers.",
+      "never": "Never",
+      "noMembers": "No contacts are filed under this account yet.",
+      "save": "Save",
+      "discard": "Discard",
+      "saved": "Customer portal settings saved for {{name}}",
+      "failed": "Could not save the portal setting. Nothing was changed. Try again.",
+      "loadFailed": "The portal setting could not be loaded."
+    },
+    "contact": {
+      "heading": "Customer portal",
+      "signedIn": "Signed in",
+      "signsInWith": "Signs in with",
+      "sees": "Sees",
+      "seesBecause": {
+        "no-account": "Own tickets only (not part of a company)",
+        "own": "Own tickets only ({{account}} shows each person their own)",
+        "manager": "All of {{account}}’s tickets (company manager)",
+        "member-not-manager": "Own tickets only ({{account}} shares with managers)",
+        "all": "All of {{account}}’s tickets (everyone in the company)"
+      },
+      "sessions": "Sessions",
+      "unknownBrowser": "Unknown browser",
+      "lastUsed": "Last used {{when}}",
+      "never": "{{name}} has not signed in to the customer portal.",
+      "signOut": "Sign out everywhere",
+      "confirmTitle": "Sign {{name}} out of the portal?",
+      "confirmBody_one": "This ends their {{count}} portal session. They can sign in again with a new link sent to their email.",
+      "confirmBody_other": "This ends their {{count}} portal sessions. They can sign in again with a new link sent to their email.",
+      "signedOut": "Signed {{name}} out of the portal",
+      "failed": "Could not sign out of the portal. Nothing was changed. Try again.",
+      "loadFailed": "The portal access could not be loaded."
+    }
+  }
 }

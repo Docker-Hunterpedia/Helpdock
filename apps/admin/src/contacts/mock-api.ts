@@ -3,6 +3,9 @@ import type {
   AccountCreateRequest,
   AccountDetail,
   AccountList,
+  AccountPortal,
+  AccountPortalUpdate,
+  AccountRole,
   AccountSearchQuery,
   AccountUpdateRequest,
   ContactCreateRequest,
@@ -18,12 +21,21 @@ import type {
   ContactMergeSummary,
   ContactNote,
   ContactNoteRequest,
+  ContactPortalAccess,
+  ContactPortalSession,
+  ContactPortalSignOut,
   ContactSearchQuery,
   ContactStats,
   ContactTimeline,
   ContactUpdateRequest,
 } from '@helpdock/schemas';
-import { CONTACT_PAGE_SIZE, normaliseIdentity } from '@helpdock/schemas';
+import {
+  CONTACT_PAGE_SIZE,
+  customerSees,
+  normaliseIdentity,
+  type PortalVisibility,
+  portalSeesBecause,
+} from '@helpdock/schemas';
 import { isMockEmpty } from '../auth/mock-empty.js';
 import {
   MOCK_CONTACT_DANIEL,
@@ -373,8 +385,30 @@ export type MockTicketHistory = (
 
 const NO_TICKETS: MockTicketHistory = () => ({ items: [], visibleCount: 0, hiddenCount: 0 });
 
+/** One portal browser of a mock contact, last used `hoursAgo` hours before the fixture was built. */
+const portalSession = (id: string, family: string, hoursAgo: number): ContactPortalSession => ({
+  id,
+  userAgentFamily: family,
+  lastSeenAt: new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString(),
+  host: 'help.helpdock.example',
+});
+
+const seedPortalSessions = (): Map<string, ContactPortalSession[]> =>
+  new Map([
+    [
+      MOCK_CONTACT_MONA,
+      [
+        portalSession('0192c3f0-1a2b-7c3d-8e4f-0000000000b1', 'Chrome on macOS', 2),
+        portalSession('0192c3f0-1a2b-7c3d-8e4f-0000000000b2', 'Safari on iPhone', 120),
+      ],
+    ],
+  ]);
+
 export class MockContactsApi implements ContactsApi {
   readonly #history: MockTicketHistory;
+  #portalVisibility = new Map<string, PortalVisibility>();
+  #roles = new Map<string, AccountRole>();
+  #portalSessions = seedPortalSessions();
   #accounts = seedAccounts();
   #contacts = seedContacts();
   #duplicates = seedDuplicates();
@@ -796,6 +830,85 @@ export class MockContactsApi implements ContactsApi {
     }
 
     return contact;
+  }
+
+  // ---------------------------------------------------------------- M21-06
+
+  async accountPortal(_brandId: string, accountId: string): Promise<AccountPortal> {
+    this.#requireAccount(accountId);
+
+    return this.#accountPortal(accountId);
+  }
+
+  async saveAccountPortal(
+    _brandId: string,
+    accountId: string,
+    request: AccountPortalUpdate,
+  ): Promise<AccountPortal> {
+    this.#requireAccount(accountId);
+    const members = this.#contacts.filter((row) => row.accountId === accountId);
+    if (!request.managerContactIds.every((id) => members.some((row) => row.id === id))) {
+      throw new Error('A manager must be a contact of this account');
+    }
+    this.#portalVisibility.set(accountId, request.visibility);
+    for (const member of members) {
+      this.#roles.set(
+        member.id,
+        request.managerContactIds.includes(member.id) ? 'manager' : 'member',
+      );
+    }
+
+    return this.#accountPortal(accountId);
+  }
+
+  async contactPortal(_brandId: string, contactId: string): Promise<ContactPortalAccess> {
+    const contact = this.#require(contactId);
+    const facts = {
+      hasAccount: contact.accountId !== null,
+      visibility:
+        contact.accountId === null
+          ? ('own' as const)
+          : (this.#portalVisibility.get(contact.accountId) ?? 'own'),
+      role: this.#roles.get(contactId) ?? 'member',
+    };
+    const sessions = this.#portalSessions.get(contactId) ?? [];
+
+    return {
+      signedIn: sessions.length > 0,
+      signsInWith:
+        sessions.length === 0
+          ? null
+          : (contact.identities.find((row) => row.kind === 'email')?.value ?? null),
+      sees: customerSees(facts),
+      seesBecause: portalSeesBecause(facts),
+      sessions: sessions.map((session) => ({ ...session })),
+    };
+  }
+
+  async signOutOfPortal(_brandId: string, contactId: string): Promise<ContactPortalSignOut> {
+    this.#require(contactId);
+    const ended = this.#portalSessions.get(contactId)?.length ?? 0;
+    this.#portalSessions.delete(contactId);
+
+    return { ended };
+  }
+
+  #accountPortal(accountId: string): AccountPortal {
+    return {
+      visibility: this.#portalVisibility.get(accountId) ?? 'own',
+      members: this.#contacts
+        .filter((row) => row.accountId === accountId && !row.anonymised)
+        .map((row) => ({
+          contactId: row.id,
+          name: row.name,
+          email:
+            row.identities.find(
+              (identityRow) => identityRow.kind === 'email' && identityRow.verified,
+            )?.value ?? null,
+          role: this.#roles.get(row.id) ?? 'member',
+          lastSignInAt: this.#portalSessions.get(row.id)?.[0]?.lastSeenAt ?? null,
+        })),
+    };
   }
 
   #requireAccount(accountId: string): Account {

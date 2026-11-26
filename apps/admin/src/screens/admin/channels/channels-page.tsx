@@ -19,6 +19,7 @@ import { FailedSendsCard } from './failed-sends-card.tsx';
 import { MailboxesTab } from './mailboxes-tab.tsx';
 import { MetaAccountPage } from './meta/account-page.tsx';
 import { MetaTab } from './meta/meta-tab.tsx';
+import { PortalTab } from './portal-tab.tsx';
 import { SendersCard } from './senders-card.tsx';
 import { SmtpCard } from './smtp-card.tsx';
 import { type ChannelsTab, channelsTabForSegment, channelsTabsFor } from './tabs.js';
@@ -32,7 +33,7 @@ import { WidgetTab } from './widget/widget-tab.tsx';
  * `AdminEmailOutgoing` for Outgoing email, `AdminWidget` for Widget, M4, and
  * `AdminWebForm` for Web form, M4-09, `Admin/Channels-Telegram` for Telegram,
  * M6-05, `Admin/Channels-Meta` and `Admin/Channels-Meta-Account` for Meta,
- * M10-07):
+ * M10-07, and `Admin/Channels-CustomerPortal` for the Customer portal, M21-06):
  * the page header, the tab row of the tabs the viewer's role may open, and
  * the tab the url names. The tabs are links, as on Ticketing, so a tab is a
  * url and back works. "Add mailbox" belongs to the Mailboxes tab alone, and
@@ -69,7 +70,11 @@ export function ChannelsPage(): ReactNode {
     <>
       <PageHeader
         title={t('channels:title')}
-        caption={t('channels:subtitle', { brand: brand.name })}
+        caption={
+          tab.key === 'portal'
+            ? t('channels:portal.caption')
+            : t('channels:subtitle', { brand: brand.name })
+        }
         action={
           tab.key === 'mailboxes' ? (
             <Button
@@ -164,6 +169,8 @@ function TabBody({
       ) : (
         <MetaAccountPage accountId={accountId} />
       );
+    case 'portal':
+      return <PortalTab />;
   }
 }
 

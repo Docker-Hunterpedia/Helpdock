@@ -8,7 +8,8 @@
     "widget": "Widget",
     "webForm": "Web form",
     "telegram": "Telegram",
-    "meta": "Meta"
+    "meta": "Meta",
+    "portal": "Customer portal"
   },
   "mailboxes": {
     "heading": "Mailboxes",
@@ -1195,5 +1196,29 @@
       "copied": "Copied",
       "verifyTokenMade": "New verify token made"
     }
+  },
+  "portal": {
+    "heading": "Customer portal",
+    "caption": "A place on your help center where customers read and answer their tickets.",
+    "off": "The portal is off. Customers see no Sign in link, and its addresses answer “not found”.",
+    "form": "Customer portal settings",
+    "enabled": "Customer portal",
+    "enabledHint": "Customers sign in on your help center with a link sent to their email and see their tickets at",
+    "newCustomers": "New customers may sign in",
+    "newCustomersHint": "Off: only people who already have a ticket get a sign-in link. On: anyone with an email address can sign in and open their first ticket in the portal.",
+    "departments": "Departments shown",
+    "departmentsHint": "Which departments’ tickets customers can see in the portal.",
+    "allDepartments": "All departments",
+    "allDepartmentsHint": "Every ticket a customer is entitled to.",
+    "onlyThese": "Only these",
+    "onlyTheseHint": "Tickets of other departments never show, even to their requester.",
+    "needsOne": "Choose at least one department.",
+    "related": "Related",
+    "relatedAccounts": "Who in a company sees its tickets is set on each account",
+    "relatedEmail": "The sign-in email uses your customer email design",
+    "save": "Save",
+    "saved": "Customer portal settings saved",
+    "saveFailed": "Could not save the portal settings. Nothing was changed. Try again.",
+    "loadFailed": "The portal settings could not be loaded. Reload the page to try again."
   }
 }

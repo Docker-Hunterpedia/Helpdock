@@ -21,6 +21,7 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { PageHeader } from '../../shell/page-header.tsx';
+import { AccountPortalSection } from './account-portal-section.tsx';
 import { AccountDialog } from './contact-dialogs.tsx';
 import { DASH } from './format.js';
 import { ContactAvatar } from './identity-pieces.tsx';
@@ -129,6 +130,8 @@ export function AccountPage(): ReactNode {
           </Table>
         </TableContainer>
       )}
+
+      <AccountPortalSection accountId={accountId} accountName={detail.account.name} />
 
       <AccountDialog
         open={editing}

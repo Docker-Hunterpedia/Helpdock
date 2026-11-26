@@ -3,6 +3,8 @@ import type {
   AccountCreateRequest,
   AccountDetail,
   AccountList,
+  AccountPortal,
+  AccountPortalUpdate,
   AccountSearchQuery,
   AccountUpdateRequest,
   ContactCreateRequest,
@@ -12,6 +14,8 @@ import type {
   ContactMergePreview,
   ContactMergeRequest,
   ContactNoteRequest,
+  ContactPortalAccess,
+  ContactPortalSignOut,
   ContactRefusal,
   ContactSearchQuery,
   ContactTimeline,
@@ -75,6 +79,20 @@ export interface ContactsApi {
     accountId: string,
     request: AccountUpdateRequest,
   ): Promise<Account>;
+
+  // ---------------------------------------------------------------- M21-06
+
+  /** The account page's "Customer portal" section: the setting and each member's role and last use. */
+  accountPortal(brandId: string, accountId: string): Promise<AccountPortal>;
+  saveAccountPortal(
+    brandId: string,
+    accountId: string,
+    request: AccountPortalUpdate,
+  ): Promise<AccountPortal>;
+  /** The contact page's "Customer portal" card. */
+  contactPortal(brandId: string, contactId: string): Promise<ContactPortalAccess>;
+  /** "Sign out everywhere": how many sessions ended. */
+  signOutOfPortal(brandId: string, contactId: string): Promise<ContactPortalSignOut>;
 }
 
 /**

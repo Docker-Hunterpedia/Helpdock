@@ -30,6 +30,7 @@ import type {
   TicketMessage,
   TicketMessagePage,
   TicketParticipantList,
+  TicketPortalView,
   TicketPriority,
   TicketRouting,
   TicketSort,
@@ -118,6 +119,9 @@ export interface TicketsApi {
     ticketId: string,
     participantId: string,
   ): Promise<TicketParticipantList>;
+
+  /** M21-06: the details panel's "Private to the requester" switch; answers with who sees the ticket now. */
+  setPortalPrivate(brandId: string, ticketId: string, value: boolean): Promise<TicketPortalView>;
 
   /** M1-12's Time card. Every write answers with the whole list and its total. */
   timeEntries(brandId: string, ticketId: string): Promise<TimeEntryList>;

@@ -640,3 +640,24 @@ describe('bulk edit (M14-04)', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('HttpTicketsApi private to the requester (M21-06)', () => {
+  it('puts the mark and parses who sees the ticket now', async () => {
+    const view = { private: true, requester: 'Mona Khalil', company: null };
+    fetchMock.mockResolvedValue(json(view));
+
+    await expect(api.setPortalPrivate(BRAND, TICKET, true)).resolves.toEqual(view);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/portal-private`);
+    expect(lastInit().method).toBe('PUT');
+    expect(JSON.parse(String(lastInit().body))).toEqual({ private: true });
+  });
+
+  it('refuses an answer that carries more than the view', async () => {
+    fetchMock.mockResolvedValue(
+      json({ private: true, requester: null, company: null, accountId: 'x' }),
+    );
+
+    await expect(api.setPortalPrivate(BRAND, TICKET, true)).rejects.toBeDefined();
+  });
+});

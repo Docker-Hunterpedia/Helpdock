@@ -674,3 +674,24 @@ describe('macros (M3-06)', () => {
     expect(lastCall().init.method).toBe('DELETE');
   });
 });
+
+describe('the Customer portal page (M21-06)', () => {
+  it('puts the whole portal block to its own route and parses it back', async () => {
+    const body = { enabled: true, newCustomers: false, departmentIds: [DEPARTMENT] };
+    fetchMock.mockResolvedValue(json(body));
+
+    await expect(api.updatePortalSettings(BRAND, body)).resolves.toEqual(body);
+
+    expect(lastCall().url).toBe(`/api/brands/${BRAND}/portal-settings`);
+    expect(lastCall().init.method).toBe('PUT');
+    expect(JSON.parse(String(lastCall().init.body))).toEqual(body);
+  });
+
+  it('fails on an answer that is not the portal block', async () => {
+    fetchMock.mockResolvedValue(json({ enabled: 'yes' }));
+
+    await expect(
+      api.updatePortalSettings(BRAND, { enabled: true, newCustomers: false, departmentIds: 'all' }),
+    ).rejects.toBeDefined();
+  });
+});

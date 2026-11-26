@@ -33,6 +33,8 @@ import type {
   MacroList,
   MacroListQuery,
   MacroUpdateRequest,
+  PortalSettings,
+  PortalSettingsUpdate,
   PriorityLabelsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
@@ -79,6 +81,7 @@ import {
   holidaySchema,
   macroListSchema,
   macroSchema,
+  portalSettingsSchema,
   retentionOverviewSchema,
   slaPolicyListSchema,
   slaPolicySchema,
@@ -306,6 +309,17 @@ export class HttpTicketingApi implements TicketingApi {
   ): Promise<BrandSettings> {
     return brandSettingsSchema.parse(
       await this.#transport.request('PATCH', `${this.#brand(brandId)}/ticketing/feedback`, request),
+    );
+  }
+
+  // ---------------------------------------------------------------- M21-06
+
+  async updatePortalSettings(
+    brandId: string,
+    request: PortalSettingsUpdate,
+  ): Promise<PortalSettings> {
+    return portalSettingsSchema.parse(
+      await this.#transport.request('PUT', `${this.#brand(brandId)}/portal-settings`, request),
     );
   }
 

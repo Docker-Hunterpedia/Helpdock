@@ -29,6 +29,7 @@ import { formatDay } from '../../ui/format.js';
 import { useToast } from '../../ui/toasts.tsx';
 import { AnonymiseDialog } from './anonymise-dialog.tsx';
 import { ContactDialog, IdentityDialog } from './contact-dialogs.tsx';
+import { ContactPortalCard } from './contact-portal-card.tsx';
 import { DuplicateSuggestions } from './duplicate-suggestions.tsx';
 import { csatLabel, DASH, durationLabel, identityLabel, languageName } from './format.js';
 import { ContactAvatar, IdentityLine, IdentityText } from './identity-pieces.tsx';
@@ -567,6 +568,14 @@ export function ContactPage(): ReactNode {
               {t('contacts:details.edit')}
             </Button>
           </Card>
+
+          {detail.anonymised ? null : (
+            <ContactPortalCard
+              contactId={detail.id}
+              contactName={detail.name}
+              accountName={detail.account?.name ?? null}
+            />
+          )}
 
           <Card title={t('contacts:stats.title')}>
             <Box sx={{ display: 'flex', gap: 4 }}>

@@ -202,7 +202,9 @@
       "status_changed": "The ticket woke up: its status changed",
       "manual": "{{actor}} woke the ticket"
     },
-    "closedWithout": "{{actor}} closed the ticket without {{fields}}"
+    "closedWithout": "{{actor}} closed the ticket without {{fields}}",
+    "portalPrivateOn": "{{actor}} marked this ticket private to the requester",
+    "portalPrivateOff": "{{actor}} made this ticket visible to the requester’s company again"
   },
   "closeGate": {
     "title": "Fill in before closing",
@@ -342,7 +344,14 @@
     "removed": "{{address}} removed.",
     "failed": "That did not work. Try again.",
     "summary_one": "{{count}} participant · Add CC",
-    "summary_other": "{{count}} participants · Add CC"
+    "summary_other": "{{count}} participants · Add CC",
+    "addedBy": "Added by {{name}}",
+    "fromEmail": "From email Cc",
+    "fromMerge": "From a merge",
+    "imported": "Imported",
+    "seesPortal": "Sees it in the portal",
+    "portalHint": "Someone copied on an email gets the replies by email only. Add them here to let them read this ticket in the portal.",
+    "addedByStaff": "Added by your team"
   },
   "filters": {
     "title": "Filter tickets",
@@ -1356,5 +1365,19 @@
   },
   "pinned": {
     "name": "{{field}}:"
+  },
+  "portal": {
+    "title": "Customer portal",
+    "private": "Private to the requester",
+    "hintOff": "Hidden from the requester’s company in the portal. Use it for payroll, HR or anything personal.",
+    "hintOn": "Only {{name}} and people your team added see this ticket in the portal. Their company does not.",
+    "hintOnNoName": "Only the requester and people your team added see this ticket in the portal. Their company does not.",
+    "nowVisible": "Now visible to:",
+    "nobody": "nobody in the portal",
+    "markedOn": "Marked private to the requester",
+    "markedOff": "Visible to the requester’s company again",
+    "failed": "That did not work. The ticket was not changed.",
+    "companyAll": "all of {{account}}",
+    "companyManagers": "managers of {{account}}"
   }
 }

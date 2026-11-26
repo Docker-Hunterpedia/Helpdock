@@ -41,6 +41,7 @@ import type {
   TicketMessage,
   TicketMessagePage,
   TicketParticipantList,
+  TicketPortalView,
   TicketPriority,
   TicketRelation,
   TicketRouting,
@@ -930,6 +931,32 @@ export class MockTicketsApi implements TicketsApi {
           name: 'finance@acme.de',
           address: 'finance@acme.de',
           source: 'agent',
+          addedByName: 'Lina Haddad',
+          seesInPortal: false,
+        },
+      ],
+    ],
+    [
+      // M21-06: a Cc the customer's own mail brought in, and one staff added, so the card draws both chips.
+      MOCK_TICKET_SIGN_IN,
+      [
+        {
+          id: '0192c3f0-1a2b-7c3d-8e4f-0000000cc002',
+          contactId: '0192c3f0-1a2b-7c3d-8e4f-0000000cc0c2',
+          name: 'Sara M.',
+          address: 'sara@acme.example',
+          source: 'email',
+          addedByName: null,
+          seesInPortal: false,
+        },
+        {
+          id: '0192c3f0-1a2b-7c3d-8e4f-0000000cc003',
+          contactId: '0192c3f0-1a2b-7c3d-8e4f-0000000cc0c3',
+          name: 'Omar Saleh',
+          address: 'omar@acme.example',
+          source: 'agent',
+          addedByName: 'Lina Haddad',
+          seesInPortal: true,
         },
       ],
     ],
@@ -1112,6 +1139,7 @@ export class MockTicketsApi implements TicketsApi {
       activityNextBefore: activity.nextBefore,
       csat: this.#csat.get(ticketId) ?? null,
       sla: mockSlaOf(ticket, this.#now),
+      portal: this.#portalView(ticket),
       ...this.#mergeView(ticket),
     });
   }
@@ -2273,6 +2301,8 @@ export class MockTicketsApi implements TicketsApi {
           name: result.value,
           address: result.value,
           source: 'agent',
+          addedByName: 'Lina Haddad',
+          seesInPortal: false,
         },
       ]);
     }
@@ -2292,6 +2322,51 @@ export class MockTicketsApi implements TicketsApi {
     );
 
     return this.participants(brandId, ticketId);
+  }
+
+  /** M21-06: the tickets marked private to their requester. */
+  readonly #portalPrivate = new Set<string>();
+
+  #portalView(ticket: Ticket): TicketPortalView {
+    const requester =
+      ticket.contactId === null ? null : (MOCK_CONTACT_NAMES[ticket.contactId] ?? null);
+    const inCompany =
+      ticket.contactId === MOCK_CONTACT_MONA || ticket.contactId === MOCK_CONTACT_ACCOUNT;
+    const isPrivate = this.#portalPrivate.has(ticket.id);
+
+    return {
+      private: isPrivate,
+      requester,
+      company: !isPrivate && inCompany ? { name: 'Acme GmbH', audience: 'all' } : null,
+    };
+  }
+
+  async setPortalPrivate(
+    _brandId: string,
+    ticketId: string,
+    value: boolean,
+  ): Promise<TicketPortalView> {
+    const ticket = this.#require(ticketId);
+    if (this.#portalPrivate.has(ticketId) !== value) {
+      if (value) {
+        this.#portalPrivate.add(ticketId);
+      } else {
+        this.#portalPrivate.delete(ticketId);
+      }
+      this.#activity.push({
+        id: this.#nextId('8'),
+        ticketId,
+        actorType: 'staff',
+        actorId: MOCK_SELF_ID,
+        action: 'ticket.portal_private.changed',
+        from: { private: !value },
+        to: { private: value },
+        via: 'ui',
+        createdAt: isoNow(),
+      });
+    }
+
+    return this.#portalView(ticket);
   }
 
   #defaultStatus(): TicketStatus {

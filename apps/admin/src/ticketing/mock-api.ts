@@ -34,6 +34,8 @@ import type {
   MacroList,
   MacroListQuery,
   MacroUpdateRequest,
+  PortalSettings,
+  PortalSettingsUpdate,
   PriorityLabelsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
@@ -97,6 +99,9 @@ import { MockSlaSettings } from './mock-sla.js';
  * Its departments start as the ones `MockStaffApi` offers in the chip picker,
  * so the two fixtures describe one brand rather than two.
  */
+
+/** Set to `1` in `localStorage` to make the next portal-settings save fail (Playwright's failure path). */
+export const MOCK_FAIL_PORTAL_SETTINGS_KEY = 'helpdock.mock.failPortalSettings';
 
 const MEMBERS: readonly EligibleMember[] = [
   {
@@ -901,6 +906,22 @@ export class MockTicketingApi implements TicketingApi {
     this.#brand = { ...this.#brand, settings: { ...this.#brand.settings, ...changes } };
 
     return this.#brand.settings;
+  }
+
+  // ---------------------------------------------------------------- M21-06
+
+  async updatePortalSettings(
+    _brandId: string,
+    request: PortalSettingsUpdate,
+  ): Promise<PortalSettings> {
+    // The Playwright "save failed" path: a test sets this key before it clicks Save.
+    if (globalThis.localStorage?.getItem(MOCK_FAIL_PORTAL_SETTINGS_KEY) === '1') {
+      throw new Error('mock: the portal settings could not be saved');
+    }
+    const portal = { ...request };
+    this.#brand = { ...this.#brand, settings: { ...this.#brand.settings, portal } };
+
+    return portal;
   }
 
   // ---------------------------------------------------------------- M1-02

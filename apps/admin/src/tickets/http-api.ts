@@ -26,6 +26,7 @@ import type {
   TicketMessage,
   TicketMessagePage,
   TicketParticipantList,
+  TicketPortalView,
   TicketRouting,
   TicketSpamSender,
   TicketSplitRequest,
@@ -59,6 +60,7 @@ import {
   ticketMessagePageSchema,
   ticketMessageSchema,
   ticketParticipantListSchema,
+  ticketPortalViewSchema,
   ticketRoutingSchema,
   ticketSchema,
   ticketSpamSenderSchema,
@@ -227,6 +229,18 @@ export class HttpTicketsApi implements TicketsApi {
         `${this.#ticket(brandId, ticketId)}/participants`,
         request,
       ),
+    );
+  }
+
+  async setPortalPrivate(
+    brandId: string,
+    ticketId: string,
+    value: boolean,
+  ): Promise<TicketPortalView> {
+    return ticketPortalViewSchema.parse(
+      await this.#transport.request('PUT', `${this.#ticket(brandId, ticketId)}/portal-private`, {
+        private: value,
+      }),
     );
   }
 

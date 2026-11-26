@@ -59,3 +59,57 @@ describe('HttpContactsApi merges', () => {
     expect(lastInit().method).toBe('POST');
   });
 });
+
+describe('HttpContactsApi customer portal (M21-06)', () => {
+  const account = '0192c3f0-1a2b-7c3d-8e4f-0000000000a1';
+  const portal = {
+    visibility: 'managers',
+    members: [
+      {
+        contactId: MOCK_CONTACT_MONA,
+        name: 'Mona Khalil',
+        email: 'mona@example.com',
+        role: 'manager',
+        lastSignInAt: null,
+      },
+    ],
+  };
+
+  it('reads and puts an account’s setting on the account’s portal path', async () => {
+    fetchMock.mockResolvedValue(json(portal));
+    await expect(api.accountPortal(MOCK_BRAND, account)).resolves.toEqual(portal);
+    expect(lastUrl()).toBe(`/api/brands/${MOCK_BRAND}/accounts/${account}/portal`);
+
+    fetchMock.mockResolvedValue(json(portal));
+    await api.saveAccountPortal(MOCK_BRAND, account, {
+      visibility: 'managers',
+      managerContactIds: [MOCK_CONTACT_MONA],
+    });
+    expect(lastInit().method).toBe('PUT');
+    expect(JSON.parse(String(lastInit().body))).toEqual({
+      visibility: 'managers',
+      managerContactIds: [MOCK_CONTACT_MONA],
+    });
+  });
+
+  it('reads a contact’s access and signs them out on the contact’s portal path', async () => {
+    const access = await new MockContactsApi().contactPortal(MOCK_BRAND, MOCK_CONTACT_MONA);
+    fetchMock.mockResolvedValue(json(access));
+    await expect(api.contactPortal(MOCK_BRAND, MOCK_CONTACT_MONA)).resolves.toEqual(access);
+    expect(lastUrl()).toBe(`${base}/portal`);
+
+    fetchMock.mockResolvedValue(json({ ended: 2 }));
+    await expect(api.signOutOfPortal(MOCK_BRAND, MOCK_CONTACT_MONA)).resolves.toEqual({ ended: 2 });
+    expect(lastUrl()).toBe(`${base}/portal/sign-out`);
+    expect(lastInit().method).toBe('POST');
+  });
+
+  it('refuses an access answer that carries a session secret', async () => {
+    const access = await new MockContactsApi().contactPortal(MOCK_BRAND, MOCK_CONTACT_MONA);
+    fetchMock.mockResolvedValue(
+      json({ ...access, sessions: access.sessions.map((s) => ({ ...s, tokenHash: 'x' })) }),
+    );
+
+    await expect(api.contactPortal(MOCK_BRAND, MOCK_CONTACT_MONA)).rejects.toBeDefined();
+  });
+});

@@ -273,7 +273,8 @@
       "systemAuditLog": "activity log, who changed, history, security log",
       "brandRetention": "retention, purge, delete old tickets, keep data, privacy, search log",
       "systemQueues": "queues, jobs, background jobs, bullmq, retry, failed jobs",
-      "contactsAccounts": "companies, organisations, domains, customer accounts"
+      "contactsAccounts": "companies, organisations, domains, customer accounts",
+      "channelsPortal": "customer portal, sign in, my tickets, customers log in, portal, self service"
     }
   },
   "setupChecklist": {

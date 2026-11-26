@@ -215,3 +215,33 @@ describe('the closed-without line in the thread (M14-17)', () => {
     ).not.toContain('without');
   });
 });
+
+describe('the private mark line (M21-06)', () => {
+  const NOW = Date.parse('2026-11-26T12:00:00Z');
+  const make = (to: Record<string, unknown>): TicketActivityEntry => ({
+    id: '0193b000-0000-7000-8000-000000000921',
+    ticketId: '0193b000-0000-7000-8000-000000000923',
+    actorType: 'staff',
+    actorId: '0193b000-0000-7000-8000-000000000924',
+    action: 'ticket.portal_private.changed',
+    via: 'ui',
+    createdAt: '2026-11-26T11:00:00Z',
+    from: { private: to.private !== true },
+    to,
+  });
+
+  it('is drawn in the thread, in English and Arabic, for the mark set and for the mark taken off', () => {
+    const on = make({ private: true });
+    const off = make({ private: false });
+
+    expect(buildThread([], [on, off], [])).toMatchObject([{ kind: 'event' }, { kind: 'event' }]);
+    expect(describeEvent(on, names, en, 'en', NOW)).toContain(
+      'marked this ticket private to the requester',
+    );
+    expect(describeEvent(off, names, en, 'en', NOW)).toContain(
+      'made this ticket visible to the requester’s company again',
+    );
+    expect(describeEvent(on, names, ar, 'ar', NOW)).toContain('خاصة بصاحب الطلب');
+    expect(describeEvent(off, names, ar, 'ar', NOW)).toContain('شركة صاحب الطلب');
+  });
+});

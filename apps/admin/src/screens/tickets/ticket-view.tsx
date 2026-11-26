@@ -74,6 +74,7 @@ import { MergeDialog } from './merge-dialog.tsx';
 import { MergedIntoBanner } from './merged-block.tsx';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
 import { useTicketMeta } from './meta/use-ticket-meta.tsx';
+import { PortalCard } from './portal-card.tsx';
 import type { ComposerReplyTo } from './reply-to-strip.tsx';
 import { RoutingTrail } from './routing-trail.tsx';
 import { SnoozeControl } from './snooze/snooze-control.tsx';
@@ -941,6 +942,9 @@ export function TicketView({
         />
       )}
       {ticketAi.card}
+      {brand.data?.settings.portal.enabled === true && detail.data?.portal !== undefined ? (
+        <PortalCard ticketId={ticketId} portal={detail.data.portal} canWrite={canWrite} />
+      ) : null}
     </>
   );
 

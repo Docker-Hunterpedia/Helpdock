@@ -1,11 +1,11 @@
-import type { TicketParticipantList } from '@helpdock/schemas';
+import type { TicketCc, TicketParticipantList } from '@helpdock/schemas';
 import { Box, Button, IconButton, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { currentBrand, useSession, useTicketsApi } from '../../auth/session.tsx';
+import { currentBrand, useSession, useTicketingApi, useTicketsApi } from '../../auth/session.tsx';
 import { isContactError } from '../../contacts/api.js';
 import { useToast } from '../../ui/toasts.tsx';
 
@@ -37,6 +37,15 @@ export function ParticipantsCard({ ticketId }: { readonly ticketId: string }): R
   const [open, setOpen] = useState(false);
   const bodyId = `${inputId}-body`;
   const key = ['ticket-participants', brand.id, ticketId];
+  // M21-06: how each CC was added, and who sees the ticket in the portal, only matter while it is on.
+  const ticketing = useTicketingApi();
+  const brandQuery = useQuery({
+    queryKey: ['brand', brand.id],
+    queryFn: () => ticketing.brand(brand.id),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const portalOn = brandQuery.data?.settings.portal.enabled === true;
 
   const participants = useQuery({
     queryKey: key,
@@ -159,9 +168,19 @@ export function ParticipantsCard({ ticketId }: { readonly ticketId: string }): R
                   component="li"
                   sx={{ display: 'flex', alignItems: 'center', gap: 2 }}
                 >
-                  <Typography variant="body2" sx={{ flexGrow: 1, minWidth: 0 }}>
-                    <bdi>{label}</bdi>
-                  </Typography>
+                  <Box sx={{ flexGrow: 1, minWidth: 0, display: 'grid', gap: 1 }}>
+                    <Typography variant="body2">
+                      <bdi>{label}</bdi>
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        {howAdded(cc, t)}
+                      </Typography>
+                      {portalOn && cc.seesInPortal === true ? (
+                        <Pill tone="success">{t('tickets:participants.seesPortal')}</Pill>
+                      ) : null}
+                    </Box>
+                  </Box>
                   <Pill tone="info">{t('tickets:participants.cc')}</Pill>
                   <IconButton
                     size="small"
@@ -204,18 +223,43 @@ export function ParticipantsCard({ ticketId }: { readonly ticketId: string }): R
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {t('tickets:participants.hint')}
           </Typography>
+          {portalOn ? (
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {t('tickets:participants.portalHint')}
+            </Typography>
+          ) : null}
         </Box>
       ) : null}
     </Box>
   );
 }
 
+/**
+ * How a CC came to be on the ticket, in the words of the artboard: "Added by
+ * Lina" for a staff add, "From email Cc" for a mail CC, "From a merge" and
+ * "Imported" for the other two sources.
+ */
+const howAdded = (cc: TicketCc, t: ReturnType<typeof useT>): string => {
+  switch (cc.source) {
+    case 'agent':
+      return cc.addedByName === null || cc.addedByName === undefined
+        ? t('tickets:participants.addedByStaff')
+        : t('tickets:participants.addedBy', { name: cc.addedByName });
+    case 'email':
+      return t('tickets:participants.fromEmail');
+    case 'merge':
+      return t('tickets:participants.fromMerge');
+    case 'import':
+      return t('tickets:participants.imported');
+  }
+};
+
 /** The 22 px label beside a participant: "contact" on neutral, "CC" on the info tint. */
 function Pill({
   tone,
   children,
 }: {
-  readonly tone: 'neutral' | 'info';
+  readonly tone: 'neutral' | 'info' | 'success';
   readonly children: ReactNode;
 }): ReactNode {
   const tokens = useSemanticTokens();
@@ -232,8 +276,18 @@ function Pill({
         alignItems: 'center',
         whiteSpace: 'nowrap',
         fontWeight: 500,
-        backgroundColor: tone === 'info' ? tokens['status.info.tint'] : tokens['bg.muted'],
-        color: tone === 'info' ? tokens['status.info.text'] : tokens['text.secondary'],
+        backgroundColor:
+          tone === 'info'
+            ? tokens['status.info.tint']
+            : tone === 'success'
+              ? tokens['status.success.tint']
+              : tokens['bg.muted'],
+        color:
+          tone === 'info'
+            ? tokens['status.info.text']
+            : tone === 'success'
+              ? tokens['status.success.text']
+              : tokens['text.secondary'],
       }}
     >
       {children}

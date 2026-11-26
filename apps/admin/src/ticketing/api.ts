@@ -33,6 +33,8 @@ import type {
   MacroList,
   MacroListQuery,
   MacroUpdateRequest,
+  PortalSettings,
+  PortalSettingsUpdate,
   PriorityLabelsUpdateRequest,
   ReplyBehaviourUpdateRequest,
   RetentionOverview,
@@ -149,6 +151,11 @@ export interface TicketingApi {
 
   /** The Feedback tab's three toggles: CSAT, time tracking, the composer timer. */
   updateFeedback(brandId: string, request: FeedbackSettingsUpdateRequest): Promise<BrandSettings>;
+  // ---------------------------------------------------------------- M21-06
+
+  /** Channels › Customer portal: the whole `settings.portal` block replaces the stored one. */
+  updatePortalSettings(brandId: string, request: PortalSettingsUpdate): Promise<PortalSettings>;
+
   // ---------------------------------------------------------------- M1-02
 
   /** The Priorities page: the whole four-row map replaces the stored names. */

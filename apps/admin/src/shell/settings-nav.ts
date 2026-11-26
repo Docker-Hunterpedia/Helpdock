@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Clock,
   Code,
+  DoorOpen,
   Download,
   Flag,
   Globe,
@@ -157,6 +158,7 @@ const ICON_OF: Readonly<Record<string, LucideIcon>> = {
   channelsMeta: MessageCircle,
   channelsWidget: MessageSquare,
   channelsWebForm: ClipboardList,
+  channelsPortal: DoorOpen,
   aiProviders: Plug,
   aiKnowledge: BookMarked,
   aiAssistant: Bot,
@@ -334,6 +336,13 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     channelsRoute('web-form'),
     'channels:tabs.webForm',
     channelsEntry('web-form'),
+  ),
+  entry(
+    'channelsPortal',
+    'channels',
+    channelsRoute('portal'),
+    'channels:tabs.portal',
+    channelsEntry('portal'),
   ),
 
   entry(

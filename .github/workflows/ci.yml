@@ -41,7 +41,9 @@ permissions:
 #   pull-through cache of Docker Hub, which has no such limit: Testcontainers
 #   through `TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX`, the Dockerfile through its
 #   `NODE_IMAGE` argument, and the smoke stack's Postgres and Redis
-#   pulled ahead and tagged under the names the Compose file uses.
+#   pulled ahead and tagged under the names the Compose file uses. The mirror
+#   refuses a pull now and then, so `scripts/ci-pull-images.sh` pulls the
+#   test images ahead with retries in every job that starts containers.
 # - ffmpeg: the media pipeline spawns ffmpeg and ffprobe (ARCHITECTURE §9) and
 #   the suites that exercise them skip themselves when they are absent, so the
 #   jobs that run those suites install it.
@@ -365,6 +367,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # The mirror refuses a pull now and then (429, 500). Pulling ahead with
+      # retries means Testcontainers finds its images locally; a failure here
+      # only warns, and the tests then pull for themselves as before.
+      - name: Pull test images through the mirror, with retries
+        if: env.DOCKERHUB_CONFIGURED != 'true'
+        continue-on-error: true
+        run: ./scripts/ci-pull-images.sh pgvector/pgvector:pg17 redis:7-alpine axllent/mailpit:latest greenmail/standalone:2.1.5
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - name: Set up Node
@@ -434,6 +443,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # The mirror refuses a pull now and then (429, 500). Pulling ahead with
+      # retries means Testcontainers finds its images locally; a failure here
+      # only warns, and the tests then pull for themselves as before.
+      - name: Pull test images through the mirror, with retries
+        if: env.DOCKERHUB_CONFIGURED != 'true'
+        continue-on-error: true
+        run: ./scripts/ci-pull-images.sh pgvector/pgvector:pg17 redis:7-alpine axllent/mailpit:latest greenmail/standalone:2.1.5
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - name: Set up Node
@@ -514,6 +530,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # The mirror refuses a pull now and then (429, 500). Pulling ahead with
+      # retries means Testcontainers finds its images locally; a failure here
+      # only warns, and the tests then pull for themselves as before.
+      - name: Pull test images through the mirror, with retries
+        if: env.DOCKERHUB_CONFIGURED != 'true'
+        continue-on-error: true
+        run: ./scripts/ci-pull-images.sh pgvector/pgvector:pg17 redis:7-alpine axllent/mailpit:latest greenmail/standalone:2.1.5
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - name: Set up Node
@@ -667,6 +690,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # The mirror refuses a pull now and then (429, 500). Pulling ahead with
+      # retries means Testcontainers finds its images locally; a failure here
+      # only warns, and the tests then pull for themselves as before.
+      - name: Pull test images through the mirror, with retries
+        if: env.DOCKERHUB_CONFIGURED != 'true'
+        continue-on-error: true
+        run: ./scripts/ci-pull-images.sh pgvector/pgvector:pg17 redis:7-alpine axllent/mailpit:latest greenmail/standalone:2.1.5
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - name: Set up Node
@@ -781,15 +811,7 @@ jobs:
       # finds them in the daemon and pulls nothing from Docker Hub.
       - name: Pull the stack's images through the mirror
         if: env.DOCKERHUB_CONFIGURED != 'true'
-        run: |
-          for image in pgvector/pgvector:pg17 redis:7-alpine; do
-            case "$image" in
-              */*) source="mirror.gcr.io/$image" ;;
-              *) source="mirror.gcr.io/library/$image" ;;
-            esac
-            docker pull --quiet "$source"
-            docker tag "$source" "$image"
-          done
+        run: ./scripts/ci-pull-images.sh pgvector/pgvector:pg17 redis:7-alpine
 
       # The stack comes up, the api serves the admin build, an unverified domain
       # gets no certificate, and an image goes through the media pipeline.
